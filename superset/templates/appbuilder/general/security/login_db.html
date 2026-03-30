@@ -1,0 +1,622 @@
+{% extends "appbuilder/base.html" %}
+
+{% block content %}
+<style>
+  /* ── Uganda MoH Malaria Analytics — Login ── */
+  .navbar, .footer, #back-to-top { display: none !important; }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    font-family: 'Segoe UI', Inter, -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    background: #F3F2F1;
+  }
+
+  .login-shell {
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ─────────────────────────────────────────
+     LEFT — Brand panel
+  ───────────────────────────────────────── */
+  .login-brand {
+    width: 480px;
+    flex-shrink: 0;
+    background: #1e2d45;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Decorative SVG mesh in the background */
+  .login-brand-bg {
+    position: absolute;
+    inset: 0;
+    opacity: 0.07;
+    background-image:
+      radial-gradient(circle at 20% 80%, #0078D4 0%, transparent 50%),
+      radial-gradient(circle at 80% 20%, #107C10 0%, transparent 50%);
+    pointer-events: none;
+  }
+
+  /* Grid lines */
+  .login-brand-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  .login-brand-inner {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 44px 48px 36px;
+  }
+
+  /* Logo row */
+  .login-logo-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 56px;
+  }
+
+  .login-logo-mark {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .login-logo-text {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.55);
+    line-height: 1.5;
+  }
+
+  /* Hero copy */
+  .login-brand-hero {
+    flex: 1;
+  }
+
+  .login-brand-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #0078D4;
+    background: rgba(0,120,212,0.15);
+    border: 1px solid rgba(0,120,212,0.3);
+    border-radius: 20px;
+    padding: 3px 10px;
+    margin-bottom: 20px;
+  }
+
+  .login-brand-eyebrow::before {
+    content: '';
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #0078D4;
+    display: inline-block;
+  }
+
+  .login-brand-h1 {
+    font-size: 32px;
+    font-weight: 800;
+    color: #ffffff;
+    line-height: 1.18;
+    letter-spacing: -0.6px;
+    margin: 0 0 18px;
+  }
+
+  .login-brand-tagline {
+    font-size: 14px;
+    color: rgba(255,255,255,0.5);
+    line-height: 1.7;
+    max-width: 340px;
+    margin: 0 0 40px;
+  }
+
+  /* Stats row */
+  .login-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 40px;
+  }
+
+  .login-stat {
+    padding: 16px 14px;
+    background: rgba(255,255,255,0.03);
+  }
+
+  .login-stat-value {
+    font-size: 22px;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: -0.5px;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .login-stat-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.35);
+  }
+
+  /* Data sources */
+  .login-sources {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .login-source-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12.5px;
+    color: rgba(255,255,255,0.5);
+  }
+
+  .login-source-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #107C10;
+    flex-shrink: 0;
+  }
+
+  /* Footer */
+  .login-brand-foot {
+    border-top: 1px solid rgba(255,255,255,0.07);
+    padding-top: 18px;
+    margin-top: 32px;
+    font-size: 11px;
+    color: rgba(255,255,255,0.22);
+    line-height: 1.6;
+  }
+
+  /* ─────────────────────────────────────────
+     RIGHT — Form panel
+  ───────────────────────────────────────── */
+  .login-form-panel {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 40px;
+    background: #F3F2F1;
+  }
+
+  .login-form-card {
+    width: 100%;
+    max-width: 420px;
+    background: #ffffff;
+    border: 1px solid #EDEBE9;
+    border-radius: 8px;
+    padding: 40px 40px 36px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04);
+  }
+
+  /* Card header */
+  .login-card-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 28px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid #F3F2F1;
+  }
+
+  .login-card-logomark {
+    width: 34px;
+    height: 34px;
+    border-radius: 6px;
+    background: #1e2d45;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    flex-shrink: 0;
+  }
+
+  .login-card-logotitle {
+    font-size: 13px;
+    font-weight: 700;
+    color: #201F1E;
+    line-height: 1.3;
+  }
+
+  .login-card-logosub {
+    font-size: 11px;
+    color: #A19F9D;
+    margin-top: 1px;
+  }
+
+  .login-card-heading {
+    font-size: 21px;
+    font-weight: 700;
+    color: #1e2d45;
+    letter-spacing: -0.4px;
+    margin: 0 0 4px;
+  }
+
+  .login-card-sub {
+    font-size: 13px;
+    color: #605E5C;
+    margin: 0 0 28px;
+  }
+
+  /* Form fields */
+  .login-field {
+    margin-bottom: 18px;
+  }
+
+  .login-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    color: #605E5C;
+    margin-bottom: 6px;
+  }
+
+  .login-input-wrap {
+    position: relative;
+  }
+
+  .login-input-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #C8C6C4;
+    font-size: 14px;
+    pointer-events: none;
+  }
+
+  .login-input {
+    width: 100%;
+    height: 44px;
+    padding: 0 14px 0 38px;
+    font-size: 14px;
+    font-family: inherit;
+    color: #201F1E;
+    background: #FAF9F8;
+    border: 1px solid #EDEBE9;
+    border-radius: 5px;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+
+  .login-input::placeholder { color: #C8C6C4; }
+
+  .login-input:hover {
+    border-color: #C8C6C4;
+    background: #ffffff;
+  }
+
+  .login-input:focus {
+    border-color: #0078D4;
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(0,120,212,0.1);
+  }
+
+  .login-field-error .login-input {
+    border-color: #D13438;
+    background: #FFF4F4;
+  }
+
+  .login-field-error .login-input:focus {
+    box-shadow: 0 0 0 3px rgba(209,52,56,0.1);
+  }
+
+  .login-error-msg {
+    font-size: 12px;
+    color: #D13438;
+    margin-top: 5px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  /* Flash messages (wrong password, etc.) */
+  .login-alert {
+    background: #FFF4F4;
+    border: 1px solid rgba(209,52,56,0.3);
+    border-radius: 5px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #D13438;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Buttons */
+  .login-btn-primary {
+    display: block;
+    width: 100%;
+    height: 44px;
+    background: #0078D4;
+    border: none;
+    border-radius: 5px;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    margin-top: 4px;
+    letter-spacing: 0.1px;
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .login-btn-primary:hover {
+    background: #106EBE;
+    box-shadow: 0 2px 8px rgba(0,120,212,0.3);
+  }
+
+  .login-btn-primary:active {
+    background: #005A9E;
+  }
+
+  .login-btn-secondary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    height: 40px;
+    background: #ffffff;
+    border: 1px solid #EDEBE9;
+    border-radius: 5px;
+    color: #252423;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    margin-top: 10px;
+    text-decoration: none;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  .login-btn-secondary:hover {
+    border-color: #A19F9D;
+    background: #FAF9F8;
+    color: #252423;
+    text-decoration: none;
+  }
+
+  .login-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 20px 0 16px;
+    color: #C8C6C4;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+
+  .login-divider::before,
+  .login-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #EDEBE9;
+  }
+
+  .login-auth-note {
+    font-size: 11.5px;
+    color: #A19F9D;
+    text-align: center;
+    margin-top: 20px;
+    line-height: 1.6;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .login-brand { width: 360px; }
+    .login-brand-inner { padding: 36px 32px 28px; }
+    .login-brand-h1 { font-size: 26px; }
+    .login-stats { display: none; }
+  }
+
+  @media (max-width: 700px) {
+    .login-brand { display: none; }
+    .login-form-panel {
+      padding: 32px 20px;
+      background: #F3F2F1;
+      align-items: flex-start;
+      padding-top: 48px;
+    }
+    .login-form-card {
+      padding: 32px 28px;
+      border: none;
+      box-shadow: none;
+      background: transparent;
+    }
+  }
+</style>
+
+<div class="login-shell">
+
+  <!-- ── Brand Panel ── -->
+  <div class="login-brand">
+    <div class="login-brand-bg"></div>
+    <div class="login-brand-grid"></div>
+    <div class="login-brand-inner">
+
+      <div class="login-logo-row">
+        <div class="login-logo-mark">⚕</div>
+        <div class="login-logo-text">Ministry of Health<br>Republic of Uganda</div>
+      </div>
+
+      <div class="login-brand-hero">
+        <div class="login-brand-eyebrow">National Programme Analytics</div>
+        <h1 class="login-brand-h1">
+          Malaria Data<br>Repository
+        </h1>
+        <p class="login-brand-tagline">
+          Integrated surveillance, intervention monitoring and programme analytics
+          for evidence-based malaria elimination decisions across Uganda.
+        </p>
+
+        <div class="login-stats">
+          <div class="login-stat">
+            <div class="login-stat-value">146</div>
+            <div class="login-stat-label">Districts</div>
+          </div>
+          <div class="login-stat">
+            <div class="login-stat-value">14+</div>
+            <div class="login-stat-label">Data Feeds</div>
+          </div>
+          <div class="login-stat">
+            <div class="login-stat-value">2030</div>
+            <div class="login-stat-label">Target Year</div>
+          </div>
+        </div>
+
+        <div class="login-sources">
+          <div class="login-source-row">
+            <div class="login-source-dot"></div>
+            HMIS / DHIS2 — National health information system
+          </div>
+          <div class="login-source-row">
+            <div class="login-source-dot"></div>
+            NMCP — Programme surveillance &amp; survey data
+          </div>
+          <div class="login-source-row">
+            <div class="login-source-dot"></div>
+            iCCM — Community case management systems
+          </div>
+          <div class="login-source-row">
+            <div class="login-source-dot"></div>
+            Entomological monitoring networks
+          </div>
+        </div>
+      </div>
+
+      <div class="login-brand-foot">
+        Authorized access only. All activity is logged and monitored.<br>
+        Uganda Malaria Data Repository · Powered by Apache Superset.
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Form Panel ── -->
+  <div class="login-form-panel">
+    <div class="login-form-card">
+
+      <!-- Card logo -->
+      <div class="login-card-logo">
+        <div class="login-card-logomark">⚕</div>
+        <div>
+          <div class="login-card-logotitle">Uganda Malaria Data Repository</div>
+          <div class="login-card-logosub">Ministry of Health · Analytics Portal</div>
+        </div>
+      </div>
+
+      <h2 class="login-card-heading">Sign in to your account</h2>
+      <p class="login-card-sub">Enter your credentials to access the analytics platform</p>
+
+      {# Flash error messages #}
+      {% with messages = get_flashed_messages(with_categories=True) %}
+        {% for category, message in messages %}
+          {% if category in ['danger', 'error', 'warning'] %}
+          <div class="login-alert">
+            <i class="fa fa-exclamation-circle"></i> {{ message }}
+          </div>
+          {% endif %}
+        {% endfor %}
+      {% endwith %}
+
+      <form action="" method="post" name="login" autocomplete="on">
+        {{ form.hidden_tag() }}
+
+        <!-- Username -->
+        <div class="login-field {% if form.errors.username is defined %}login-field-error{% endif %}">
+          <label class="login-label" for="username">{{ _("Username") }}</label>
+          <div class="login-input-wrap">
+            <span class="login-input-icon"><i class="fa fa-user"></i></span>
+            {{ form.username(size=80, class="login-input", autofocus=true, placeholder=_("Enter your username")) }}
+          </div>
+          {% for error in form.errors.get('username', []) %}
+            <div class="login-error-msg"><i class="fa fa-exclamation-circle"></i> {{ error }}</div>
+          {% endfor %}
+        </div>
+
+        <!-- Password -->
+        <div class="login-field {% if form.errors.password is defined %}login-field-error{% endif %}">
+          <label class="login-label" for="password">{{ _("Password") }}</label>
+          <div class="login-input-wrap">
+            <span class="login-input-icon"><i class="fa fa-lock"></i></span>
+            {{ form.password(size=80, class="login-input", placeholder=_("Enter your password")) }}
+          </div>
+          {% for error in form.errors.get('password', []) %}
+            <div class="login-error-msg"><i class="fa fa-exclamation-circle"></i> {{ error }}</div>
+          {% endfor %}
+        </div>
+
+        <input class="login-btn-primary" type="submit" value="{{ _('Sign In') }}">
+
+        {% if appbuilder.sm.auth_user_registration %}
+          <a href="{{ appbuilder.sm.get_url_for_registeruser }}" class="login-btn-secondary">
+            <i class="fa fa-user-plus"></i> {{ _('Create an account') }}
+          </a>
+        {% endif %}
+
+        <div class="login-divider">or</div>
+
+        <a href="/public/" class="login-btn-secondary">
+          <i class="fa fa-arrow-left"></i> {{ _('Back to Public Dashboards') }}
+        </a>
+
+        <p class="login-auth-note">
+          Access is restricted to authorized Ministry of Health personnel.<br>
+          Contact your system administrator for account assistance.
+        </p>
+
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

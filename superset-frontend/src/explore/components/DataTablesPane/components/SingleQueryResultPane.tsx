@@ -1,0 +1,107 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+import { useState, useCallback, useMemo } from 'react';
+import { t } from '@superset-ui/core';
+import {
+  TableView,
+  TableSize,
+  EmptyWrapperType,
+} from '@superset-ui/core/components';
+import {
+  useFilteredTableData,
+  useTableColumns,
+} from 'src/explore/components/DataTableControl';
+import { TableControls } from './DataTableControls';
+import { SingleQueryResultPaneProp } from '../types';
+
+export const SingleQueryResultPane = ({
+  data,
+  colnames,
+  coltypes,
+  rowcount,
+  datasourceId,
+  dataSize = 50,
+  isVisible,
+  canDownload,
+}: SingleQueryResultPaneProp) => {
+  const [filterText, setFilterText] = useState('');
+
+  // Normalize rows to objects keyed by colnames to avoid N/A rendering
+  const normalizedData = useMemo(() => {
+    if (!data || !colnames || data.length === 0) return [];
+    // If rows already look like objects, keep them
+    const first = data[0];
+    const looksObject =
+      first && typeof first === 'object' && !Array.isArray(first);
+    if (looksObject) return data as Record<string, any>[];
+    // Map array rows to objects keyed by colnames
+    return (data as any[][]).map(row => {
+      const obj: Record<string, any> = {};
+      colnames.forEach((col, i) => {
+        // Ensure row is an array and has the expected index
+        obj[col] = Array.isArray(row) ? row[i] : null;
+      });
+      return obj;
+    });
+  }, [data, colnames]);
+
+  // this is to preserve the order of the columns, even if there are integer values,
+  // while also only grabbing the first column's keys
+  const columns = useTableColumns(
+    colnames,
+    coltypes,
+    normalizedData,
+    datasourceId,
+    isVisible,
+    {}, // moreConfig
+  );
+  const filteredData = useFilteredTableData(filterText, normalizedData);
+
+  const handleInputChange = useCallback(
+    (input: string) => setFilterText(input),
+    [],
+  );
+
+  return (
+    <>
+      <TableControls
+        data={filteredData}
+        columnNames={colnames}
+        columnTypes={coltypes}
+        rowcount={rowcount}
+        datasourceId={datasourceId}
+        onInputChange={handleInputChange}
+        isLoading={false}
+        canDownload={canDownload}
+      />
+      <TableView
+        columns={columns}
+        size={TableSize.Small}
+        data={filteredData}
+        pageSize={dataSize}
+        noDataText={t('No results')}
+        emptyWrapperType={EmptyWrapperType.Small}
+        className="table-condensed"
+        isPaginationSticky
+        showRowCount={false}
+        small
+      />
+    </>
+  );
+};

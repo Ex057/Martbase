@@ -1,0 +1,434 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+import {
+  useRef,
+  useEffect,
+  useMemo,
+  forwardRef,
+  useImperativeHandle,
+  useLayoutEffect,
+  useCallback,
+  Ref,
+  useState,
+} from 'react';
+import { useSelector } from 'react-redux';
+
+import { styled, useTheme, mergeReplaceArrays } from '@superset-ui/core';
+import { use, init, EChartsType, registerLocale } from 'echarts/core';
+import {
+  SankeyChart,
+  PieChart,
+  BarChart,
+  FunnelChart,
+  GaugeChart,
+  GraphChart,
+  LineChart,
+  ScatterChart,
+  RadarChart,
+  BoxplotChart,
+  TreeChart,
+  TreemapChart,
+  HeatmapChart,
+  SunburstChart,
+  CustomChart,
+} from 'echarts/charts';
+import { CanvasRenderer } from 'echarts/renderers';
+import {
+  TooltipComponent,
+  TitleComponent,
+  GridComponent,
+  VisualMapComponent,
+  LegendComponent,
+  DataZoomComponent,
+  ToolboxComponent,
+  GraphicComponent,
+  AriaComponent,
+  MarkAreaComponent,
+  MarkLineComponent,
+} from 'echarts/components';
+import { LabelLayout } from 'echarts/features';
+import { EchartsHandler, EchartsProps, EchartsStylesProps } from '../types';
+import { DEFAULT_LOCALE } from '../constants';
+
+// Define this interface here to avoid creating a dependency back to superset-frontend,
+// TODO: to move the type to @superset-ui/core
+interface ExplorePageState {
+  common: {
+    locale: string;
+  };
+}
+
+const Styles = styled.div<EchartsStylesProps>`
+  height: ${({ height }) => height};
+  width: ${({ width }) => width};
+  background-color: inherit;
+`;
+
+use([
+  CanvasRenderer,
+  BarChart,
+  BoxplotChart,
+  CustomChart,
+  FunnelChart,
+  GaugeChart,
+  GraphChart,
+  HeatmapChart,
+  LineChart,
+  PieChart,
+  RadarChart,
+  SankeyChart,
+  ScatterChart,
+  SunburstChart,
+  TreeChart,
+  TreemapChart,
+  AriaComponent,
+  DataZoomComponent,
+  GraphicComponent,
+  GridComponent,
+  MarkAreaComponent,
+  MarkLineComponent,
+  LegendComponent,
+  ToolboxComponent,
+  TooltipComponent,
+  TitleComponent,
+  VisualMapComponent,
+  LabelLayout,
+]);
+
+const loadLocale = async (locale: string) => {
+  let lang;
+  try {
+    lang = await import(`echarts/lib/i18n/lang${locale}`);
+  } catch (e) {
+    console.error(`Locale ${locale} not supported in ECharts`, e);
+  }
+  return lang?.default;
+};
+
+function Echart(
+  {
+    width,
+    height,
+    echartOptions,
+    eventHandlers,
+    zrEventHandlers,
+    selectedValues = {},
+    refs,
+    vizType,
+  }: EchartsProps,
+  ref: Ref<EchartsHandler>,
+) {
+  const theme = useTheme();
+  const divRef = useRef<HTMLDivElement>(null);
+  if (refs) {
+    // eslint-disable-next-line no-param-reassign
+    refs.divRef = divRef;
+  }
+  const [didMount, setDidMount] = useState(false);
+  const chartRef = useRef<EChartsType>();
+  const initAnimationFrameRef = useRef<number>();
+  const isMountedRef = useRef(false);
+  const currentSelection = useMemo(
+    () => Object.keys(selectedValues) || [],
+    [selectedValues],
+  );
+  const previousSelection = useRef<string[]>([]);
+
+  useImperativeHandle(ref, () => ({
+    getEchartInstance: () => chartRef.current,
+  }));
+
+  const locale = useSelector(
+    (state: ExplorePageState) => state?.common?.locale ?? DEFAULT_LOCALE,
+  ).toUpperCase();
+
+  const resolveChartStyleValue = useCallback(
+    (cssVariableName: string) => {
+      if (typeof window === 'undefined') {
+        return undefined;
+      }
+
+      let element = divRef.current?.parentElement;
+      while (element) {
+        const value = window
+          .getComputedStyle(element)
+          .getPropertyValue(cssVariableName)
+          .trim();
+        if (value && value !== 'inherit') {
+          return value;
+        }
+        element = element.parentElement;
+      }
+
+      return undefined;
+    },
+    [],
+  );
+
+  const resolveInheritedBackgroundColor = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const explicitBackgroundColor = resolveChartStyleValue(
+      '--superset-chart-background-color',
+    );
+    if (
+      explicitBackgroundColor &&
+      explicitBackgroundColor !== 'transparent' &&
+      explicitBackgroundColor !== 'rgba(0, 0, 0, 0)'
+    ) {
+      return explicitBackgroundColor;
+    }
+
+    let element = divRef.current?.parentElement;
+    while (element) {
+      const computedColor = window.getComputedStyle(element).backgroundColor;
+      if (
+        computedColor &&
+        computedColor !== 'transparent' &&
+        computedColor !== 'rgba(0, 0, 0, 0)'
+      ) {
+        return computedColor;
+      }
+      element = element.parentElement;
+    }
+
+    return undefined;
+  }, [resolveChartStyleValue]);
+
+  const handleSizeChange = useCallback(
+    ({ width, height }: { width: number; height: number }) => {
+      // Skip resize when the container has no dimensions (e.g. collapsed panel).
+      // ECharts logs "Can't get DOM width or height" when resized to 0.
+      if (chartRef.current && width > 0 && height > 0) {
+        chartRef.current.resize({ width, height });
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (initAnimationFrameRef.current) {
+        window.cancelAnimationFrame(initAnimationFrameRef.current);
+        initAnimationFrameRef.current = undefined;
+      }
+      chartRef.current?.dispose();
+      chartRef.current = undefined;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    loadLocale(locale).then(localeObj => {
+      if (cancelled) {
+        return;
+      }
+
+      if (localeObj) {
+        registerLocale(locale, localeObj);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locale]);
+
+  useEffect(() => {
+    const initializeWhenReady = () => {
+      const container = divRef.current;
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      if (!container || width <= 0 || height <= 0) {
+        initAnimationFrameRef.current =
+          window.requestAnimationFrame(initializeWhenReady);
+        return;
+      }
+
+      if (!chartRef.current) {
+        // Superset already measures chart width/height; pass them into ECharts
+        // directly so Explore charts can initialize before the inner div reports
+        // a non-zero clientHeight.
+        chartRef.current = init(container, null, {
+          locale,
+          width,
+          height,
+        });
+      }
+
+      handleSizeChange({ width, height });
+
+      if (isMountedRef.current) {
+        setDidMount(true);
+      }
+
+      initAnimationFrameRef.current = undefined;
+    };
+
+    if (initAnimationFrameRef.current) {
+      window.cancelAnimationFrame(initAnimationFrameRef.current);
+      initAnimationFrameRef.current = undefined;
+    }
+
+    initializeWhenReady();
+
+    return () => {
+      if (initAnimationFrameRef.current) {
+        window.cancelAnimationFrame(initAnimationFrameRef.current);
+        initAnimationFrameRef.current = undefined;
+      }
+    };
+  }, [handleSizeChange, height, locale, width]);
+
+  useEffect(() => {
+    if (didMount) {
+      Object.entries(eventHandlers || {}).forEach(([name, handler]) => {
+        chartRef.current?.off(name);
+        chartRef.current?.on(name, handler);
+      });
+
+      Object.entries(zrEventHandlers || {}).forEach(([name, handler]) => {
+        chartRef.current?.getZr().off(name);
+        chartRef.current?.getZr().on(name, handler);
+      });
+
+      const explicitTextColor =
+        resolveChartStyleValue('--superset-chart-text-color') ||
+        theme.colorText;
+
+      const getEchartsTheme = (options: any) => {
+        const antdTheme = theme;
+        const echartsTheme = {
+          textStyle: {
+            color: explicitTextColor,
+            fontFamily: antdTheme.fontFamily,
+          },
+          title: {
+            textStyle: { color: explicitTextColor },
+          },
+          legend: {
+            textStyle: { color: explicitTextColor },
+            pageTextStyle: {
+              color: explicitTextColor,
+            },
+            pageIconColor: explicitTextColor,
+            pageIconInactiveColor: antdTheme.colorTextDisabled,
+            inactiveColor: antdTheme.colorTextDisabled,
+          },
+          tooltip: {
+            backgroundColor: antdTheme.colorBgContainer,
+            textStyle: { color: explicitTextColor },
+          },
+          axisPointer: {
+            lineStyle: { color: antdTheme.colorPrimary },
+            label: { color: explicitTextColor },
+          },
+        } as any;
+        if (options?.xAxis) {
+          echartsTheme.xAxis = {
+            axisLine: { lineStyle: { color: antdTheme.colorSplit } },
+            axisLabel: { color: explicitTextColor },
+            nameTextStyle: { color: explicitTextColor },
+            splitLine: { lineStyle: { color: antdTheme.colorSplit } },
+          };
+        }
+        if (options?.yAxis) {
+          echartsTheme.yAxis = {
+            axisLine: { lineStyle: { color: antdTheme.colorSplit } },
+            axisLabel: { color: explicitTextColor },
+            nameTextStyle: { color: explicitTextColor },
+            splitLine: { lineStyle: { color: antdTheme.colorSplit } },
+          };
+        }
+        return echartsTheme;
+      };
+
+      const baseTheme = getEchartsTheme(echartOptions);
+      const globalOverrides = theme.echartsOptionsOverrides || {};
+      const chartOverrides = vizType
+        ? theme.echartsOptionsOverridesByChartType?.[vizType] || {}
+        : {};
+      const inheritedBackgroundColor = resolveInheritedBackgroundColor();
+      if (divRef.current && inheritedBackgroundColor) {
+        divRef.current.style.backgroundColor = inheritedBackgroundColor;
+      }
+
+      const mergedEchartOptions = mergeReplaceArrays(
+        baseTheme,
+        echartOptions,
+        globalOverrides,
+        chartOverrides,
+      );
+      const themedEchartOptions =
+        inheritedBackgroundColor &&
+        (mergedEchartOptions?.backgroundColor == null ||
+          mergedEchartOptions?.backgroundColor === 'transparent' ||
+          mergedEchartOptions?.backgroundColor === 'rgba(0, 0, 0, 0)')
+          ? {
+              ...mergedEchartOptions,
+              backgroundColor: inheritedBackgroundColor,
+            }
+          : mergedEchartOptions;
+
+      chartRef.current?.setOption(themedEchartOptions, true);
+    }
+  }, [
+    didMount,
+    echartOptions,
+    eventHandlers,
+    resolveChartStyleValue,
+    resolveInheritedBackgroundColor,
+    zrEventHandlers,
+    theme,
+  ]);
+
+  // highlighting
+  useEffect(() => {
+    if (!chartRef.current) return;
+    chartRef.current.dispatchAction({
+      type: 'downplay',
+      dataIndex: previousSelection.current.filter(
+        value => !currentSelection.includes(value),
+      ),
+    });
+    if (currentSelection.length) {
+      chartRef.current.dispatchAction({
+        type: 'highlight',
+        dataIndex: currentSelection,
+      });
+    }
+    previousSelection.current = currentSelection;
+  }, [currentSelection, chartRef.current]);
+
+  useLayoutEffect(() => {
+    handleSizeChange({ width, height });
+  }, [width, height, handleSizeChange]);
+
+  return <Styles ref={divRef} height={height} width={width} />;
+}
+
+export default forwardRef(Echart);

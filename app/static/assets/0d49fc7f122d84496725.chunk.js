@@ -1,0 +1,14 @@
+"use strict";(globalThis.webpackChunksuperset=globalThis.webpackChunksuperset||[]).push([[2823],{12823:(e,t,n)=>{n.r(t),n.d(t,{default:()=>d});var a=n(2445),r=n(74098),o=n(90924),l=n(58516),i=n(24002),s=n(2801),u=n(82384),c=n(17102);function d(e){const{data:t,formData:n,height:d,width:f,setDataMask:h,setHoveredFilter:m,unsetHoveredFilter:p,setFocusedFilter:g,unsetFocusedFilter:v,setFilterActive:S,filterState:b,inputRef:x}=e,{defaultValue:w}=n,[$,F]=(0,i.useState)(null!=w?w:[]),M=e=>{const t=(0,o.A)(e);F(t);const n={};t.length&&(n.granularity_sqla=t[0]),h({extraFormData:n,filterState:{value:t.length?t:null}})};(0,i.useEffect)(()=>{M(null!=w?w:null)},[JSON.stringify(w)]),(0,i.useEffect)(()=>{var e;M(null!=(e=b.value)?e:null)},[JSON.stringify(b.value)]);const y=(t||[]).filter(e=>e.dtype===l.GenericDataType.Temporal),k=0===y.length?(0,r.t)("No time columns"):(0,r.tn)("%s option","%s options",y.length,y.length),z={};b.validateMessage&&(z.extra=(0,a.Y)(c.Mo,{status:b.validateStatus,children:b.validateMessage}));const I=y.map(e=>{const{column_name:t,verbose_name:n}=e;return{label:null!=n?n:t,value:t}});return(0,a.Y)(c.j3,{height:d,width:f,children:(0,a.Y)(u.e,{validateStatus:b.validateStatus,...z,children:(0,a.Y)(s.A,{name:n.nativeFilterId,allowClear:!0,value:$,placeholder:k,onChange:M,onBlur:v,onFocus:g,onMouseEnter:m,onMouseLeave:p,ref:x,options:I,onOpenChange:S})})})}},17102:(e,t,n)=>{n.d(t,{Mo:()=>i,YH:()=>o,j3:()=>l});var a=n(81465),r=n(82384);const o=0,l=a.I4.div`
+  min-height: ${({height:e})=>e}px;
+  width: ${({width:e})=>e===o?"100%":`${e}px`};
+`,i=((0,a.I4)(r.e)`
+  &.ant-row.ant-form-item {
+    margin: 0;
+  }
+`,a.I4.div`
+  color: ${({theme:e,status:t="error"})=>{if("help"===t)return e.colorTextSecondary;switch(t){case"error":default:return e.colorError;case"warning":return e.colorWarning;case"info":return e.colorInfo}}};
+  text-align: ${({centerText:e})=>e?"center":"left"};
+  width: 100%;
+`)},82384:(e,t,n)=>{n.d(t,{e:()=>r});var a=n(29645);const r=(0,n(81465).I4)(a.Form.Item)`
+  ${({theme:e})=>`\n    &.ant-form-item > .ant-row > .ant-form-item-label {\n      padding-bottom: ${e.paddingXXS}px;\n    }\n    .ant-form-item-label {\n      & > label {\n        font-size: ${e.fontSizeSM}px;\n        &.ant-form-item-required:not(.ant-form-item-required-mark-optional) {\n          &::before {\n            display: none;\n          }\n          &::after {\n            display: inline-block;\n            visibility: visible;\n            color: ${e.colorError};\n            font-size: ${e.fontSizeSM}px;\n            content: '*';\n          }\n        }\n      }\n    }\n    .ant-form-item-extra {\n      margin-top: ${e.sizeUnit}px;\n      font-size: ${e.fontSizeSM}px;\n    }\n  `}
+`}}]);

@@ -1,0 +1,6 @@
+ # ...existing code...
+# In get_columns method, ensure groupby: True for all relevant columns
+for col in columns:
+    col['groupby'] = True
+# ...existing code...
+

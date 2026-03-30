@@ -1,0 +1,136 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+import { Suspense, useEffect } from 'react';
+import { hot } from 'react-hot-loader/root';
+import {
+  BrowserRouter as Router,
+  Switch,
+  Route,
+  useLocation,
+} from 'react-router-dom';
+import { bindActionCreators } from 'redux';
+import { css } from '@superset-ui/core';
+import { Layout, Loading } from '@superset-ui/core/components';
+import { setupAGGridModules } from '@superset-ui/core/components/ThemedAgGridReact';
+import { ErrorBoundary } from 'src/components';
+import Menu from 'src/features/home/Menu';
+import getBootstrapData, { applicationRoot } from 'src/utils/getBootstrapData';
+import ToastContainer from 'src/components/MessageToasts/ToastContainer';
+import setupApp from 'src/setup/setupApp';
+import setupPlugins from 'src/setup/setupPlugins';
+import { routes, isFrontendRoute } from 'src/views/routes';
+import { Logger, LOG_ACTIONS_SPA_NAVIGATION } from 'src/logger/LogUtils';
+import setupCodeOverrides from 'src/setup/setupCodeOverrides';
+import { logEvent } from 'src/logger/actions';
+import { store } from 'src/views/store';
+import ExtensionsStartup from 'src/extensions/ExtensionsStartup';
+import { AppGlobalStyles } from 'src/AppGlobalStyles';
+import { RootContextProviders } from './RootContextProviders';
+import { ScrollToTop } from './ScrollToTop';
+
+setupApp();
+setupPlugins();
+setupCodeOverrides();
+setupAGGridModules();
+
+const bootstrapData = getBootstrapData();
+
+let lastLocationPathname: string;
+
+const boundActions = bindActionCreators({ logEvent }, store.dispatch);
+const PUBLIC_PORTAL_PATH_PREFIXES = ['/superset/public', '/public'];
+
+const isPublicPortalPath = (pathname: string) =>
+  PUBLIC_PORTAL_PATH_PREFIXES.some(
+    prefix => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+
+const LocationPathnameLogger = () => {
+  const location = useLocation();
+  useEffect(() => {
+    // This will log client side route changes for single page app user navigation
+    boundActions.logEvent(LOG_ACTIONS_SPA_NAVIGATION, {
+      path: location.pathname,
+    });
+    // reset performance logger timer start point to avoid soft navigation
+    // cause dashboard perf measurement problem
+    if (lastLocationPathname && lastLocationPathname !== location.pathname) {
+      Logger.markTimeOrigin();
+    }
+    lastLocationPathname = location.pathname;
+  }, [location.pathname]);
+  return <></>;
+};
+
+const AppShell = () => {
+  const location = useLocation();
+  const isPublicPortalRoute = isPublicPortalPath(location.pathname);
+
+  return (
+    <>
+      <ScrollToTop />
+      <LocationPathnameLogger />
+      <RootContextProviders>
+        <AppGlobalStyles />
+        <ExtensionsStartup />
+        {!isPublicPortalRoute && (
+          <Menu
+            data={bootstrapData.common.menu_data}
+            isFrontendRoute={isFrontendRoute}
+          />
+        )}
+        <Switch>
+          {routes.map(({ path, Component, props = {}, Fallback = Loading }) => (
+            <Route path={path} key={path}>
+              <Suspense fallback={<Fallback />}>
+                <Layout>
+                  <Layout.Content
+                    css={css`
+                      display: flex;
+                      flex-direction: column;
+                      padding-top: ${isPublicPortalRoute ? 0 : 46}px;
+                      min-height: 100vh;
+                    `}
+                  >
+                    <ErrorBoundary
+                      css={css`
+                        margin: ${isPublicPortalRoute ? 0 : 16}px;
+                      `}
+                    >
+                      <Component user={bootstrapData.user} {...props} />
+                    </ErrorBoundary>
+                  </Layout.Content>
+                </Layout>
+              </Suspense>
+            </Route>
+          ))}
+        </Switch>
+        <ToastContainer />
+      </RootContextProviders>
+    </>
+  );
+};
+
+const App = () => (
+  <Router basename={applicationRoot()}>
+    <AppShell />
+  </Router>
+);
+
+export default hot(App);
