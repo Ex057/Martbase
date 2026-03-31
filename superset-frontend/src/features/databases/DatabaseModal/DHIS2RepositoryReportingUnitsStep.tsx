@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { styled, t } from '@superset-ui/core';
-import { Alert, Select, Tag, Typography } from '@superset-ui/core/components';
+import {
+  Alert,
+  Select,
+  Tag,
+  Typography,
+} from '@superset-ui/core/components';
 
 import type { DHIS2Instance } from 'src/features/dhis2/types';
 import type {
@@ -8,7 +13,6 @@ import type {
   LevelMappingConfig,
 } from 'src/features/datasets/AddDataset/DHIS2DatasetWizard';
 import WizardStepOrgUnits, {
-  OrgUnit,
   OrgUnitGroup,
   OrgUnitGroupSet,
   StepOrgUnitsMetadataPayload,
@@ -22,12 +26,11 @@ import type {
   RepositoryEnabledGroupDimension,
   RepositoryEnabledGroupSetDimension,
   RepositoryEnabledLevelDimension,
-  RepositoryOrgUnitDetail,
   RepositoryOrgUnitRecord,
   RepositoryReportingUnitApproach,
   RepositorySeparateInstanceConfig,
 } from '../types';
-import { resolveRepositoryOrgUnits } from './repositoryOrgUnits';
+import { buildLookup, pruneSelectedKeys, resolveRepositoryOrgUnits } from './repositoryOrgUnits';
 
 const { Paragraph, Text } = Typography;
 
@@ -139,9 +142,7 @@ const DimensionField = styled.div`
   gap: 8px;
 `;
 
-type RepositorySummary = NonNullable<
-  DatabaseObject['repository_org_unit_summary']
->;
+type RepositorySummary = NonNullable<DatabaseObject['repository_org_unit_summary']>;
 
 const REPOSITORY_APPROACH_OPTIONS: Array<{
   value: RepositoryReportingUnitApproach;
@@ -212,15 +213,12 @@ function resolveInitialApproach(
   );
 }
 
-function buildEmptyWizardState(
-  selectedInstanceIds: number[],
-): DHIS2WizardState {
+function buildEmptyWizardState(selectedInstanceIds: number[]): DHIS2WizardState {
   return {
     datasetName: '',
     description: '',
     selectedInstanceIds,
-    orgUnitSourceMode:
-      selectedInstanceIds.length > 1 ? 'repository' : 'primary',
+    orgUnitSourceMode: selectedInstanceIds.length > 1 ? 'repository' : 'primary',
     primaryOrgUnitInstanceId: selectedInstanceIds[0] ?? null,
     variableMappings: [],
     dataElements: [],
@@ -251,18 +249,22 @@ function buildSharedWizardState(
   const wizardState = buildEmptyWizardState(selectedInstanceIds);
   const config = initialValue?.repository_org_unit_config || null;
   const scope =
-    initialValue?.repository_data_scope || ('selected' as RepositoryDataScope);
+    initialValue?.repository_data_scope ||
+    ('selected' as RepositoryDataScope);
   const approach =
     initialValue?.repository_reporting_unit_approach ||
     getDefaultApproach(activeInstances);
-  const effectiveScope = approach === 'map_merge' ? 'all_levels' : scope;
+  const effectiveScope =
+    approach === 'map_merge' ? 'all_levels' : scope;
 
   return {
     ...wizardState,
     orgUnitSourceMode:
       approach === 'primary_instance' ? 'primary' : 'repository',
     primaryOrgUnitInstanceId:
-      initialValue?.primary_instance_id ?? selectedInstanceIds[0] ?? null,
+      initialValue?.primary_instance_id ??
+      selectedInstanceIds[0] ??
+      null,
     orgUnits: sanitizeSelectionKeys(config?.selected_org_units || []),
     selectedOrgUnitDetails: (config?.selected_org_unit_details || []) as
       | DHIS2WizardState['selectedOrgUnitDetails']
@@ -270,8 +272,7 @@ function buildSharedWizardState(
     dataLevelScope: effectiveScope,
     includeChildren: !['selected', 'ancestors'].includes(effectiveScope),
     maxOrgUnitLevel: initialValue?.lowest_data_level_to_use ?? null,
-    levelMapping:
-      (config?.level_mapping as LevelMappingConfig | null) || undefined,
+    levelMapping: (config?.level_mapping as LevelMappingConfig | null) || undefined,
   };
 }
 
@@ -281,10 +282,7 @@ function buildSeparateWizardStates(
 ): Record<number, DHIS2WizardState> {
   const config = initialValue?.repository_org_unit_config || null;
   const separateConfigs = new Map(
-    (config?.separate_instance_configs || []).map(item => [
-      item.instance_id,
-      item,
-    ]),
+    (config?.separate_instance_configs || []).map(item => [item.instance_id, item]),
   );
 
   return Object.fromEntries(
@@ -299,11 +297,10 @@ function buildSeparateWizardStates(
           ...wizardState,
           orgUnitSourceMode: 'primary',
           primaryOrgUnitInstanceId: instance.id,
-          orgUnits: sanitizeSelectionKeys(
-            instanceConfig?.selected_org_units || [],
-          ),
-          selectedOrgUnitDetails: (instanceConfig?.selected_org_unit_details ||
-            []) as DHIS2WizardState['selectedOrgUnitDetails'] | undefined,
+          orgUnits: sanitizeSelectionKeys(instanceConfig?.selected_org_units || []),
+          selectedOrgUnitDetails: (instanceConfig?.selected_org_unit_details || []) as
+            | DHIS2WizardState['selectedOrgUnitDetails']
+            | undefined,
           dataLevelScope: scope,
           includeChildren: !['selected', 'ancestors'].includes(scope),
           maxOrgUnitLevel:
@@ -327,10 +324,9 @@ function buildLineageSummary(
       Array.from(
         new Set(
           record.lineage
-            .map(
-              lineage =>
-                lineage.source_instance_code ||
-                (lineage.instance_id != null ? `I${lineage.instance_id}` : ''),
+            .map(lineage =>
+              lineage.source_instance_code ||
+              (lineage.instance_id != null ? `I${lineage.instance_id}` : ''),
             )
             .filter(Boolean),
         ),
@@ -357,8 +353,8 @@ function formatApproachLabel(
   approach: RepositoryReportingUnitApproach | null | undefined,
 ): string {
   return (
-    REPOSITORY_APPROACH_OPTIONS.find(option => option.value === approach)
-      ?.label || t('Not configured')
+    REPOSITORY_APPROACH_OPTIONS.find(option => option.value === approach)?.label ||
+    t('Not configured')
   );
 }
 
@@ -367,8 +363,7 @@ function getApproachDescription(
 ): string {
   return (
     REPOSITORY_APPROACH_OPTIONS.find(option => option.value === approach)
-      ?.description ||
-    t('Select how the repository reporting unit hierarchy should be built.')
+      ?.description || t('Select how the repository reporting unit hierarchy should be built.')
   );
 }
 
@@ -446,10 +441,7 @@ function normalizeSourceRefs(
       return;
     }
     current.source_group_ids = Array.from(
-      new Set([
-        ...(current.source_group_ids || []),
-        ...(ref.source_group_ids || []),
-      ]),
+      new Set([...(current.source_group_ids || []), ...(ref.source_group_ids || [])]),
     );
     current.source_group_labels = Array.from(
       new Set([
@@ -505,10 +497,7 @@ function buildLevelDimensionOptions(
       });
       return;
     }
-    current.source_refs = normalizeSourceRefs([
-      ...current.source_refs,
-      ...refs,
-    ]);
+    current.source_refs = normalizeSourceRefs([...current.source_refs, ...refs]);
   });
 
   return Array.from(options.values())
@@ -551,10 +540,7 @@ function buildGroupDimensionOptions(
         });
         return;
       }
-      current.source_refs = normalizeSourceRefs([
-        ...current.source_refs,
-        ...refs,
-      ]);
+      current.source_refs = normalizeSourceRefs([...current.source_refs, ...refs]);
     });
   });
 
@@ -619,10 +605,7 @@ function buildGroupSetDimensionOptions(
           ),
         ]),
       );
-      current.source_refs = normalizeSourceRefs([
-        ...current.source_refs,
-        ...refs,
-      ]);
+      current.source_refs = normalizeSourceRefs([...current.source_refs, ...refs]);
     });
   });
 
@@ -642,18 +625,8 @@ function extractSelectedDimensionKeys<TItem extends { key: string }>(
   return Array.isArray(items)
     ? items
         .map(item => item?.key)
-        .filter(
-          (value): value is string =>
-            typeof value === 'string' && value.length > 0,
-        )
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
     : [];
-}
-
-function areStringArraysEqual(left: string[], right: string[]): boolean {
-  return (
-    left.length === right.length &&
-    left.every((value, index) => value === right[index])
-  );
 }
 
 function resolveSelectedDimensions<TItem extends { key: string }>(
@@ -661,9 +634,7 @@ function resolveSelectedDimensions<TItem extends { key: string }>(
   options: RepositoryDimensionOption<TItem>[],
   savedItems: TItem[] | null | undefined,
 ): TItem[] {
-  const optionMap = new Map(
-    options.map(option => [option.key, option.payload]),
-  );
+  const optionMap = new Map(options.map(option => [option.key, option.payload]));
   const savedMap = new Map(
     (savedItems || []).map(item => [item.key, item] as const),
   );
@@ -672,9 +643,7 @@ function resolveSelectedDimensions<TItem extends { key: string }>(
     .filter((value): value is TItem => !!value);
 }
 
-function mergePersistedDimensionOptions<
-  TItem extends { key: string; label: string },
->(
+function mergePersistedDimensionOptions<TItem extends { key: string; label: string }>(
   options: RepositoryDimensionOption<TItem>[],
   savedItems: TItem[] | null | undefined,
 ): RepositoryDimensionOption<TItem>[] {
@@ -719,229 +688,6 @@ function sortLevelDimensionOptionsAscending(
   });
 }
 
-function buildOrgUnitLookup(orgUnits: OrgUnit[]): Map<string, OrgUnit> {
-  return new Map(orgUnits.map(unit => [unit.selectionKey, unit] as const));
-}
-
-function getScopeDepth(scope: RepositoryDataScope): number | null {
-  switch (scope) {
-    case 'children':
-      return 1;
-    case 'grandchildren':
-      return 2;
-    case 'all_levels':
-      return null;
-    default:
-      return 0;
-  }
-}
-
-function getAncestorSelectionKeys(
-  selectionKey: string,
-  lookup: Map<string, OrgUnit>,
-): string[] {
-  const keys: string[] = [];
-  const visited = new Set<string>();
-  let current = lookup.get(selectionKey);
-
-  while (current?.parentId && !visited.has(current.parentId)) {
-    keys.push(current.parentId);
-    visited.add(current.parentId);
-    current = lookup.get(current.parentId);
-  }
-
-  return keys;
-}
-
-function getOrgUnitRelativeDepth(
-  ancestor: OrgUnit,
-  descendant: OrgUnit,
-): number | null {
-  if (
-    typeof ancestor.level === 'number' &&
-    typeof descendant.level === 'number'
-  ) {
-    return descendant.level - ancestor.level;
-  }
-
-  if (!ancestor.path || !descendant.path) {
-    return null;
-  }
-
-  const ancestorPath = ancestor.path
-    .split('/')
-    .filter((part: string) => part.length > 0);
-  const descendantPath = descendant.path
-    .split('/')
-    .filter((part: string) => part.length > 0);
-
-  if (descendantPath.length < ancestorPath.length) {
-    return null;
-  }
-
-  const isAncestorPath = ancestorPath.every(
-    (part: string, index: number) => descendantPath[index] === part,
-  );
-
-  return isAncestorPath ? descendantPath.length - ancestorPath.length : null;
-}
-
-function pruneScopedSelectionKeys(
-  selectionKeys: string[],
-  orgUnits: OrgUnit[],
-  scope: RepositoryDataScope,
-): string[] {
-  const lookup = buildOrgUnitLookup(orgUnits);
-  const uniqueKeys = Array.from(new Set(selectionKeys)).filter(key =>
-    lookup.has(key),
-  );
-
-  if (!['children', 'grandchildren', 'all_levels'].includes(scope)) {
-    return uniqueKeys;
-  }
-
-  const maxDepth = getScopeDepth(scope);
-  const originalOrder = new Map(uniqueKeys.map((key, index) => [key, index]));
-  const kept = new Set<string>();
-
-  uniqueKeys
-    .slice()
-    .sort((left, right) => {
-      const leftUnit = lookup.get(left);
-      const rightUnit = lookup.get(right);
-      const leftLevel = leftUnit?.level ?? Number.MAX_SAFE_INTEGER;
-      const rightLevel = rightUnit?.level ?? Number.MAX_SAFE_INTEGER;
-
-      if (leftLevel !== rightLevel) {
-        return leftLevel - rightLevel;
-      }
-
-      return (originalOrder.get(left) ?? 0) - (originalOrder.get(right) ?? 0);
-    })
-    .forEach(selectionKey => {
-      const selectedAncestorKey = getAncestorSelectionKeys(
-        selectionKey,
-        lookup,
-      ).find(ancestorKey => kept.has(ancestorKey));
-
-      if (!selectedAncestorKey) {
-        kept.add(selectionKey);
-        return;
-      }
-
-      const ancestorNode = lookup.get(selectedAncestorKey);
-      const currentNode = lookup.get(selectionKey);
-      const relativeDepth =
-        ancestorNode && currentNode
-          ? getOrgUnitRelativeDepth(ancestorNode, currentNode)
-          : null;
-
-      if (
-        maxDepth !== null &&
-        relativeDepth !== null &&
-        relativeDepth > maxDepth
-      ) {
-        kept.add(selectionKey);
-      }
-    });
-
-  return uniqueKeys.filter(key => kept.has(key));
-}
-
-function buildRepositorySelectionDetail(
-  unit: OrgUnit,
-): RepositoryOrgUnitDetail {
-  return {
-    id: unit.id,
-    selectionKey: unit.selectionKey,
-    sourceOrgUnitId: unit.sourceOrgUnitId,
-    displayName: unit.displayName,
-    parentId: unit.parentId,
-    level: unit.level,
-    path: unit.path,
-    sourceInstanceIds: unit.sourceInstanceIds,
-    sourceInstanceNames: unit.sourceInstanceNames,
-    repositoryLevel: unit.repositoryLevel,
-    repositoryLevelName: unit.repositoryLevelName,
-    repositoryKey: unit.repositoryKey,
-    sourceLineageLabel: unit.sourceLineageLabel,
-    strategy: unit.strategy,
-    lineage: unit.lineage,
-    provenance: unit.provenance,
-  };
-}
-
-function filterPersistedSelectionDetails(
-  selectionKeys: string[],
-  details: RepositoryOrgUnitDetail[] | null | undefined,
-): RepositoryOrgUnitDetail[] {
-  if (!Array.isArray(details) || selectionKeys.length === 0) {
-    return [];
-  }
-
-  const detailMap = new Map(
-    details
-      .filter(
-        (detail): detail is RepositoryOrgUnitDetail =>
-          !!detail &&
-          typeof detail === 'object' &&
-          typeof detail.id === 'string',
-      )
-      .map(
-        detail =>
-          [
-            detail.selectionKey || detail.sourceOrgUnitId || detail.id,
-            detail,
-          ] as const,
-      ),
-  );
-
-  return selectionKeys
-    .map(selectionKey => detailMap.get(selectionKey))
-    .filter(
-      (detail): detail is RepositoryOrgUnitDetail => detail !== undefined,
-    );
-}
-
-function normalizeScopedSelections(params: {
-  selectionKeys: string[];
-  orgUnits: OrgUnit[];
-  scope: RepositoryDataScope;
-  details?: RepositoryOrgUnitDetail[] | null;
-}): {
-  selectionKeys: string[];
-  details: RepositoryOrgUnitDetail[];
-} {
-  const { selectionKeys, orgUnits, scope, details } = params;
-  const uniqueKeys = Array.from(new Set(selectionKeys));
-
-  if (orgUnits.length === 0) {
-    return {
-      selectionKeys: uniqueKeys,
-      details: filterPersistedSelectionDetails(uniqueKeys, details),
-    };
-  }
-
-  const prunedSelectionKeys = pruneScopedSelectionKeys(
-    uniqueKeys,
-    orgUnits,
-    scope,
-  );
-  const lookup = buildOrgUnitLookup(orgUnits);
-  const normalizedDetails = prunedSelectionKeys
-    .map(selectionKey => lookup.get(selectionKey))
-    .filter((unit): unit is OrgUnit => unit !== undefined)
-    .map(buildRepositorySelectionDetail);
-
-  return {
-    selectionKeys: prunedSelectionKeys,
-    details:
-      normalizedDetails.length > 0
-        ? normalizedDetails
-        : filterPersistedSelectionDetails(prunedSelectionKeys, details),
-  };
-}
-
 function buildStepValue(params: {
   approach: RepositoryReportingUnitApproach;
   sharedWizardState: DHIS2WizardState;
@@ -966,9 +712,7 @@ function buildStepValue(params: {
   } = params;
 
   const activeInstanceIds = activeInstances.map(instance => instance.id);
-  const rawSharedSelectedOrgUnits = sanitizeSelectionKeys(
-    sharedWizardState.orgUnits,
-  );
+  const sharedSelectedOrgUnits = sanitizeSelectionKeys(sharedWizardState.orgUnits);
   const sharedDataScope =
     (sharedWizardState.dataLevelScope as RepositoryDataScope | undefined) ||
     'selected';
@@ -976,43 +720,31 @@ function buildStepValue(params: {
     approach === 'map_merge' ? 'all_levels' : sharedDataScope;
   const primaryInstanceId =
     approach === 'primary_instance'
-      ? (sharedWizardState.primaryOrgUnitInstanceId ?? null)
+      ? sharedWizardState.primaryOrgUnitInstanceId ?? null
       : null;
-  const sharedSelection = normalizeScopedSelections({
-    selectionKeys: rawSharedSelectedOrgUnits,
-    orgUnits: sharedMetadata?.orgUnits || [],
-    scope: effectiveSharedDataScope,
-    details: sharedWizardState.selectedOrgUnitDetails as
-      | RepositoryOrgUnitDetail[]
-      | undefined,
-  });
-  const sharedSelectedOrgUnits = sharedSelection.selectionKeys;
-  const sharedSelectedOrgUnitDetails = sharedSelection.details;
 
   const separateInstanceConfigs: RepositorySeparateInstanceConfig[] =
     approach === 'separate'
       ? activeInstanceIds.map(instanceId => {
-          const state =
-            separateWizardStates[instanceId] ||
-            buildEmptyWizardState([instanceId]);
-          const scopedSelection = normalizeScopedSelections({
-            selectionKeys: sanitizeSelectionKeys(state.orgUnits),
-            orgUnits: separateMetadata[instanceId]?.orgUnits || [],
-            scope:
-              (state.dataLevelScope as RepositoryDataScope | undefined) ||
-              'selected',
-            details: state.selectedOrgUnitDetails as
-              | RepositoryOrgUnitDetail[]
-              | undefined,
-          });
+          const state = separateWizardStates[instanceId] || buildEmptyWizardState([instanceId]);
+          const instanceScope =
+            (state.dataLevelScope as RepositoryDataScope | undefined) || 'selected';
+          const instanceMetadata = separateMetadata[instanceId]?.orgUnits || [];
+          const instanceLookup = buildLookup(instanceMetadata);
+          const rawKeys = sanitizeSelectionKeys(state.orgUnits);
+          const prunedKeys = pruneSelectedKeys(rawKeys, instanceLookup, instanceScope);
+          const prunedKeySet = new Set(prunedKeys);
           return {
             instance_id: instanceId,
-            data_scope:
-              (state.dataLevelScope as RepositoryDataScope | undefined) ||
-              'selected',
+            data_scope: instanceScope,
             lowest_data_level_to_use: state.maxOrgUnitLevel ?? null,
-            selected_org_units: scopedSelection.selectionKeys,
-            selected_org_unit_details: scopedSelection.details,
+            selected_org_units: prunedKeys,
+            selected_org_unit_details: (
+              (state.selectedOrgUnitDetails as RepositorySeparateInstanceConfig['selected_org_unit_details']) ||
+              []
+            ).filter(detail =>
+              prunedKeySet.has(detail.selectionKey || detail.id || ''),
+            ),
           };
         })
       : [];
@@ -1023,10 +755,10 @@ function buildStepValue(params: {
     lowestDataLevelToUse: sharedWizardState.maxOrgUnitLevel ?? null,
     primaryInstanceId,
     sharedSelectedOrgUnits,
-    sharedSelectedOrgUnitDetails,
+    sharedSelectedOrgUnitDetails:
+      sharedWizardState.selectedOrgUnitDetails as DatabaseRepositoryOrgUnitConfig['selected_org_unit_details'],
     sharedMetadata: sharedMetadata?.orgUnits || [],
-    levelMapping:
-      (sharedWizardState.levelMapping as DatabaseRepositoryOrgUnitConfig['level_mapping']) ||
+    levelMapping: (sharedWizardState.levelMapping as DatabaseRepositoryOrgUnitConfig['level_mapping']) ||
       null,
     autoMerge,
     separateInstanceConfigs,
@@ -1040,33 +772,44 @@ function buildStepValue(params: {
 
   const validationError =
     !suppressMissingInstancesValidation && activeInstances.length === 0
-      ? t(
-          'Add and activate at least one DHIS2 instance before managing repository reporting units.',
-        )
+      ? t('Add and activate at least one DHIS2 instance before managing repository reporting units.')
       : approach === 'primary_instance' && primaryInstanceId == null
-        ? t(
-            'Choose the primary DHIS2 instance that will define the repository hierarchy.',
-          )
+        ? t('Choose the primary DHIS2 instance that will define the repository hierarchy.')
         : repositoryOrgUnits.length === 0
-          ? t(
-              'Select reporting units to build the repository hierarchy before continuing.',
-            )
+          ? t('Select reporting units to build the repository hierarchy before continuing.')
           : null;
 
+  // Prune selected org units so ancestor selections correctly subsume
+  // covered descendants under expanding scopes (children/grandchildren/
+  // all_levels). Without this, the backend may reject the payload as
+  // containing stale redundant selections.
+  const sharedOrgUnitLookup = buildLookup(sharedMetadata?.orgUnits || []);
+  const prunedSharedSelectedOrgUnits = pruneSelectedKeys(
+    sharedSelectedOrgUnits,
+    sharedOrgUnitLookup,
+    effectiveSharedDataScope,
+  );
+  const prunedSelectedOrgUnitDetailsSet = new Set(prunedSharedSelectedOrgUnits);
+  const prunedSelectedOrgUnitDetails = (
+    (sharedWizardState.selectedOrgUnitDetails as DatabaseRepositoryOrgUnitConfig['selected_org_unit_details']) ||
+    []
+  ).filter(detail =>
+    prunedSelectedOrgUnitDetailsSet.has(detail.selectionKey || detail.id || ''),
+  );
+
   const repositoryOrgUnitConfig: DatabaseRepositoryOrgUnitConfig = {
-    selected_org_units: sharedSelectedOrgUnits,
-    selected_org_unit_details: sharedSelectedOrgUnitDetails,
+    selected_org_units: prunedSharedSelectedOrgUnits,
+    selected_org_unit_details: prunedSelectedOrgUnitDetails,
     level_mapping:
       approach === 'map_merge' || approach === 'auto_merge'
-        ? (sharedWizardState.levelMapping as DatabaseRepositoryOrgUnitConfig['level_mapping']) ||
-          null
+        ? ((sharedWizardState.levelMapping as DatabaseRepositoryOrgUnitConfig['level_mapping']) ||
+          null)
         : null,
     filters: {
       active_instance_ids: activeInstanceIds,
     },
     auto_merge: approach === 'auto_merge' ? autoMerge : null,
-    separate_instance_configs:
-      approach === 'separate' ? separateInstanceConfigs : [],
+    separate_instance_configs: approach === 'separate' ? separateInstanceConfigs : [],
     enabled_dimensions: enabledDimensions,
     repository_org_units: repositoryOrgUnits,
   };
@@ -1074,9 +817,7 @@ function buildStepValue(params: {
   const summary = {
     approach,
     lowest_data_level_to_use:
-      approach === 'separate'
-        ? null
-        : (sharedWizardState.maxOrgUnitLevel ?? null),
+      approach === 'separate' ? null : sharedWizardState.maxOrgUnitLevel ?? null,
     primary_instance_id: primaryInstanceId,
     data_scope: approach === 'separate' ? null : effectiveSharedDataScope,
     enabled_level_dimensions: enabledDimensions.levels?.length || 0,
@@ -1088,9 +829,7 @@ function buildStepValue(params: {
   return {
     repository_reporting_unit_approach: approach,
     lowest_data_level_to_use:
-      approach === 'separate'
-        ? null
-        : (sharedWizardState.maxOrgUnitLevel ?? null),
+      approach === 'separate' ? null : sharedWizardState.maxOrgUnitLevel ?? null,
     primary_instance_id: primaryInstanceId,
     repository_data_scope:
       approach === 'separate' ? null : effectiveSharedDataScope,
@@ -1107,8 +846,8 @@ export function renderRepositorySummaryLines(
 ): Array<{ label: string; value: string }> {
   const primaryInstanceName =
     value.primary_instance_id != null
-      ? instances.find(instance => instance.id === value.primary_instance_id)
-          ?.name || t('Configured connection %s', value.primary_instance_id)
+      ? instances.find(instance => instance.id === value.primary_instance_id)?.name ||
+        t('Configured connection %s', value.primary_instance_id)
       : t('Not applicable');
   const lineageSummary = Object.entries(
     value.repository_org_unit_summary.source_lineage_counts || {},
@@ -1141,13 +880,11 @@ export function renderRepositorySummaryLines(
           ? t('Configured per instance')
           : value.repository_reporting_unit_approach === 'map_merge'
             ? t('Automatic from mapped hierarchy')
-            : formatDataScopeLabel(value.repository_data_scope),
+          : formatDataScopeLabel(value.repository_data_scope),
     },
     {
       label: t('Total repository reporting units to store'),
-      value: String(
-        value.repository_org_unit_summary.total_repository_org_units || 0,
-      ),
+      value: String(value.repository_org_unit_summary.total_repository_org_units || 0),
     },
     {
       label: t('Enabled hierarchy levels'),
@@ -1172,100 +909,6 @@ export function renderRepositorySummaryLines(
       value: lineageSummary || t('No lineage summary available'),
     },
   ];
-}
-
-function buildSelectionDetailFingerprint(
-  details: RepositoryOrgUnitDetail[] | null | undefined,
-): string[] {
-  return (details || []).map(detail =>
-    [
-      detail.selectionKey || detail.sourceOrgUnitId || detail.id,
-      detail.parentId || '',
-      detail.level ?? '',
-      detail.path || '',
-    ].join('::'),
-  );
-}
-
-function buildEnabledDimensionFingerprint(
-  enabledDimensions: DatabaseRepositoryEnabledDimensions | null | undefined,
-): {
-  levels: string[];
-  groups: string[];
-  groupSets: string[];
-} {
-  return {
-    levels: (enabledDimensions?.levels || []).map(item => item.key),
-    groups: (enabledDimensions?.groups || []).map(item => item.key),
-    groupSets: (enabledDimensions?.group_sets || []).map(item => item.key),
-  };
-}
-
-function buildInitializationFingerprint(params: {
-  databaseId?: number;
-  activeInstanceIds: number[];
-  initialValue?: Partial<RepositoryReportingUnitsStepValue> | null;
-}): string {
-  const { databaseId, activeInstanceIds, initialValue } = params;
-  const config = initialValue?.repository_org_unit_config || null;
-
-  return JSON.stringify({
-    databaseId: databaseId || null,
-    activeInstanceIds,
-    repository_reporting_unit_approach:
-      initialValue?.repository_reporting_unit_approach || null,
-    lowest_data_level_to_use: initialValue?.lowest_data_level_to_use ?? null,
-    primary_instance_id: initialValue?.primary_instance_id ?? null,
-    repository_data_scope: initialValue?.repository_data_scope || null,
-    selected_org_units: config?.selected_org_units || [],
-    selected_org_unit_details: buildSelectionDetailFingerprint(
-      config?.selected_org_unit_details as
-        | RepositoryOrgUnitDetail[]
-        | undefined,
-    ),
-    level_mapping: config?.level_mapping || null,
-    auto_merge: config?.auto_merge || null,
-    enabled_dimensions: buildEnabledDimensionFingerprint(
-      config?.enabled_dimensions || null,
-    ),
-    separate_instance_configs: (config?.separate_instance_configs || []).map(
-      item => ({
-        instance_id: item.instance_id,
-        data_scope: item.data_scope,
-        lowest_data_level_to_use: item.lowest_data_level_to_use ?? null,
-        selected_org_units: item.selected_org_units,
-        selected_org_unit_details: buildSelectionDetailFingerprint(
-          item.selected_org_unit_details,
-        ),
-      }),
-    ),
-  });
-}
-
-function areMetadataPayloadsEqual(
-  left: StepOrgUnitsMetadataPayload | null | undefined,
-  right: StepOrgUnitsMetadataPayload | null | undefined,
-): boolean {
-  if (left === right) {
-    return true;
-  }
-
-  if (!left || !right) {
-    return false;
-  }
-
-  return (
-    left.orgUnits === right.orgUnits &&
-    left.orgUnitLevels === right.orgUnitLevels &&
-    left.orgUnitGroups === right.orgUnitGroups &&
-    left.orgUnitGroupSets === right.orgUnitGroupSets &&
-    left.instances === right.instances &&
-    left.repositoryConfig === right.repositoryConfig &&
-    left.repositoryEnabledDimensions === right.repositoryEnabledDimensions &&
-    left.repositoryApproach === right.repositoryApproach &&
-    left.repositoryDataScope === right.repositoryDataScope &&
-    left.repositoryLowestDataLevelToUse === right.repositoryLowestDataLevelToUse
-  );
 }
 
 export default function DHIS2RepositoryReportingUnitsStep({
@@ -1318,9 +961,8 @@ export default function DHIS2RepositoryReportingUnitsStep({
       initialValue?.repository_org_unit_config?.enabled_dimensions?.group_sets,
     ),
   );
-  const lastAppliedInitializationRef = useRef<string>('');
-  const lastEmittedStepValueRef =
-    useRef<RepositoryReportingUnitsStepValue | null>(null);
+  const initializationKeyRef = useRef<string>('');
+  const lastEmittedFingerprintRef = useRef<string>('');
   const hasPersistedLevelDimensions = Array.isArray(
     initialValue?.repository_org_unit_config?.enabled_dimensions?.levels,
   );
@@ -1330,33 +972,36 @@ export default function DHIS2RepositoryReportingUnitsStep({
   const hasPersistedGroupSetDimensions = Array.isArray(
     initialValue?.repository_org_unit_config?.enabled_dimensions?.group_sets,
   );
+  const autoInitializedDimensionKeysRef = useRef({
+    levels: hasPersistedLevelDimensions,
+    groups: hasPersistedGroupDimensions,
+    groupSets: hasPersistedGroupSetDimensions,
+  });
   const savedEnabledDimensions =
     initialValue?.repository_org_unit_config?.enabled_dimensions || null;
 
-  const initializationFingerprint = useMemo(
-    () =>
-      buildInitializationFingerprint({
-        databaseId,
-        activeInstanceIds: activeInstances.map(instance => instance.id),
-        initialValue,
-      }),
-    [activeInstances, databaseId, initialValue],
-  );
+  // Only track external identity changes (databaseId + active instance set)
+  // and the approach from persisted config. Never include the full initialValue
+  // object — it contains large nested payloads and feeding it back through
+  // onChange→parent→initialValue creates an expensive reinitialization loop.
+  const initializationKey = JSON.stringify({
+    databaseId: databaseId || null,
+    activeInstanceIds: activeInstances.map(instance => instance.id),
+    approach: initialValue?.repository_reporting_unit_approach || null,
+    primaryInstanceId: initialValue?.primary_instance_id ?? null,
+    selectedOrgUnitCount:
+      initialValue?.repository_org_unit_config?.selected_org_units?.length ?? 0,
+  });
 
   useEffect(() => {
-    if (initialValue && initialValue === lastEmittedStepValueRef.current) {
+    if (initializationKeyRef.current === initializationKey) {
       return;
     }
-    if (lastAppliedInitializationRef.current === initializationFingerprint) {
-      return;
-    }
-    lastAppliedInitializationRef.current = initializationFingerprint;
+    initializationKeyRef.current = initializationKey;
     const nextApproach = resolveInitialApproach(activeInstances, initialValue);
     setApproach(nextApproach);
     setSharedWizardState(buildSharedWizardState(activeInstances, initialValue));
-    setSeparateWizardStates(
-      buildSeparateWizardStates(activeInstances, initialValue),
-    );
+    setSeparateWizardStates(buildSeparateWizardStates(activeInstances, initialValue));
     setSharedMetadata(null);
     setSeparateMetadata({});
     setAutoMerge({
@@ -1376,11 +1021,15 @@ export default function DHIS2RepositoryReportingUnitsStep({
     );
     setEnabledGroupSetKeys(
       extractSelectedDimensionKeys(
-        initialValue?.repository_org_unit_config?.enabled_dimensions
-          ?.group_sets,
+        initialValue?.repository_org_unit_config?.enabled_dimensions?.group_sets,
       ),
     );
-  }, [activeInstances, initialValue, initializationFingerprint]);
+    autoInitializedDimensionKeysRef.current = {
+      levels: hasPersistedLevelDimensions,
+      groups: hasPersistedGroupDimensions,
+      groupSets: hasPersistedGroupSetDimensions,
+    };
+  }, [activeInstances, initialValue, initializationKey]);
 
   useEffect(() => {
     if (waitingForPersistedInstances) {
@@ -1396,7 +1045,7 @@ export default function DHIS2RepositoryReportingUnitsStep({
         current.primaryOrgUnitInstanceId &&
         activeInstanceIds.includes(current.primaryOrgUnitInstanceId)
           ? current.primaryOrgUnitInstanceId
-          : (activeInstanceIds[0] ?? null),
+          : activeInstanceIds[0] ?? null,
     }));
     setSeparateWizardStates(current =>
       Object.fromEntries(
@@ -1413,43 +1062,17 @@ export default function DHIS2RepositoryReportingUnitsStep({
     );
   }, [activeInstances, approach, waitingForPersistedInstances]);
 
-  const handleSharedMetadataLoaded = useMemo(
-    () => (nextMetadata: StepOrgUnitsMetadataPayload) => {
-      setSharedMetadata(current =>
-        areMetadataPayloadsEqual(current, nextMetadata)
-          ? current
-          : nextMetadata,
-      );
-    },
-    [],
-  );
-
-  const separateMetadataLoadHandlers = useMemo(
-    () =>
-      Object.fromEntries(
-        activeInstances.map(instance => [
-          instance.id,
-          (nextMetadata: StepOrgUnitsMetadataPayload) => {
-            setSeparateMetadata(current => {
-              const existing = current[instance.id];
-              if (areMetadataPayloadsEqual(existing, nextMetadata)) {
-                return current;
-              }
-              return {
-                ...current,
-                [instance.id]: nextMetadata,
-              };
-            });
-          },
-        ]),
-      ) as Record<number, (nextMetadata: StepOrgUnitsMetadataPayload) => void>,
-    [activeInstances],
-  );
-
   const allMetadataPayloads = useMemo(
-    () => [sharedMetadata, ...Object.values(separateMetadata)],
+    () => [
+      sharedMetadata,
+      ...Object.values(separateMetadata),
+    ],
     [separateMetadata, sharedMetadata],
   );
+  // This intentionally calls resolveRepositoryOrgUnits independently from
+  // stepValue to break a dependency cycle: stepValue → enabledDimensions →
+  // levelDimensionOptions → stepValue. The cost is acceptable because useMemo
+  // prevents recalculation when inputs are stable.
   const levelDimensionOptions = useMemo(
     () =>
       buildLevelDimensionOptions(
@@ -1458,20 +1081,15 @@ export default function DHIS2RepositoryReportingUnitsStep({
           dataScope:
             approach === 'map_merge'
               ? 'all_levels'
-              : (sharedWizardState.dataLevelScope as
-                  | RepositoryDataScope
-                  | undefined) || 'selected',
+              : ((sharedWizardState.dataLevelScope as RepositoryDataScope | undefined) ||
+                'selected'),
           lowestDataLevelToUse:
-            approach === 'separate'
-              ? null
-              : (sharedWizardState.maxOrgUnitLevel ?? null),
+            approach === 'separate' ? null : sharedWizardState.maxOrgUnitLevel ?? null,
           primaryInstanceId:
             approach === 'primary_instance'
-              ? (sharedWizardState.primaryOrgUnitInstanceId ?? null)
+              ? sharedWizardState.primaryOrgUnitInstanceId ?? null
               : null,
-          sharedSelectedOrgUnits: sanitizeSelectionKeys(
-            sharedWizardState.orgUnits,
-          ),
+          sharedSelectedOrgUnits: sanitizeSelectionKeys(sharedWizardState.orgUnits),
           sharedSelectedOrgUnitDetails:
             sharedWizardState.selectedOrgUnitDetails as DatabaseRepositoryOrgUnitConfig['selected_org_unit_details'],
           sharedMetadata: sharedMetadata?.orgUnits || [],
@@ -1488,9 +1106,8 @@ export default function DHIS2RepositoryReportingUnitsStep({
                   return {
                     instance_id: instance.id,
                     data_scope:
-                      (state.dataLevelScope as
-                        | RepositoryDataScope
-                        | undefined) || 'selected',
+                      (state.dataLevelScope as RepositoryDataScope | undefined) ||
+                      'selected',
                     lowest_data_level_to_use: state.maxOrgUnitLevel ?? null,
                     selected_org_units: sanitizeSelectionKeys(state.orgUnits),
                     selected_org_unit_details:
@@ -1565,11 +1182,15 @@ export default function DHIS2RepositoryReportingUnitsStep({
       const validCurrent = current.filter(key =>
         levelDimensionOptions.some(option => option.key === key),
       );
-      const nextKeys =
-        validCurrent.length > 0
-          ? validCurrent
-          : levelDimensionOptions.map(option => option.key);
-      return areStringArraysEqual(current, nextKeys) ? current : nextKeys;
+      if (validCurrent.length > 0) {
+        autoInitializedDimensionKeysRef.current.levels = true;
+        return validCurrent;
+      }
+      if (!autoInitializedDimensionKeysRef.current.levels) {
+        autoInitializedDimensionKeysRef.current.levels = true;
+        return levelDimensionOptions.map(option => option.key);
+      }
+      return validCurrent;
     });
   }, [hasPersistedLevelDimensions, levelDimensionOptions]);
 
@@ -1582,15 +1203,18 @@ export default function DHIS2RepositoryReportingUnitsStep({
         groupDimensionOptions.some(option => option.key === key),
       );
       if (hasPersistedGroupDimensions) {
-        return areStringArraysEqual(current, validCurrent)
-          ? current
-          : validCurrent;
+        autoInitializedDimensionKeysRef.current.groups = true;
+        return validCurrent;
       }
-      const nextKeys =
-        validCurrent.length > 0
-          ? validCurrent
-          : groupDimensionOptions.map(option => option.key);
-      return areStringArraysEqual(current, nextKeys) ? current : nextKeys;
+      if (validCurrent.length > 0) {
+        autoInitializedDimensionKeysRef.current.groups = true;
+        return validCurrent;
+      }
+      if (!autoInitializedDimensionKeysRef.current.groups) {
+        autoInitializedDimensionKeysRef.current.groups = true;
+        return groupDimensionOptions.map(option => option.key);
+      }
+      return validCurrent;
     });
   }, [groupDimensionOptions, hasPersistedGroupDimensions]);
 
@@ -1603,15 +1227,18 @@ export default function DHIS2RepositoryReportingUnitsStep({
         groupSetDimensionOptions.some(option => option.key === key),
       );
       if (hasPersistedGroupSetDimensions) {
-        return areStringArraysEqual(current, validCurrent)
-          ? current
-          : validCurrent;
+        autoInitializedDimensionKeysRef.current.groupSets = true;
+        return validCurrent;
       }
-      const nextKeys =
-        validCurrent.length > 0
-          ? validCurrent
-          : groupSetDimensionOptions.map(option => option.key);
-      return areStringArraysEqual(current, nextKeys) ? current : nextKeys;
+      if (validCurrent.length > 0) {
+        autoInitializedDimensionKeysRef.current.groupSets = true;
+        return validCurrent;
+      }
+      if (!autoInitializedDimensionKeysRef.current.groupSets) {
+        autoInitializedDimensionKeysRef.current.groupSets = true;
+        return groupSetDimensionOptions.map(option => option.key);
+      }
+      return validCurrent;
     });
   }, [groupSetDimensionOptions, hasPersistedGroupSetDimensions]);
 
@@ -1656,9 +1283,9 @@ export default function DHIS2RepositoryReportingUnitsStep({
         separateMetadata,
         autoMerge,
         enabledDimensions,
-        activeInstances,
-        suppressMissingInstancesValidation: waitingForPersistedInstances,
-      }),
+      activeInstances,
+      suppressMissingInstancesValidation: waitingForPersistedInstances,
+    }),
     [
       activeInstances,
       approach,
@@ -1676,7 +1303,25 @@ export default function DHIS2RepositoryReportingUnitsStep({
     if (waitingForPersistedInstances) {
       return;
     }
-    lastEmittedStepValueRef.current = stepValue;
+    // Build a lightweight fingerprint to avoid emitting semantically identical
+    // payloads to the parent, which would cause unnecessary re-renders and
+    // state churn — especially expensive for large repository hierarchies.
+    const fingerprint = JSON.stringify({
+      a: stepValue.repository_reporting_unit_approach,
+      l: stepValue.lowest_data_level_to_use,
+      p: stepValue.primary_instance_id,
+      s: stepValue.repository_data_scope,
+      n: stepValue.repository_org_units.length,
+      v: stepValue.validationError,
+      ou: stepValue.repository_org_unit_config?.selected_org_units?.length ?? 0,
+      dl: stepValue.repository_org_unit_config?.enabled_dimensions?.levels?.length ?? 0,
+      dg: stepValue.repository_org_unit_config?.enabled_dimensions?.groups?.length ?? 0,
+      ds: stepValue.repository_org_unit_config?.enabled_dimensions?.group_sets?.length ?? 0,
+    });
+    if (fingerprint === lastEmittedFingerprintRef.current) {
+      return;
+    }
+    lastEmittedFingerprintRef.current = fingerprint;
     onChange(stepValue);
   }, [onChange, stepValue, waitingForPersistedInstances]);
 
@@ -1721,9 +1366,10 @@ export default function DHIS2RepositoryReportingUnitsStep({
         ...current,
         dataLevelScope: 'all_levels',
         includeChildren: true,
-        maxOrgUnitLevel: shouldResetLowestLevel
-          ? deepestMappedLevel
-          : current.maxOrgUnitLevel,
+        maxOrgUnitLevel:
+          shouldResetLowestLevel
+            ? deepestMappedLevel
+            : current.maxOrgUnitLevel,
       }));
     }
   }, [
@@ -1740,9 +1386,7 @@ export default function DHIS2RepositoryReportingUnitsStep({
         <FieldStack>
           <div>
             <Text strong>
-              {t(
-                'Choose how the repository reporting unit hierarchy should be built',
-              )}
+              {t('Choose how the repository reporting unit hierarchy should be built')}
             </Text>
             <Paragraph style={{ marginTop: 8, marginBottom: 0 }}>
               {t(
@@ -1801,18 +1445,14 @@ export default function DHIS2RepositoryReportingUnitsStep({
                 onChange={value =>
                   setAutoMerge(current => ({
                     ...current,
-                    fallback_behavior: value as
-                      | 'preserve_unmatched'
-                      | 'drop_unmatched',
+                    fallback_behavior: value as 'preserve_unmatched' | 'drop_unmatched',
                   }))
                 }
                 styles={{ root: { width: '100%', marginTop: 8 } }}
               />
             </div>
             <div>
-              <Text strong>
-                {t('Fallback behavior for unresolved conflicts')}
-              </Text>
+              <Text strong>{t('Fallback behavior for unresolved conflicts')}</Text>
               <Select
                 virtual={false}
                 options={[
@@ -1829,9 +1469,7 @@ export default function DHIS2RepositoryReportingUnitsStep({
                 onChange={value =>
                   setAutoMerge(current => ({
                     ...current,
-                    unresolved_conflicts: value as
-                      | 'preserve_for_review'
-                      | 'drop',
+                    unresolved_conflicts: value as 'preserve_for_review' | 'drop',
                   }))
                 }
                 styles={{ root: { width: '100%', marginTop: 8 } }}
@@ -1846,9 +1484,7 @@ export default function DHIS2RepositoryReportingUnitsStep({
           <Alert
             type="info"
             showIcon
-            message={t(
-              'Each configured DHIS2 instance is managed independently',
-            )}
+            message={t('Each configured DHIS2 instance is managed independently')}
             description={t(
               'Configure reporting units for each instance separately. Stored repository units remain source-specific.',
             )}
@@ -1862,16 +1498,12 @@ export default function DHIS2RepositoryReportingUnitsStep({
                 )}
               </Paragraph>
               <WizardStepOrgUnits
-                wizardState={
-                  separateWizardStates[instance.id] ||
-                  buildEmptyWizardState([instance.id])
-                }
+                wizardState={separateWizardStates[instance.id] || buildEmptyWizardState([instance.id])}
                 updateState={updates =>
                   setSeparateWizardStates(current => ({
                     ...current,
                     [instance.id]: {
-                      ...(current[instance.id] ||
-                        buildEmptyWizardState([instance.id])),
+                      ...(current[instance.id] || buildEmptyWizardState([instance.id])),
                       ...updates,
                     },
                   }))
@@ -1895,7 +1527,12 @@ export default function DHIS2RepositoryReportingUnitsStep({
                   ),
                   lowestDataLevelTitle: t('Lowest data level to use'),
                 }}
-                onMetadataLoaded={separateMetadataLoadHandlers[instance.id]}
+                onMetadataLoaded={metadata =>
+                  setSeparateMetadata(current => ({
+                    ...current,
+                    [instance.id]: metadata,
+                  }))
+                }
               />
             </InstanceSection>
           ))}
@@ -1974,7 +1611,7 @@ export default function DHIS2RepositoryReportingUnitsStep({
             lowestDataLevelOptions={
               approach === 'map_merge' ? mappedLowestLevelOptions : undefined
             }
-            onMetadataLoaded={handleSharedMetadataLoaded}
+            onMetadataLoaded={setSharedMetadata}
           />
         </SectionBlock>
       )}
@@ -2094,9 +1731,7 @@ export default function DHIS2RepositoryReportingUnitsStep({
             </SummaryItem>
           ))}
         </SummaryGrid>
-        <div
-          style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}
-        >
+        <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Tag color="blue">
             {t(
               'Conflicted repository units: %s',

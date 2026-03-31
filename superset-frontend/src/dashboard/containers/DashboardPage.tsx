@@ -136,19 +136,23 @@ export const DashboardPage: FC<PageProps> = ({
     (state: RootState) => state.dashboardInfo.theme,
   );
   const { addDangerToast } = useToasts();
-  const { result: dashboard, error: dashboardApiError } =
-    useDashboard(idOrSlug, Boolean(isPublicView));
+  const { result: dashboard, error: dashboardApiError } = useDashboard(
+    idOrSlug,
+    Boolean(isPublicView),
+  );
   const publicDashboardId = dashboard?.id || numericDashboardId;
-  const { result: charts, error: chartsApiError } =
-    useDashboardCharts(
-      isPublicView ? publicDashboardId : idOrSlug,
-      Boolean(isPublicView),
-    );
+  const { result: charts, error: chartsApiError } = useDashboardCharts(
+    isPublicView ? publicDashboardId : idOrSlug,
+    Boolean(isPublicView),
+  );
   const {
     result: datasets,
     error: datasetsApiError,
     status,
-  } = useDashboardDatasets(isPublicView ? null : idOrSlug);
+  } = useDashboardDatasets(
+    isPublicView ? publicDashboardId : idOrSlug,
+    Boolean(isPublicView),
+  );
   const isDashboardHydrated = useRef(false);
 
   const error = dashboardApiError || chartsApiError;

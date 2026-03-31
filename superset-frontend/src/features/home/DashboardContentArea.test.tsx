@@ -126,6 +126,62 @@ test('loads chart previews without requesting embedded configuration in legacy m
   );
 });
 
+test('loads public chart previews from the path-based charts endpoint', async () => {
+  const getSpy = jest
+    .spyOn(SupersetClient, 'get')
+    .mockImplementation(({ endpoint }) => {
+      if (endpoint === '/api/v1/dashboard/public/7') {
+        return Promise.resolve({
+          json: {
+            result: {
+              position_json: {
+                ROOT_ID: { id: 'ROOT_ID', type: 'ROOT', children: [] },
+              },
+            },
+          },
+          response: new Response(),
+        }) as any;
+      }
+
+      if (endpoint === '/api/v1/chart/dashboard/7/charts') {
+        return Promise.resolve({
+          json: {
+            result: [
+              {
+                id: 101,
+                slice_name: 'ANC coverage',
+                description: '',
+                url: '/chart/101',
+                viz_type: 'line',
+              },
+            ],
+          },
+          response: new Response(),
+        }) as any;
+      }
+
+      throw new Error(`Unexpected endpoint: ${endpoint}`);
+    });
+
+  render(
+    <DashboardContentArea
+      selectedDashboard={selectedDashboard}
+      isPublic
+      useEmbeddedSDK={false}
+    />,
+  );
+
+  expect(await screen.findByText('Chart preview: 101')).toBeInTheDocument();
+
+  await waitFor(() => {
+    expect(getSpy).toHaveBeenCalledTimes(2);
+  });
+
+  expect(getSpy.mock.calls.map(([request]) => request.endpoint).sort()).toEqual(
+    ['/api/v1/chart/dashboard/7/charts', '/api/v1/dashboard/public/7'],
+  );
+});
+
 test('reuses cached embedded dashboard uuid on repeat visits', async () => {
   const getSpy = jest.spyOn(SupersetClient, 'get').mockResolvedValue({
     json: {

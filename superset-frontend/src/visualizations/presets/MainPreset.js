@@ -79,13 +79,14 @@ import {
 } from 'src/filters/components';
 import { PivotTableChartPlugin as PivotTableChartPluginV2 } from '@superset-ui/plugin-chart-pivot-table';
 import { HandlebarsChartPlugin } from '@superset-ui/plugin-chart-handlebars';
+import VitalMapsChartPlugin from '@superset-ui/plugin-chart-vital-maps';
 import { FilterPlugins } from 'src/constants';
 import AgGridTableChartPlugin from '@superset-ui/plugin-chart-ag-grid-table';
 import TimeTableChartPlugin from '../TimeTable';
 import DHIS2MapChartPlugin from '../DHIS2Map';
 import MarqueeChartPlugin from '../Marquee';
 import SlideshowChartPlugin from '../Slideshow';
-import VitalMapsChartPlugin from '@superset-ui/plugin-chart-vital-maps';
+import SummaryChartPlugin from '../Summary';
 
 export default class MainPreset extends Preset {
   constructor() {
@@ -198,6 +199,7 @@ export default class MainPreset extends Preset {
         new DHIS2MapChartPlugin().configure({ key: 'dhis2_map' }),
         new MarqueeChartPlugin().configure({ key: 'marquee_kpi' }),
         new SlideshowChartPlugin().configure({ key: 'slideshow' }),
+        new SummaryChartPlugin().configure({ key: 'summary' }),
         new VitalMapsChartPlugin().configure({ key: 'vital_maps' }),
         ...experimentalPlugins,
         ...agGridTablePlugin,

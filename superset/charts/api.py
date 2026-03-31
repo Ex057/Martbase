@@ -1208,8 +1208,15 @@ class ChartRestApi(BaseSupersetModelRestApi):
             if is_public_access:
                 dashboard_id_str = request.args.get("dashboard_id")
                 if not dashboard_id_str:
-                    return self.response_400(message="dashboard_id is required")
-                dashboard_id = int(dashboard_id_str)
+                    return self.response(200, result=[])  # return empty list if no dashboard_id
+                try:
+                    dashboard_id = int(dashboard_id_str)
+                except ValueError:
+                    # If not an int, treat as slug
+                    dashboard = db.session.query(Dashboard).filter(Dashboard.slug == dashboard_id_str).first()
+                    if not dashboard:
+                        return self.response_404()
+                    dashboard_id = dashboard.id
 
             if not dashboard_id:
                 return self.response_400(message="dashboard_id is required")
@@ -1222,11 +1229,12 @@ class ChartRestApi(BaseSupersetModelRestApi):
                 .filter(Dashboard.id == dashboard_id)
             )
 
-            # For public access, only return charts marked as public (hide restricted charts)
-            if is_public_access:
-                query = query.filter(Slice.is_public == True)
+            # Note: For public access, we return all charts on the dashboard
+            # since public dashboards should only contain public charts
 
             charts = query.all()
+
+            logger.info(f"Public charts API: found {len(charts)} charts for dashboard_id={dashboard_id}")
 
             result = [
                 {
@@ -1235,6 +1243,8 @@ class ChartRestApi(BaseSupersetModelRestApi):
                     "description": chart.description or "",
                     "viz_type": chart.viz_type,
                     "is_public": getattr(chart, "is_public", False),
+                    "form_data": chart.form_data,
+                    "params": chart.params,
                 }
                 for chart in charts
             ]

@@ -1391,6 +1391,10 @@ def _get_fetch_spec(metadata_type: str) -> tuple[str, str, dict[str, Any]]:
             {
                 "fields": (
                     "id,displayName,name,aggregationType,valueType,domainType,"
+                    "categoryCombo[id,displayName,name,"
+                    "categories[id,displayName,name,dataDimensionType,"
+                    "categoryOptions[id,displayName,name,code]]],"
+                    "optionSet[id,displayName,name],"
                     "groups[id,displayName,name],"
                     "legendSet[id,displayName,name,legends[id,displayName,name,startValue,endValue,color]]"
                 ),
@@ -2127,14 +2131,6 @@ def _matches_search(item: dict[str, Any], search_term: str) -> bool:
     if not search_term:
         return True
 
-    uid_tokens = [
-        token
-        for token in re.split(r"[\s,;\t\r\n]+", search_term)
-        if token
-    ]
-    if len(uid_tokens) > 1 and all(_SEARCH_ID_RE.match(token) for token in uid_tokens):
-        return str(item.get("id") or "") in set(uid_tokens)
-
     if _SEARCH_ID_RE.match(search_term):
         return item.get("id") == search_term
 
@@ -2848,7 +2844,6 @@ def schedule_database_metadata_refresh_after_commit(
     requested_instance_ids = list(dict.fromkeys(instance_ids or []))
     active_metadata_types = list(dict.fromkeys(metadata_types or SUPPORTED_METADATA_TYPES))
     session = db.session()
-    flask_app = current_app._get_current_object() if has_app_context() else None
 
     def _fire() -> None:
         schedule_database_metadata_refresh(
@@ -2858,22 +2853,6 @@ def schedule_database_metadata_refresh_after_commit(
             reason=reason,
         )
 
-    def _fire_with_app_context() -> None:
-        if flask_app is not None:
-            with flask_app.app_context():
-                _fire()
-            return
-        _fire()
-
-    def _defer_fire() -> None:
-        # `after_commit` runs before SQLAlchemy fully tears down the transaction
-        # state for the current session. Dispatch onto the next tick so the
-        # scheduler can use a fresh session instead of querying in a committed
-        # transaction.
-        timer = threading.Timer(0, _fire_with_app_context)
-        timer.daemon = True
-        timer.start()
-
     def _remove_listener(event_name: str, callback: Any) -> None:
         try:
             event.remove(session, event_name, callback)
@@ -2882,7 +2861,7 @@ def schedule_database_metadata_refresh_after_commit(
 
     def _after_commit(_session: Any) -> None:
         try:
-            _defer_fire()
+            _fire()
         except Exception:  # pylint: disable=broad-except
             logger.warning(
                 "Deferred DHIS2 metadata scheduling failed for database id=%s",

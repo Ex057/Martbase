@@ -17,9 +17,22 @@
  * under the License.
  */
 
-import React, { FC, useRef, useEffect, useMemo, useState, useCallback } from 'react';
+import {
+  FC,
+  Fragment,
+  useRef,
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+} from 'react';
 import { styled, t } from '@superset-ui/core';
-import { MarqueeChartProps, MarqueeKpiItem, MarqueePlacement, MarqueeOrientation } from './types';
+import {
+  MarqueeChartProps,
+  MarqueeKpiItem,
+  MarqueePlacement,
+  MarqueeOrientation,
+} from './types';
 
 // ─── Styled Components ───────────────────────────────────────────────────────
 
@@ -27,19 +40,46 @@ interface WrapperProps {
   $containerBackground: string;
   $containerHeight: number;
   $isVertical: boolean;
+  $blockAlign: 'start' | 'center' | 'end';
 }
 
 const Wrapper = styled.div<WrapperProps>`
   position: relative;
   width: 100%;
-  height: ${({ $isVertical, $containerHeight }) =>
+  height: 100%;
+  min-height: ${({ $isVertical, $containerHeight }) =>
     $isVertical ? '100%' : `${$containerHeight}px`};
   background: ${({ $containerBackground }) => $containerBackground};
   overflow: hidden;
+  display: grid;
+  justify-items: stretch;
+  align-items: ${({ $isVertical, $blockAlign }) => {
+    if ($isVertical) {
+      return 'stretch';
+    }
+    if ($blockAlign === 'start') {
+      return 'start';
+    }
+    if ($blockAlign === 'end') {
+      return 'end';
+    }
+    return 'center';
+  }};
+  box-sizing: border-box;
+`;
+
+interface ViewportProps {
+  $containerHeight: number;
+  $isVertical: boolean;
+}
+
+const Viewport = styled.div<ViewportProps>`
+  width: 100%;
+  height: ${({ $isVertical, $containerHeight }) =>
+    $isVertical ? '100%' : `${$containerHeight}px`};
+  overflow: hidden;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  box-sizing: border-box;
 `;
 
 interface TrackProps {
@@ -56,32 +96,48 @@ const Track = styled.div<TrackProps>`
   gap: 0;
   flex-shrink: 0;
   animation: ${({ $isVertical, $reverse }) =>
-    $isVertical
-      ? $reverse
-        ? 'marqueeScrollVerticalReverse'
-        : 'marqueeScrollVertical'
-      : $reverse
-      ? 'marqueeScrollReverse'
-      : 'marqueeScroll'
-  } ${({ $animationDuration }) => $animationDuration} linear
+      $isVertical
+        ? $reverse
+          ? 'marqueeScrollVerticalReverse'
+          : 'marqueeScrollVertical'
+        : $reverse
+          ? 'marqueeScrollReverse'
+          : 'marqueeScroll'}
+    ${({ $animationDuration }) => $animationDuration} linear
     ${({ $paused }) => ($paused ? 'paused' : 'running')} infinite;
   will-change: transform;
 
   @keyframes marqueeScroll {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-50%); }
+    0% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(-50%);
+    }
   }
   @keyframes marqueeScrollReverse {
-    0% { transform: translateX(-50%); }
-    100% { transform: translateX(0); }
+    0% {
+      transform: translateX(-50%);
+    }
+    100% {
+      transform: translateX(0);
+    }
   }
   @keyframes marqueeScrollVertical {
-    0% { transform: translateY(0); }
-    100% { transform: translateY(-50%); }
+    0% {
+      transform: translateY(0);
+    }
+    100% {
+      transform: translateY(-50%);
+    }
   }
   @keyframes marqueeScrollVerticalReverse {
-    0% { transform: translateY(-50%); }
-    100% { transform: translateY(0); }
+    0% {
+      transform: translateY(-50%);
+    }
+    100% {
+      transform: translateY(0);
+    }
   }
 `;
 
@@ -108,21 +164,32 @@ const Item = styled.div<ItemProps>`
   border: ${({ $borderWidth, $borderColor }) =>
     $borderWidth > 0 ? `${$borderWidth}px solid ${$borderColor}` : 'none'};
   border-radius: ${({ $borderRadius }) => $borderRadius}px;
-  padding: ${({ $padding }) => $padding}px ${({ $padding }) => Math.round($padding * 1.4)}px;
-  min-width: ${({ $isVertical, $minWidth }) => ($isVertical ? 'auto' : `${$minWidth}px`)};
-  max-width: ${({ $isVertical, $maxWidth }) => ($isVertical ? 'none' : `${$maxWidth}px`)};
+  padding: ${({ $padding }) => $padding}px
+    ${({ $padding }) => Math.round($padding * 1.4)}px;
+  min-width: ${({ $isVertical, $minWidth }) =>
+    $isVertical ? 'auto' : `${$minWidth}px`};
+  max-width: ${({ $isVertical, $maxWidth }) =>
+    $isVertical ? 'none' : `${$maxWidth}px`};
   flex-shrink: 0;
   margin: ${({ $isVertical, $gap }) =>
-    $isVertical ? `${Math.round($gap / 2)}px 4px` : `0 ${Math.round($gap / 2)}px`};
+    $isVertical
+      ? `${Math.round($gap / 2)}px 4px`
+      : `0 ${Math.round($gap / 2)}px`};
   box-shadow: ${({ $shadow }) =>
-    $shadow ? '0 1px 3px 0 rgba(0,0,0,.08), 0 1px 2px -1px rgba(0,0,0,.06)' : 'none'};
-  transition: background 0.15s ease, box-shadow 0.15s ease;
+    $shadow
+      ? '0 1px 3px 0 rgba(0,0,0,.08), 0 1px 2px -1px rgba(0,0,0,.06)'
+      : 'none'};
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease;
   cursor: default;
 
   &:hover {
     background: ${({ $hoverBackground }) => $hoverBackground};
     box-shadow: ${({ $shadow }) =>
-      $shadow ? '0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -2px rgba(0,0,0,.08)' : 'none'};
+      $shadow
+        ? '0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -2px rgba(0,0,0,.08)'
+        : 'none'};
   }
 `;
 
@@ -222,7 +289,7 @@ const EmptyState = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #9ca3af;
+  color: ${({ theme }) => theme.colorTextSecondary};
   font-size: 13px;
 `;
 
@@ -236,6 +303,22 @@ export function resolveIsVertical(
   if (orientation === 'horizontal') return false;
   // auto: derive from placement
   return placement === 'left' || placement === 'right';
+}
+
+function resolveBlockAlign(
+  placement: MarqueePlacement,
+  isVertical: boolean,
+): 'start' | 'center' | 'end' {
+  if (isVertical) {
+    return 'center';
+  }
+  if (placement === 'top') {
+    return 'start';
+  }
+  if (placement === 'bottom') {
+    return 'end';
+  }
+  return 'center';
 }
 
 function cssRgba(value: any): string {
@@ -342,7 +425,7 @@ const KpiCard: FC<KpiCardProps> = ({ item, props, isVertical }) => {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-const MarqueeViz: FC<MarqueeChartProps> = (props) => {
+const MarqueeViz: FC<MarqueeChartProps> = props => {
   const {
     items,
     placement,
@@ -356,7 +439,6 @@ const MarqueeViz: FC<MarqueeChartProps> = (props) => {
     dividerColor,
     showSeparators,
     height,
-    width: _width,
   } = props;
 
   const [paused, setPaused] = useState(false);
@@ -368,13 +450,21 @@ const MarqueeViz: FC<MarqueeChartProps> = (props) => {
     () => resolveIsVertical(placement, orientation),
     [placement, orientation],
   );
+  const blockAlign = useMemo(
+    () => resolveBlockAlign(placement, isVertical),
+    [placement, isVertical],
+  );
 
   // Measure the single-copy track size to compute animation duration
   useEffect(() => {
-    if (!trackRef.current) return;
+    if (!trackRef.current) {
+      return undefined;
+    }
     const measure = () => {
       const el = trackRef.current;
-      if (!el) return;
+      if (!el) {
+        return;
+      }
       const size = isVertical ? el.scrollHeight / 2 : el.scrollWidth / 2;
       setTrackSize(size || 0);
     };
@@ -415,29 +505,32 @@ const MarqueeViz: FC<MarqueeChartProps> = (props) => {
       $containerBackground={cssRgba(containerBackground)}
       $containerHeight={containerHeight}
       $isVertical={isVertical}
+      $blockAlign={blockAlign}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      style={{ height: isVertical ? height : containerHeight }}
+      style={{ height }}
     >
-      <Track
-        ref={trackRef}
-        $isVertical={isVertical}
-        $animationDuration={animationDuration}
-        $paused={paused || !autoLoop}
-        $reverse={scrollDirection === 'reverse'}
-      >
-        {displayItems.map((item, index) => (
-          <React.Fragment key={`${item.id}-${index}`}>
-            {showSeparators && index > 0 && (
-              <Separator
-                $color={cssRgba(dividerColor)}
-                $isVertical={isVertical}
-              />
-            )}
-            <KpiCard item={item} props={props} isVertical={isVertical} />
-          </React.Fragment>
-        ))}
-      </Track>
+      <Viewport $containerHeight={containerHeight} $isVertical={isVertical}>
+        <Track
+          ref={trackRef}
+          $isVertical={isVertical}
+          $animationDuration={animationDuration}
+          $paused={paused || !autoLoop}
+          $reverse={scrollDirection === 'reverse'}
+        >
+          {displayItems.map((item, index) => (
+            <Fragment key={`${item.id}-${index}`}>
+              {showSeparators && index > 0 && (
+                <Separator
+                  $color={cssRgba(dividerColor)}
+                  $isVertical={isVertical}
+                />
+              )}
+              <KpiCard item={item} props={props} isVertical={isVertical} />
+            </Fragment>
+          ))}
+        </Track>
+      </Viewport>
     </Wrapper>
   );
 };

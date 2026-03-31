@@ -407,7 +407,7 @@ export default function DashboardContentArea({
           ? `/api/v1/dashboard/public/${selectedDashboard.id}`
           : `/api/v1/dashboard/${selectedDashboard.id}`;
         const chartsEndpoint = isPublic
-          ? `/api/v1/chart/public/?dashboard_id=${selectedDashboard.id}`
+          ? `/api/v1/chart/dashboard/${selectedDashboard.id}/charts`
           : `/api/v1/chart/dashboard/${selectedDashboard.id}/charts`;
 
         const [dashboardResponse, chartsResponse] = await Promise.all([

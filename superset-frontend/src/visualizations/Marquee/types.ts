@@ -17,7 +17,12 @@
  * under the License.
  */
 
-export type MarqueePlacement = 'top' | 'bottom' | 'left' | 'right' | 'custom_section';
+export type MarqueePlacement =
+  | 'top'
+  | 'bottom'
+  | 'left'
+  | 'right'
+  | 'custom_section';
 export type MarqueeOrientation = 'auto' | 'horizontal' | 'vertical';
 export type MarqueeDirection = 'forward' | 'reverse';
 
@@ -63,25 +68,29 @@ export interface MarqueeFormData {
   // Typography - Title/Label
   label_font_size: number;
   label_font_weight: string;
-  label_color: string;
+  label_color: unknown;
   // Typography - Value
   value_font_size: number;
   value_font_weight: string;
-  value_color: string;
+  value_color: unknown;
   // Typography - Subtitle
   subtitle_font_size: number;
-  subtitle_color: string;
+  subtitle_color: unknown;
   // Colors
-  container_background: string;
-  item_background: string;
-  item_border_color: string;
+  container_background: unknown;
+  item_background: unknown;
+  item_border_color: unknown;
   item_border_width: number;
   item_border_radius: number;
   show_shadow: boolean;
-  hover_background: string;
-  delta_positive_color: string;
-  delta_negative_color: string;
-  divider_color: string;
+  hover_background: unknown;
+  delta_positive_color: unknown;
+  delta_negative_color: unknown;
+  divider_color: unknown;
+  chart_background_color?: unknown;
+  chartBackgroundColor?: unknown;
+  default_breakpoint_color?: unknown;
+  color_picker?: unknown;
   // Formatting
   number_format: string;
   prefix: string;

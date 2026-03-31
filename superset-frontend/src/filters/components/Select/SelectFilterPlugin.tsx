@@ -261,7 +261,9 @@ const parsePeriodValue = (value: unknown): ParsedPeriod | null => {
     };
   }
 
-  const weeklyVariantMatch = trimmed.match(/^(\d{4})(Wed|Thu|Sat|Sun)W(\d{1,2})$/);
+  const weeklyVariantMatch = trimmed.match(
+    /^(\d{4})(Wed|Thu|Sat|Sun)W(\d{1,2})$/,
+  );
   if (weeklyVariantMatch) {
     const year = Number(weeklyVariantMatch[1]);
     const day = weeklyVariantMatch[2];
@@ -270,10 +272,10 @@ const parsePeriodValue = (value: unknown): ParsedPeriod | null => {
       day === 'Wed'
         ? 'weekWed'
         : day === 'Thu'
-        ? 'weekThu'
-        : day === 'Sat'
-        ? 'weekSat'
-        : 'weekSun';
+          ? 'weekThu'
+          : day === 'Sat'
+            ? 'weekSat'
+            : 'weekSun';
     return {
       raw: trimmed,
       granularity,
@@ -344,8 +346,7 @@ const parsePeriodValue = (value: unknown): ParsedPeriod | null => {
   if (sixMonthlyMatch) {
     const year = Number(sixMonthlyMatch[1]);
     const half = Number(sixMonthlyMatch[2]);
-    const label =
-      half === 1 ? `Jan-Jun ${year}` : `Jul-Dec ${year}`;
+    const label = half === 1 ? `Jan-Jun ${year}` : `Jul-Dec ${year}`;
     return {
       raw: trimmed,
       granularity: 'sixMonth',
@@ -360,9 +361,7 @@ const parsePeriodValue = (value: unknown): ParsedPeriod | null => {
     const year = Number(sixMonthlyAprilMatch[1]);
     const half = Number(sixMonthlyAprilMatch[2]);
     const label =
-      half === 1
-        ? `Apr-Sep ${year}`
-        : `Oct ${year} - Mar ${year + 1}`;
+      half === 1 ? `Apr-Sep ${year}` : `Oct ${year} - Mar ${year + 1}`;
     return {
       raw: trimmed,
       granularity: 'sixMonthApril',
@@ -467,10 +466,10 @@ const buildFixedPeriodsForYear = (
         granularity === 'weekWed'
           ? 'Wed'
           : granularity === 'weekThu'
-          ? 'Thu'
-          : granularity === 'weekSat'
-          ? 'Sat'
-          : 'Sun';
+            ? 'Thu'
+            : granularity === 'weekSat'
+              ? 'Sat'
+              : 'Sun';
       return Array.from({ length: 52 }, (_, index) => {
         const week = index + 1;
         return {
@@ -540,8 +539,7 @@ const buildFixedPeriodsForYear = (
       return [1, 2].map(half => ({
         raw: `${year}AprilS${half}`,
         granularity: 'sixMonthApril',
-        label:
-          half === 1 ? `Apr-Sep ${year}` : `Oct ${year} - Mar ${year + 1}`,
+        label: half === 1 ? `Apr-Sep ${year}` : `Oct ${year} - Mar ${year + 1}`,
         sortKey: year * 10 + half,
         year,
       }));
@@ -592,15 +590,14 @@ const buildFixedPeriodsForYear = (
 
 const buildRelativePeriodOptions = (
   categories: RelativePeriodCategory[],
-): RelativePeriodOption[] => {
-  return categories.flatMap(category =>
+): RelativePeriodOption[] =>
+  categories.flatMap(category =>
     RELATIVE_PERIOD_CATEGORIES[category].options.map(option => ({
       key: option.key,
       label: option.label,
       values: [option.key],
     })),
   );
-};
 
 type DataMaskAction =
   | { type: 'ownState'; ownState: JsonObject }
@@ -662,9 +659,31 @@ const StyledSpace = styled(Space)<{
 `;
 
 const PeriodPickerTrigger = styled(Button)`
-  margin-top: ${({ theme }) => theme.sizeUnit * 2}px;
+  width: auto;
+  min-width: 180px;
+  justify-content: center;
+  flex-shrink: 0;
+`;
+
+const PeriodFilterRow = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: ${({ theme }) => theme.sizeUnit * 2}px;
   width: 100%;
-  justify-content: flex-start;
+
+  ${StyledSpace} {
+    flex: 1;
+    min-width: 0;
+  }
+
+  @media (max-width: 720px) {
+    flex-direction: column;
+    align-items: stretch;
+
+    ${PeriodPickerTrigger} {
+      width: 100%;
+    }
+  }
 `;
 
 const PeriodPickerLayout = styled.div`
@@ -820,7 +839,10 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
     [col, effectiveData, isPeriodColumn],
   );
   const relativePeriodOptions = useMemo(
-    () => buildRelativePeriodOptions(Object.keys(RELATIVE_PERIOD_CATEGORIES) as RelativePeriodCategory[]),
+    () =>
+      buildRelativePeriodOptions(
+        Object.keys(RELATIVE_PERIOD_CATEGORIES) as RelativePeriodCategory[],
+      ),
     [],
   );
   const relativePeriodMap = useMemo(
@@ -852,9 +874,8 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
     const currentYear = new Date().getFullYear();
     const startYear = currentYear - 20;
     const endYear = currentYear + 5;
-    const years = Array.from(
-      { length: endYear - startYear + 1 },
-      (_, index) => String(startYear + index),
+    const years = Array.from({ length: endYear - startYear + 1 }, (_, index) =>
+      String(startYear + index),
     );
     if (selectedPeriodYear && !years.includes(selectedPeriodYear)) {
       years.push(selectedPeriodYear);
@@ -880,7 +901,9 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
           isRelativePeriodToken(value) &&
           RELATIVE_PERIOD_LABELS[value.slice(RELATIVE_PERIOD_PREFIX.length)]
         ) {
-          return RELATIVE_PERIOD_LABELS[value.slice(RELATIVE_PERIOD_PREFIX.length)];
+          return RELATIVE_PERIOD_LABELS[
+            value.slice(RELATIVE_PERIOD_PREFIX.length)
+          ];
         }
         if (typeof value === 'string' && RELATIVE_PERIOD_LABELS[value]) {
           return RELATIVE_PERIOD_LABELS[value];
@@ -1060,21 +1083,17 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
           effectiveData.length,
         );
 
-  const fixedPeriodsForPicker = useMemo(
-    () => {
-      if (!selectedPeriodYear) {
-        return [];
-      }
-      return buildFixedPeriodsForYear(
-        periodPickerGranularity,
-        Number(selectedPeriodYear),
-      );
-    },
-    [periodPickerGranularity, selectedPeriodYear],
-  );
+  const fixedPeriodsForPicker = useMemo(() => {
+    if (!selectedPeriodYear) {
+      return [];
+    }
+    return buildFixedPeriodsForYear(
+      periodPickerGranularity,
+      Number(selectedPeriodYear),
+    );
+  }, [periodPickerGranularity, selectedPeriodYear]);
   const relativePeriodsForPicker = useMemo(
-    () =>
-      buildRelativePeriodOptions([relativePeriodCategory]),
+    () => buildRelativePeriodOptions([relativePeriodCategory]),
     [relativePeriodCategory],
   );
   const periodTypeOptions = useMemo(
@@ -1469,63 +1488,121 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
         validateStatus={filterState.validateStatus}
         extra={formItemExtra}
       >
-        <StyledSpace
-          appSection={appSection}
-          inverseSelection={inverseSelection}
-        >
-          {appSection !== AppSection.FilterConfigModal && inverseSelection && (
-            <Select
-              className="exclude-select"
-              value={`${excludeFilterValues}`}
-              options={[
-                { value: 'true', label: t('is not') },
-                { value: 'false', label: t('is') },
-              ]}
-              onChange={handleExclusionToggle}
-            />
-          )}
-          <Select
-            name={formData.nativeFilterId}
-            allowClear
-            allowNewOptions={!searchAllOptions && creatable !== false}
-            allowSelectAll={!searchAllOptions}
-            value={filterState.value || []}
-            disabled={isDisabled}
-            getPopupContainer={
-              showOverflow
-                ? () => (parentRef?.current as HTMLElement) || document.body
-                : (trigger: HTMLElement) =>
-                    (trigger?.parentNode as HTMLElement) || document.body
-            }
-            showSearch={showSearch}
-            mode={multiSelect ? 'multiple' : 'single'}
-            placeholder={placeholderText}
-            onClear={() => onSearch('')}
-            onSearch={onSearch}
-            onBlur={handleBlur}
-            onFocus={setFocusedFilter}
-            onMouseEnter={setHoveredFilter}
-            onMouseLeave={unsetHoveredFilter}
-            // @ts-ignore
-            onChange={handleChange}
-            ref={inputRef}
-            loading={isRefreshing}
-            oneLine={filterBarOrientation === FilterBarOrientation.Horizontal}
-            invertSelection={inverseSelection && excludeFilterValues}
-            options={options}
-            sortComparator={sortComparator}
-            onOpenChange={setFilterActive}
-            className="select-container"
-          />
-        </StyledSpace>
-        {isPeriodColumn && (
-          <>
+        {isPeriodColumn ? (
+          <PeriodFilterRow>
+            <StyledSpace
+              appSection={appSection}
+              inverseSelection={inverseSelection}
+            >
+              {appSection !== AppSection.FilterConfigModal &&
+                inverseSelection && (
+                  <Select
+                    className="exclude-select"
+                    value={`${excludeFilterValues}`}
+                    options={[
+                      { value: 'true', label: t('is not') },
+                      { value: 'false', label: t('is') },
+                    ]}
+                    onChange={handleExclusionToggle}
+                  />
+                )}
+              <Select
+                name={formData.nativeFilterId}
+                allowClear
+                allowNewOptions={!searchAllOptions && creatable !== false}
+                allowSelectAll={!searchAllOptions}
+                value={filterState.value || []}
+                disabled={isDisabled}
+                getPopupContainer={
+                  showOverflow
+                    ? () => (parentRef?.current as HTMLElement) || document.body
+                    : (trigger: HTMLElement) =>
+                        (trigger?.parentNode as HTMLElement) || document.body
+                }
+                showSearch={showSearch}
+                mode={multiSelect ? 'multiple' : 'single'}
+                placeholder={placeholderText}
+                onClear={() => onSearch('')}
+                onSearch={onSearch}
+                onBlur={handleBlur}
+                onFocus={setFocusedFilter}
+                onMouseEnter={setHoveredFilter}
+                onMouseLeave={unsetHoveredFilter}
+                // @ts-ignore
+                onChange={handleChange}
+                ref={inputRef}
+                loading={isRefreshing}
+                oneLine={
+                  filterBarOrientation === FilterBarOrientation.Horizontal
+                }
+                invertSelection={inverseSelection && excludeFilterValues}
+                options={options}
+                sortComparator={sortComparator}
+                onOpenChange={setFilterActive}
+                className="select-container"
+              />
+            </StyledSpace>
             <PeriodPickerTrigger
               buttonStyle="secondary"
               onClick={handleOpenPeriodPicker}
             >
               {t('Open period picker')}
             </PeriodPickerTrigger>
+          </PeriodFilterRow>
+        ) : (
+          <StyledSpace
+            appSection={appSection}
+            inverseSelection={inverseSelection}
+          >
+            {appSection !== AppSection.FilterConfigModal &&
+              inverseSelection && (
+                <Select
+                  className="exclude-select"
+                  value={`${excludeFilterValues}`}
+                  options={[
+                    { value: 'true', label: t('is not') },
+                    { value: 'false', label: t('is') },
+                  ]}
+                  onChange={handleExclusionToggle}
+                />
+              )}
+            <Select
+              name={formData.nativeFilterId}
+              allowClear
+              allowNewOptions={!searchAllOptions && creatable !== false}
+              allowSelectAll={!searchAllOptions}
+              value={filterState.value || []}
+              disabled={isDisabled}
+              getPopupContainer={
+                showOverflow
+                  ? () => (parentRef?.current as HTMLElement) || document.body
+                  : (trigger: HTMLElement) =>
+                      (trigger?.parentNode as HTMLElement) || document.body
+              }
+              showSearch={showSearch}
+              mode={multiSelect ? 'multiple' : 'single'}
+              placeholder={placeholderText}
+              onClear={() => onSearch('')}
+              onSearch={onSearch}
+              onBlur={handleBlur}
+              onFocus={setFocusedFilter}
+              onMouseEnter={setHoveredFilter}
+              onMouseLeave={unsetHoveredFilter}
+              // @ts-ignore
+              onChange={handleChange}
+              ref={inputRef}
+              loading={isRefreshing}
+              oneLine={filterBarOrientation === FilterBarOrientation.Horizontal}
+              invertSelection={inverseSelection && excludeFilterValues}
+              options={options}
+              sortComparator={sortComparator}
+              onOpenChange={setFilterActive}
+              className="select-container"
+            />
+          </StyledSpace>
+        )}
+        {isPeriodColumn && (
+          <>
             <Modal
               show={isPeriodPickerOpen}
               onHide={() => setIsPeriodPickerOpen(false)}

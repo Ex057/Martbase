@@ -67,7 +67,6 @@ import {
   useImportResource,
 } from 'src/views/CRUD/hooks';
 import { useCommonConf } from 'src/features/databases/state';
-import type { DHIS2Instance } from 'src/features/dhis2/types';
 import { isEmpty, pick } from 'lodash';
 import { OnlyKeyWithType } from 'src/utils/types';
 import { ModalTitleWithIcon } from 'src/components/ModalTitleWithIcon';
@@ -81,6 +80,7 @@ import {
   CustomTextType,
   DatabaseParameters,
 } from '../types';
+import type { DHIS2Instance } from 'src/features/dhis2/types';
 import ExtraOptions from './ExtraOptions';
 import SqlAlchemyForm from './SqlAlchemyForm';
 import DatabaseConnectionForm from './DatabaseConnectionForm';
@@ -191,53 +191,6 @@ const normalizeStatusDetails = (message: string) =>
     .replace(/^\[SQL:\s*(.*?)\]\s*$/ims, '$1')
     .replace(/^\(Background on this error at:.*?\)\s*$/im, '')
     .trim();
-
-const NUMERIC_DYNAMIC_FORM_PARAMETER_TYPES = new Set(['integer', 'number']);
-
-const sanitizeDynamicFormParameters = (
-  parameters: DatabaseParameters | undefined,
-  parametersSchema: Record<string, any> | undefined,
-): DatabaseParameters | undefined => {
-  if (!parameters) {
-    return parameters;
-  }
-
-  let hasChanges = false;
-  const nextParameters = { ...parameters } as Record<string, any>;
-
-  Object.entries(parametersSchema || {}).forEach(([key, schema]) => {
-    if (!Object.prototype.hasOwnProperty.call(nextParameters, key)) {
-      return;
-    }
-
-    const value = nextParameters[key];
-    if (
-      NUMERIC_DYNAMIC_FORM_PARAMETER_TYPES.has(String(schema?.type || '')) &&
-      typeof value === 'string' &&
-      value.trim() === ''
-    ) {
-      delete nextParameters[key];
-      hasChanges = true;
-    }
-  });
-
-  return hasChanges ? (nextParameters as DatabaseParameters) : parameters;
-};
-
-const isSuccessfulDatabaseUpdateResult = (
-  result: unknown,
-): result is Partial<DatabaseObject> => {
-  if (!result || typeof result !== 'object') {
-    return false;
-  }
-
-  const resultRecord = result as Record<string, unknown>;
-  return !(
-    'error' in resultRecord ||
-    'errors' in resultRecord ||
-    'statusText' in resultRecord
-  );
-};
 
 export interface DatabaseModalProps {
   addDangerToast: (msg: string) => void;
@@ -809,17 +762,13 @@ const DatabaseModal: FunctionComponent<DatabaseModalProps> = ({
     [db],
   );
   const repositoryStepInitialValue = useMemo(() => {
-    const dbValue = repositoryStepInitialValueFromDb;
-    const dbHasRepositoryConfig = Boolean(
-      dbValue?.repository_reporting_unit_approach ||
-        dbValue?.repository_org_unit_config ||
-        (dbValue?.repository_org_units || []).length,
-    );
-    if (dbHasRepositoryConfig) {
-      return dbValue;
-    }
-    return repositoryReportingUnitsValue || dbValue;
-  }, [repositoryReportingUnitsValue, repositoryStepInitialValueFromDb]);
+    // Only derive initialValue from the persisted DB state.
+    // Never feed repositoryReportingUnitsValue (the child's own output) back
+    // as initialValue — that creates a parent↔child reinitialization loop
+    // where onChange triggers a new initialValue, which resets the child,
+    // which emits onChange again.
+    return repositoryStepInitialValueFromDb;
+  }, [repositoryStepInitialValueFromDb]);
   const effectiveRepositoryReportingUnitsValue = useMemo(() => {
     if (!repositoryReportingUnitsValue) {
       return repositoryStepInitialValueFromDb
@@ -1010,14 +959,6 @@ const DatabaseModal: FunctionComponent<DatabaseModalProps> = ({
       return;
     }
 
-    const parametersSchema = isEditMode
-      ? db?.parameters_schema?.properties
-      : dbModel?.parameters.properties;
-    const sanitizedParameters = sanitizeDynamicFormParameters(
-      db?.parameters,
-      parametersSchema,
-    );
-
     const connection: Partial<DatabaseObject> = {
       sqlalchemy_uri: db?.sqlalchemy_uri || '',
       database_name: db?.database_name?.trim() || undefined,
@@ -1027,7 +968,7 @@ const DatabaseModal: FunctionComponent<DatabaseModalProps> = ({
       server_cert: db?.server_cert || undefined,
       // For parameter-based databases, include parameters and engine
       ...(isParameterBased && {
-        parameters: sanitizedParameters,
+        parameters: db.parameters,
         engine: db.engine,
         driver: db?.driver,
         configuration_method:
@@ -1258,13 +1199,22 @@ const DatabaseModal: FunctionComponent<DatabaseModalProps> = ({
     }
 
     if (dbToUpdate.configuration_method === ConfigurationMethod.DynamicForm) {
-      const parametersSchema = isEditMode
+      // Strip blank numeric parameters (e.g. port='') before save/test so the
+      // backend schema validator does not reject them with "Not a valid integer".
+      const schemaProps = isEditMode
         ? dbToUpdate.parameters_schema?.properties
-        : dbModel?.parameters.properties;
-      dbToUpdate.parameters = sanitizeDynamicFormParameters(
-        dbToUpdate.parameters,
-        parametersSchema,
-      );
+        : dbModel?.parameters?.properties;
+      if (schemaProps && dbToUpdate.parameters) {
+        Object.keys(schemaProps).forEach(key => {
+          const schemaType = schemaProps[key]?.type;
+          if (
+            (schemaType === 'integer' || schemaType === 'number') &&
+            dbToUpdate.parameters?.[key as keyof DatabaseParameters] === ''
+          ) {
+            delete dbToUpdate.parameters[key as keyof DatabaseParameters];
+          }
+        });
+      }
 
       // Validate DB before saving
       if (dbToUpdate?.parameters?.catalog) {
@@ -1294,10 +1244,13 @@ const DatabaseModal: FunctionComponent<DatabaseModalProps> = ({
         }
       }
 
+      const parameters_schema = isEditMode
+        ? dbToUpdate.parameters_schema?.properties
+        : dbModel?.parameters.properties;
       const additionalEncryptedExtra = JSON.parse(
         dbToUpdate.masked_encrypted_extra || '{}',
       );
-      const paramConfigArray = Object.keys(parametersSchema || {});
+      const paramConfigArray = Object.keys(parameters_schema || {});
 
       paramConfigArray.forEach(paramConfig => {
         /*
@@ -1306,7 +1259,7 @@ const DatabaseModal: FunctionComponent<DatabaseModalProps> = ({
          * backend when the database is created or edited.
          */
         if (
-          parametersSchema?.[paramConfig]?.['x-encrypted-extra'] &&
+          parameters_schema[paramConfig]['x-encrypted-extra'] &&
           dbToUpdate.parameters?.[paramConfig as keyof DatabaseParameters]
         ) {
           if (
@@ -1365,34 +1318,40 @@ const DatabaseModal: FunctionComponent<DatabaseModalProps> = ({
         dbToUpdate as DatabaseObject,
         true,
       );
-      if (!isSuccessfulDatabaseUpdateResult(result)) {
-        setLoading(false);
-        return;
-      }
-
-      if (onDatabaseAdd) onDatabaseAdd();
-      if (await runExtraExtensionSave(dbToUpdate)) {
-        setLoading(false);
-        return;
-      }
-      if (isDHIS2GuidedFlow) {
-        if (dhis2CreateStage === 'review') {
-          onClose();
-          addSuccessToast(t('DHIS2 Database saved'));
-          redirectURL(DATABASE_LIST_ROUTE);
-        } else {
-          await fetchResource(db.id as number);
-          setEditNewDb(false);
-          setHasConnectedDb(true);
-          setDhis2CreateStage('connections');
+      // Explicitly verify the update returned a valid database object.
+      // A 422 or other error can produce a truthy-but-invalid result
+      // (e.g. an error message string or an object without an id).
+      // Without this check the modal could advance on failure.
+      const isSuccessfulUpdate =
+        result &&
+        typeof result === 'object' &&
+        !('error' in result) &&
+        !('message' in result);
+      if (isSuccessfulUpdate) {
+        if (onDatabaseAdd) onDatabaseAdd();
+        if (await runExtraExtensionSave(dbToUpdate)) {
+          setLoading(false);
+          return;
         }
-        setShowCTAbtns(false);
-        setLoading(false);
-        return;
-      }
-      if (!editNewDb) {
-        onClose();
-        addSuccessToast(t('Database settings updated'));
+        if (isDHIS2GuidedFlow) {
+          if (dhis2CreateStage === 'review') {
+            onClose();
+            addSuccessToast(t('DHIS2 Database saved'));
+            redirectURL(DATABASE_LIST_ROUTE);
+          } else {
+            await fetchResource(db.id as number);
+            setEditNewDb(false);
+            setHasConnectedDb(true);
+            setDhis2CreateStage('connections');
+          }
+          setShowCTAbtns(false);
+          setLoading(false);
+          return;
+        }
+        if (!editNewDb) {
+          onClose();
+          addSuccessToast(t('Database settings updated'));
+        }
       }
     } else if (db) {
       // Create

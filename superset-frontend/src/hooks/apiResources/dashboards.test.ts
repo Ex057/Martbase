@@ -16,75 +16,40 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { renderHook } from '@testing-library/react-hooks';
-import fetchMock from 'fetch-mock';
-import { useDashboardDatasets } from './dashboards';
+import { makeApi } from '@superset-ui/core';
+import { act, renderHook } from '@testing-library/react-hooks';
+import { useDashboardCharts } from './dashboards';
 
-// eslint-disable-next-line no-restricted-globals -- TODO: Migrate from describe blocks
-describe('useDashboardDatasets', () => {
-  const mockDatasets = [
-    {
-      id: 1,
-      metrics: [
-        {
-          metric_name: 'count',
-          currency: { symbol: 'GBP', symbolPosition: 'prefix' },
-        },
-        {
-          metric_name: 'revenue',
-          currency: { symbol: 'USD', symbolPosition: 'suffix' },
-        },
-        { metric_name: 'no_currency' },
-      ],
-    },
-    {
-      id: 2,
-      metrics: [{ metric_name: 'no_currency' }],
-    },
-    {
-      id: 3,
-      metrics: [
-        {
-          metric_name: 'other_currency',
-          currency: { symbol: 'CNY', symbolPosition: 'suffix' },
-        },
-      ],
-    },
-  ];
+jest.mock('@superset-ui/core', () => ({
+  ...jest.requireActual<any>('@superset-ui/core'),
+  makeApi: jest.fn().mockReturnValue(
+    jest.fn().mockResolvedValue({
+      result: [],
+    }),
+  ),
+}));
 
-  beforeEach(() => {
-    fetchMock.reset();
+beforeAll(() => {
+  jest.useFakeTimers();
+});
+
+afterAll(() => {
+  jest.useRealTimers();
+});
+
+afterEach(() => {
+  (makeApi as jest.Mock).mockClear();
+});
+
+test('uses the path-based charts endpoint for public dashboards', async () => {
+  renderHook(() => useDashboardCharts(7, true));
+
+  await act(async () => {
+    jest.runAllTimers();
   });
 
-  test('adds currencyFormats to datasets', async () => {
-    fetchMock.get('glob:*/api/v1/dashboard/*/datasets', {
-      result: mockDatasets,
-    });
-
-    const { result, waitForNextUpdate } = renderHook(() =>
-      useDashboardDatasets(1),
-    );
-    await waitForNextUpdate();
-
-    const expectedContent = [
-      {
-        ...mockDatasets[0],
-        currencyFormats: {
-          count: { symbol: 'GBP', symbolPosition: 'prefix' },
-          revenue: { symbol: 'USD', symbolPosition: 'suffix' },
-        },
-      },
-      {
-        ...mockDatasets[1],
-        currencyFormats: {},
-      },
-      {
-        ...mockDatasets[2],
-        currencyFormats: {
-          other_currency: { symbol: 'CNY', symbolPosition: 'suffix' },
-        },
-      },
-    ];
-    expect(result.current.result).toEqual(expectedContent);
+  expect(makeApi).toHaveBeenCalledWith({
+    method: 'GET',
+    endpoint: '/api/v1/chart/dashboard/7/charts',
   });
 });
