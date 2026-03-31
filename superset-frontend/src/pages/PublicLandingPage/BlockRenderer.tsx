@@ -2535,7 +2535,7 @@ export function RenderBlockTree({
                   }}
                 >
                   <DashboardPage
-                    idOrSlug={dashboard.slug || String(dashboard.id)}
+                    idOrSlug={String(dashboard.id)}
                     isPublicView
                   />
                 </div>

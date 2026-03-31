@@ -2311,7 +2311,7 @@ class PublicPageRestApi(BaseApi):
                 return None
             path = (
                 f"/superset/public/dashboards/?dashboard="
-                f"{item.dashboard.slug or item.dashboard.id}"
+                f"{item.dashboard.id}"
             )
 
         if item.item_type == "page_collection":
@@ -2333,7 +2333,7 @@ class PublicPageRestApi(BaseApi):
                     "id": f"dashboard-{dash.id}",
                     "label": dash.dashboard_title,
                     "path": (
-                        f"/superset/public/dashboards/?dashboard={dash.slug or dash.id}"
+                        f"/superset/public/dashboards/?dashboard={dash.id}"
                     ),
                     "item_type": "dashboard",
                     "dashboard_id": dash.id,
