@@ -108,6 +108,19 @@ ghostdriver.log
 testCSV.csv
 .terser-plugin-cache/
 apache-superset-*.tar.gz*
+
+# Development & Cache directories
+.clickhouse/
+.codex*
+.cursor/
+.git.worktree.broken
+.tmp/
+
+# Logs and temporary files
+*.log
+cookies.txt
+test-results/
+{sanitize_dhis2_column_name(*
 apache_superset-*.tar.gz*
 release.json
 

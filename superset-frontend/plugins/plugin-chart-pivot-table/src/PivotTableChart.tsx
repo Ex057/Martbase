@@ -25,6 +25,7 @@ import {
   DataRecordValue,
   FeatureFlag,
   getColumnLabel,
+  getMetricLabel,
   getNumberFormatter,
   getSelectedText,
   isAdhocColumn,
@@ -45,12 +46,13 @@ import {
 } from './types';
 
 const Styles = styled.div<PivotTableStylesProps>`
-  ${({ height, width, margin }) => `
+  ${({ height, width, margin, chartBackgroundColor }) => `
       margin: ${margin}px;
       height: ${height - margin * 2}px;
       width: ${
         typeof width === 'string' ? parseInt(width, 10) : width - margin * 2
       }px;
+      background-color: ${chartBackgroundColor || 'transparent'};
  `}
 `;
 
@@ -181,6 +183,7 @@ export default function PivotTableChart(props: PivotTableProps) {
     metricsLayout,
     metricColorFormatters,
     dateFormatters,
+    chartBackgroundColor,
     onContextMenu,
     timeGrainSqla,
     allowRenderHtml,
@@ -197,19 +200,44 @@ export default function PivotTableChart(props: PivotTableProps) {
         : getNumberFormatter(valueFormat),
     [valueFormat, currencyFormat],
   );
+  const metricEntries = useMemo(
+    () =>
+      metrics.map((metric: string | AdhocMetric) => {
+        const dataKey =
+          typeof metric === 'string' ? metric : (metric.label as string);
+        let displayLabel = dataKey;
+
+        try {
+          displayLabel = getMetricLabel(metric);
+        } catch {
+          displayLabel = dataKey;
+        }
+
+        return {
+          dataKey,
+          displayLabel,
+        };
+      }),
+    [metrics],
+  );
   const customFormatsArray = useMemo(
     () =>
-      Array.from(
-        new Set([
-          ...Object.keys(columnFormats || {}),
-          ...Object.keys(currencyFormats || {}),
+      metricEntries
+        .filter(
+          ({ dataKey }) => columnFormats[dataKey] || currencyFormats[dataKey],
+        )
+        .map(({ dataKey, displayLabel }) => [
+          displayLabel,
+          columnFormats[dataKey] || valueFormat,
+          currencyFormats[dataKey] || currencyFormat,
         ]),
-      ).map(metricName => [
-        metricName,
-        columnFormats[metricName] || valueFormat,
-        currencyFormats[metricName] || currencyFormat,
-      ]),
-    [columnFormats, currencyFormat, currencyFormats, valueFormat],
+    [
+      columnFormats,
+      currencyFormat,
+      currencyFormats,
+      metricEntries,
+      valueFormat,
+    ],
   );
   const hasCustomMetricFormatters = customFormatsArray.length > 0;
   const metricFormatters = useMemo(
@@ -232,65 +260,31 @@ export default function PivotTableChart(props: PivotTableProps) {
     [customFormatsArray, hasCustomMetricFormatters],
   );
 
-  const metricNames = useMemo(
-    () =>
-      metrics.map((metric: string | AdhocMetric) =>
-        typeof metric === 'string' ? metric : (metric.label as string),
-      ),
-    [metrics],
+  const metricDisplayLabels = useMemo(
+    () => metricEntries.map(({ displayLabel }) => displayLabel),
+    [metricEntries],
   );
 
   const unpivotedData = useMemo(() => {
     const unpivoted = data.reduce(
       (acc: Record<string, any>[], record: Record<string, any>) => [
         ...acc,
-        ...metricNames
-          .map((name: string) => {
-            const value = record[name];
-            if (acc.length === 0) {
-              console.log('[PIVOT_TABLE] Processing metric:', name);
-              console.log('[PIVOT_TABLE]   record keys:', Object.keys(record));
-              console.log('[PIVOT_TABLE]   record[name]:', value);
-            }
+        ...metricEntries
+          .map(({ dataKey, displayLabel }) => {
+            const value = record[dataKey];
             return {
               ...record,
-              [METRIC_KEY]: name,
+              [METRIC_KEY]: displayLabel,
               value,
             };
           })
-          .filter(record => {
-            if (record.value === null) {
-              console.log(
-                '[PIVOT_TABLE] Filtered out null value for metric:',
-                record[METRIC_KEY],
-              );
-            }
-            return record.value !== null;
-          }),
+          .filter(record => record.value !== null),
       ],
       [],
     );
 
-    if (unpivoted.length === 0) {
-      console.warn(
-        '[PIVOT_TABLE] No unpivoted data! metricNames:',
-        metricNames,
-      );
-      console.warn(
-        '[PIVOT_TABLE] First record keys:',
-        data.length > 0 ? Object.keys(data[0]) : 'no data',
-      );
-    } else {
-      console.log(
-        '[PIVOT_TABLE] Unpivoted data generated:',
-        unpivoted.length,
-        'rows',
-      );
-      console.log('[PIVOT_TABLE] First unpivoted row:', unpivoted[0]);
-    }
-
     return unpivoted;
-  }, [data, metricNames]);
+  }, [data, metricEntries]);
   const groupbyRows = useMemo(
     () => groupbyRowsRaw.map(getColumnLabel),
     [groupbyRowsRaw],
@@ -302,9 +296,9 @@ export default function PivotTableChart(props: PivotTableProps) {
 
   const sorters = useMemo(
     () => ({
-      [METRIC_KEY]: sortAs(metricNames),
+      [METRIC_KEY]: sortAs(metricDisplayLabels),
     }),
-    [metricNames],
+    [metricDisplayLabels],
   );
 
   const [rows, cols] = useMemo(() => {
@@ -601,7 +595,12 @@ export default function PivotTableChart(props: PivotTableProps) {
   );
 
   return (
-    <Styles height={height} width={width} margin={theme.sizeUnit * 4}>
+    <Styles
+      height={height}
+      width={width}
+      margin={theme.sizeUnit * 4}
+      chartBackgroundColor={chartBackgroundColor}
+    >
       <PivotTableWrapper>
         <PivotTable
           data={unpivotedData}
@@ -620,6 +619,7 @@ export default function PivotTableChart(props: PivotTableProps) {
           namesMapping={verboseMap}
           onContextMenu={handleContextMenu}
           allowRenderHtml={allowRenderHtml}
+          chartBackgroundColor={chartBackgroundColor}
         />
       </PivotTableWrapper>
     </Styles>

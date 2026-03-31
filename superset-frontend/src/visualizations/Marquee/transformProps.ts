@@ -24,7 +24,12 @@ import {
   t,
 } from '@superset-ui/core';
 import { colorValueToCss } from 'src/utils/colorValue';
-import { MarqueeChartProps, MarqueeFormData, MarqueeKpiItem } from './types';
+import {
+  MarqueeChartProps,
+  MarqueeColorThreshold,
+  MarqueeFormData,
+  MarqueeKpiItem,
+} from './types';
 
 const DEFAULT_LABEL_COLOR = '#6b7280';
 const DEFAULT_VALUE_COLOR = '#111827';
@@ -180,6 +185,25 @@ export default function transformProps(
   ])
     ? sharedBackgroundColor || DEFAULT_CONTAINER_BACKGROUND
     : resolveCssColor(fd.container_background) || DEFAULT_CONTAINER_BACKGROUND;
+  const colorThresholds: MarqueeColorThreshold[] = (
+    fd.color_thresholds || []
+  )
+    .map(threshold => {
+      const numericValue = Number(threshold?.value);
+      const color = resolveCssColor(threshold?.color);
+
+      if (Number.isNaN(numericValue) || !color) {
+        return null;
+      }
+
+      return {
+        value: numericValue,
+        color,
+      };
+    })
+    .filter(
+      (threshold): threshold is MarqueeColorThreshold => threshold !== null,
+    );
 
   // Extract the first (aggregated) row from query results
   const row = queriesData?.[0]?.data?.[0] || {};
@@ -229,6 +253,8 @@ export default function transformProps(
     pauseOnHover: fd.pause_on_hover ?? true,
     autoLoop: fd.auto_loop ?? true,
     scrollDirection: fd.scroll_direction || 'forward',
+    variant: fd.variant || 'default',
+    colorThresholds,
     itemSpacing: fd.item_spacing ?? 12,
     itemPadding: fd.item_padding ?? 16,
     itemMinWidth: fd.item_min_width ?? 140,

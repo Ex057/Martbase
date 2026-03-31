@@ -341,6 +341,8 @@ function getState(
           shouldMapStateToProps: () => true,
           mapStateToProps: (state: Record<string, any>) => ({
             databaseId: getDhis2LegendSetDatabaseId(state.datasource),
+            colorMode: state.controls?.color_mode?.value,
+            hasColorModeControl: Boolean(state.controls?.color_mode),
           }),
         },
       },

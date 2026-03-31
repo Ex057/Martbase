@@ -42,7 +42,16 @@ NVD3.propTypes = {
   className: PropTypes.string.isRequired,
 };
 
+const chartTextColor = theme =>
+  `var(--superset-chart-text-color, ${theme.colorText})`;
+
+const chartBackgroundColor = () =>
+  'var(--superset-chart-background-color, transparent)';
+
 export default styled(NVD3)`
+  color: ${({ theme }) => chartTextColor(theme)};
+  background-color: ${chartBackgroundColor()};
+
   .superset-legacy-chart-nvd3-dist-bar,
   .superset-legacy-chart-nvd3-bar {
     overflow-x: auto !important;
@@ -73,10 +82,26 @@ export default styled(NVD3)`
       font-size: ${({ theme }) => theme.fontSize} !important;
     }
     g.nv-axis text {
-      fill: ${({ theme }) => theme.colorText};
+      fill: ${({ theme }) => chartTextColor(theme)};
     }
     g.nv-series text {
-      fill: ${({ theme }) => theme.colorText};
+      fill: ${({ theme }) => chartTextColor(theme)};
+    }
+    .nvd3.nv-bullet .nv-title,
+    .nvd3.nv-bullet .nv-subtitle,
+    .nvd3.nv-bullet .nv-tick text {
+      fill: ${({ theme }) => chartTextColor(theme)};
+    }
+    .nvd3.nv-bullet .nv-measure {
+      fill: ${({ theme }) => chartTextColor(theme)};
+    }
+    .nvd3.nv-bullet .nv-markerTriangle {
+      stroke: ${({ theme }) => chartTextColor(theme)};
+      fill: ${({ theme }) => theme.colorBgContainer};
+    }
+    .nvd3.nv-bullet .nv-markerLine,
+    .nvd3.nv-bullet .nv-tick line {
+      stroke: ${({ theme }) => chartTextColor(theme)};
     }
     g.solid path,
     line.solid {

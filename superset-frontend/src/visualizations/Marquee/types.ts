@@ -25,6 +25,12 @@ export type MarqueePlacement =
   | 'custom_section';
 export type MarqueeOrientation = 'auto' | 'horizontal' | 'vertical';
 export type MarqueeDirection = 'forward' | 'reverse';
+export type MarqueeVariant = 'default' | 'dark' | 'glass';
+
+export interface MarqueeColorThreshold {
+  value: number;
+  color: string;
+}
 
 export interface MarqueeKpiItem {
   id: string;
@@ -87,6 +93,11 @@ export interface MarqueeFormData {
   delta_positive_color: unknown;
   delta_negative_color: unknown;
   divider_color: unknown;
+  variant?: MarqueeVariant;
+  color_thresholds?: Array<{
+    value: number;
+    color: unknown;
+  }>;
   chart_background_color?: unknown;
   chartBackgroundColor?: unknown;
   default_breakpoint_color?: unknown;
@@ -115,6 +126,8 @@ export interface MarqueeChartProps {
   pauseOnHover: boolean;
   autoLoop: boolean;
   scrollDirection: MarqueeDirection;
+  variant: MarqueeVariant;
+  colorThresholds: MarqueeColorThreshold[];
   // Layout
   itemSpacing: number;
   itemPadding: number;

@@ -171,12 +171,15 @@ const legacyChartDataRequest = async (
 /**
  * Check if a datasource is DHIS2 based on the form data
  */
-const isDHIS2Datasource = formData =>
-  isDirectDhis2Datasource({
+const isDHIS2Datasource = formData => {
+  return isDirectDhis2Datasource({
     database: formData?.database,
     extra:
-      formData?.extra ?? formData?.datasource_extra ?? formData?.dataset_extra,
+      formData?.extra ??
+      formData?.datasource_extra ??
+      formData?.dataset_extra,
   });
+};
 
 async function v1ChartDataRequestUncached(
   formData,
@@ -328,65 +331,51 @@ const v1ChartDataRequest = async (
     try {
       const cached = await dhis2Cache.get(cacheKey);
       if (cached) {
-        const cachedRowcount = Math.max(
-          Number(cached.rowcount) || 0,
-          Array.isArray(cached.data) ? cached.data.length : 0,
+        const { isStale } = cached;
+        // eslint-disable-next-line no-console
+        console.log(
+          `[DHIS2Cache] ${isStale ? 'Stale' : 'Fresh'} cache hit for chart ${sliceId || 'unknown'}: ${cached.rowcount} rows`,
         );
 
-        if (cachedRowcount === 0) {
-          // Empty DHIS2 cache entries are often produced by transient public-page
-          // loads before the final chart query settles. Ignore them and refetch.
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[DHIS2Cache] Ignoring empty cache entry for chart ${sliceId || 'unknown'} and refetching`,
-          );
-        } else {
-          const { isStale } = cached;
-          // eslint-disable-next-line no-console
-          console.log(
-            `[DHIS2Cache] ${isStale ? 'Stale' : 'Fresh'} cache hit for chart ${sliceId || 'unknown'}: ${cached.rowcount} rows`,
-          );
-
-          // If stale, trigger background refresh
-          if (isStale) {
-            // Fire and forget - refresh in background
-            v1ChartDataRequestUncached(
-              formData,
-              resultFormat,
-              resultType,
-              true, // force refresh
-              requestParams,
-              setDataMask,
-              ownState,
-              parseMethod,
-            )
-              .then(({ json }) => {
-                if (json?.result) {
-                  dhis2Cache.set(cacheKey, queryContext, json, true, 2);
-                }
-              })
-              .catch(() => {
-                // Ignore background refresh errors
-              });
-          }
-
-          // Return cached data immediately
-          return {
-            response: { status: 200 },
-            json: {
-              result: [
-                {
-                  data: cached.data,
-                  colnames: cached.colnames,
-                  coltypes: cached.coltypes,
-                  rowcount: cached.rowcount,
-                  from_cache: true,
-                  is_cached: true,
-                },
-              ],
-            },
-          };
+        // If stale, trigger background refresh
+        if (isStale) {
+          // Fire and forget - refresh in background
+          v1ChartDataRequestUncached(
+            formData,
+            resultFormat,
+            resultType,
+            true, // force refresh
+            requestParams,
+            setDataMask,
+            ownState,
+            parseMethod,
+          )
+            .then(({ json }) => {
+              if (json?.result) {
+                dhis2Cache.set(cacheKey, queryContext, json, true, 2);
+              }
+            })
+            .catch(() => {
+              // Ignore background refresh errors
+            });
         }
+
+        // Return cached data immediately
+        return {
+          response: { status: 200 },
+          json: {
+            result: [
+              {
+                data: cached.data,
+                colnames: cached.colnames,
+                coltypes: cached.coltypes,
+                rowcount: cached.rowcount,
+                from_cache: true,
+                is_cached: true,
+              },
+            ],
+          },
+        };
       }
     } catch (cacheError) {
       // eslint-disable-next-line no-console
@@ -635,6 +624,7 @@ export function exploreJSON(
   key,
   dashboardId,
   ownState,
+  { silent = false } = {},
 ) {
   return async (dispatch, getState) => {
     const logStart = Logger.getTimestamp();
@@ -651,7 +641,11 @@ export function exploreJSON(
     const setDataMask = dataMask => {
       dispatch(updateDataMask(formData.slice_id, dataMask));
     };
-    dispatch(chartUpdateStarted(controller, formData, key));
+    // In silent mode, skip the loading state dispatch so charts don't
+    // show loading spinners during background data refreshes.
+    if (!silent) {
+      dispatch(chartUpdateStarted(controller, formData, key));
+    }
 
     const chartDataRequest = getChartDataRequest({
       setDataMask,
@@ -762,8 +756,9 @@ export function postChartFormData(
   key,
   dashboardId,
   ownState,
+  options,
 ) {
-  return exploreJSON(formData, force, timeout, key, dashboardId, ownState);
+  return exploreJSON(formData, force, timeout, key, dashboardId, ownState, options);
 }
 
 export function redirectSQLLab(formData, history) {
@@ -798,7 +793,7 @@ export function redirectSQLLab(formData, history) {
   };
 }
 
-export function refreshChart(chartKey, force, dashboardId) {
+export function refreshChart(chartKey, force, dashboardId, { silent = false } = {}) {
   return (dispatch, getState) => {
     const chart = (getState().charts || {})[chartKey];
     const timeout =
@@ -818,6 +813,7 @@ export function refreshChart(chartKey, force, dashboardId) {
         chart.id,
         dashboardId,
         getState().dataMask[chart.id]?.ownState,
+        { silent },
       ),
     );
   };

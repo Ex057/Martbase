@@ -27,6 +27,7 @@ import {
   useState,
 } from 'react';
 import { styled, SupersetClient, t } from '@superset-ui/core';
+import { Icons } from '@superset-ui/core/components/Icons';
 import {
   Alert,
   Button,
@@ -97,7 +98,8 @@ const StickyHeader = styled.header`
   z-index: 30;
   backdrop-filter: blur(18px);
   background: var(--portal-header-bg);
-  border-bottom: 1px solid var(--portal-border);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--portal-header-text, #ffffff);
 `;
 
 const HeaderInner = styled.div<{ $maxWidth: string }>`
@@ -146,7 +148,7 @@ const BrandEyebrow = styled.span`
   font-size: 11px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--portal-muted);
+  color: var(--portal-header-muted, rgba(255, 255, 255, 0.7));
 `;
 
 const BrandTitle = styled.span`
@@ -163,6 +165,29 @@ const HeaderActions = styled.div`
   flex-wrap: wrap;
 `;
 
+const HeaderBackButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--portal-radius-md, 8px);
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--portal-header-text, #ffffff);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.28);
+  }
+`;
+
 const NavRow = styled.nav`
   display: flex;
   align-items: center;
@@ -172,13 +197,16 @@ const NavRow = styled.nav`
 
 const NavButton = styled.button<{ $active?: boolean }>`
   border: 0;
-  border-radius: var(--portal-radius-md, 0);
+  border-radius: var(--portal-radius-md, 8px);
   padding: 10px 16px;
   background: ${({ $active }) =>
     $active ? 'var(--portal-nav-active-bg)' : 'transparent'};
   color: ${({ $active }) =>
-    $active ? 'var(--portal-nav-active-text)' : 'var(--portal-muted-strong)'};
-  font-weight: ${({ $active }) => ($active ? 700 : 600)};
+    $active
+      ? 'var(--portal-nav-active-text, #ffffff)'
+      : 'rgba(255, 255, 255, 0.85)'};
+  font-weight: ${({ $active }) => ($active ? 700 : 500)};
+  font-size: 13px;
   cursor: pointer;
   transition:
     background 0.2s ease,
@@ -186,7 +214,7 @@ const NavButton = styled.button<{ $active?: boolean }>`
 
   &:hover {
     background: var(--portal-nav-hover-bg);
-    color: var(--portal-text);
+    color: #ffffff;
   }
 `;
 
@@ -198,13 +226,15 @@ const NavButtonCluster = styled.div`
 
 const NavDropdownTrigger = styled.button<{ $active?: boolean }>`
   border: 0;
-  border-radius: var(--portal-radius-md, 0);
+  border-radius: var(--portal-radius-md, 8px);
   padding: 10px 12px;
   background: ${({ $active }) =>
     $active ? 'var(--portal-nav-active-bg)' : 'transparent'};
   color: ${({ $active }) =>
-    $active ? 'var(--portal-nav-active-text)' : 'var(--portal-muted-strong)'};
-  font-weight: 600;
+    $active
+      ? 'var(--portal-nav-active-text, #ffffff)'
+      : 'rgba(255, 255, 255, 0.85)'};
+  font-weight: 500;
   cursor: pointer;
   transition:
     background 0.2s ease,
@@ -212,7 +242,7 @@ const NavDropdownTrigger = styled.button<{ $active?: boolean }>`
 
   &:hover {
     background: var(--portal-nav-hover-bg);
-    color: var(--portal-text);
+    color: #ffffff;
   }
 `;
 
@@ -238,7 +268,6 @@ const Main = styled.main<{ $maxWidth: string }>`
   margin: 0 auto;
   padding: 28px 24px 72px;
 `;
-
 
 const SectionNote = styled.span`
   color: var(--portal-muted);
@@ -270,14 +299,12 @@ const CardBody = styled.div`
   line-height: 1.75;
 `;
 
-
-
 /* ── Dashboard full-view layout (when a dashboard is selected) ── */
 
 /* ── end dashboard view layout ── */
 
 const Footer = styled.footer`
-  border-top: 1px solid var(--portal-border);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   background: var(--portal-footer-bg);
 `;
 
@@ -291,7 +318,8 @@ const FooterInner = styled.div<{ $maxWidth: string }>`
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  color: var(--portal-muted);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
 `;
 
 const FooterLinks = styled.div`
@@ -302,17 +330,17 @@ const FooterLinks = styled.div`
 `;
 
 const FooterLink = styled.a`
-  color: var(--portal-muted-strong);
+  color: rgba(255, 255, 255, 0.7);
   text-decoration: none;
 
   &:hover {
-    color: var(--portal-text);
+    color: #ffffff;
     text-decoration: none;
   }
 `;
 
 const FooterText = styled.span`
-  color: var(--portal-muted-strong);
+  color: rgba(255, 255, 255, 0.7);
 `;
 
 const DrawerStack = styled.div`
@@ -394,17 +422,17 @@ function persistTheme(theme: VisualMode) {
 
 function buildPortalSearch({
   pageSlug,
-  dashboardRef,
+  dashboardSlug,
 }: {
   pageSlug?: string | null;
-  dashboardRef?: string | null;
+  dashboardSlug?: string | null;
 }) {
   const normalizedPath = pageSlug
     ? `/superset/public/${pageSlug}/`
     : '/superset/public/';
   const params = new URLSearchParams();
-  if (dashboardRef) {
-    params.set(DASHBOARD_QUERY_PARAM, dashboardRef);
+  if (dashboardSlug) {
+    params.set(DASHBOARD_QUERY_PARAM, dashboardSlug);
   }
 
   const query = params.toString();
@@ -530,8 +558,7 @@ export default function PublicLandingPage() {
   const history = useHistory();
   const location = useLocation();
 
-  // eslint-disable-next-line no-console
-  console.log('[PublicLandingPage] Mounted. Pathname:', location.pathname);
+  // Debug logging removed — was firing on every render, not just mount
   const pageSlug = readPageSlug(location.pathname, location.search);
   const selectedDashboardSlug = readDashboardSlug(location.search);
   const shouldOpenStudio = false;
@@ -597,8 +624,10 @@ export default function PublicLandingPage() {
     data?.portal_layout.config.portalTitle ||
     data?.config.navbar.title.text ||
     t('Public Analytics Portal');
-  const accentColor = data?.portal_layout.config.accentColor || '#0f766e';
-  const secondaryColor = data?.portal_layout.config.secondaryColor || '#1d4ed8';
+  const dashboardBackLabel =
+    data?.portal_layout.config.dashboardBackLabel || t('Back to page');
+  const accentColor = data?.portal_layout.config.accentColor || '#1976D2';
+  const secondaryColor = data?.portal_layout.config.secondaryColor || '#4DA3FF';
   const surfaceColor = data?.portal_layout.config.surfaceColor || '#ffffff';
   const logoSrc =
     visualMode === 'dark'
@@ -767,7 +796,7 @@ export default function PublicLandingPage() {
     history.push(
       buildPortalSearch({
         pageSlug: pageSlug || currentPage?.slug,
-        dashboardRef: String(dashboard.id),
+        dashboardSlug: dashboard.slug || String(dashboard.id),
       }),
     );
   }
@@ -1130,15 +1159,11 @@ export default function PublicLandingPage() {
       data?.portal_layout.config.dashboardBadgeLabel || t('Public');
     const dashboardEmbedSubtitle =
       data?.portal_layout.config.dashboardEmbedSubtitle || undefined;
-    const dashboardBackLabel =
-      data?.portal_layout.config.dashboardBackLabel || t('Back to page');
 
     return (
       <DashboardPage
-        idOrSlug={String(dashboard.id)}
+        idOrSlug={dashboard.slug || String(dashboard.id)}
         isPublicView
-        onBack={clearSelectedDashboard}
-        backLabel={dashboardBackLabel}
         badge={dashboardBadgeLabel}
         subtitle={dashboardEmbedSubtitle}
       />
@@ -1148,42 +1173,39 @@ export default function PublicLandingPage() {
   const shellThemeStyle = {
     '--portal-accent': accentColor,
     '--portal-secondary': secondaryColor,
-    '--portal-bg': visualMode === 'dark' ? '#08111f' : '#f3f7fb',
-    '--portal-bg-elevated': visualMode === 'dark' ? '#101a2c' : '#eef3f9',
+    '--portal-bg': visualMode === 'dark' ? '#0A1929' : '#F5F7FA',
+    '--portal-bg-elevated': visualMode === 'dark' ? '#132F4C' : '#EEF2F7',
     '--portal-wash':
       visualMode === 'dark'
-        ? 'rgba(45, 212, 191, 0.12)'
-        : 'rgba(15, 118, 110, 0.12)',
-    '--portal-surface': visualMode === 'dark' ? '#132033' : surfaceColor,
-    '--portal-text': visualMode === 'dark' ? '#ecf5ff' : '#0f172a',
-    '--portal-muted': visualMode === 'dark' ? '#94a3b8' : '#64748b',
-    '--portal-muted-strong': visualMode === 'dark' ? '#cbd5e1' : '#475569',
+        ? 'rgba(25, 118, 210, 0.12)'
+        : 'rgba(25, 118, 210, 0.08)',
+    '--portal-surface': visualMode === 'dark' ? '#132F4C' : surfaceColor,
+    '--portal-text': visualMode === 'dark' ? '#ecf5ff' : '#1A1F2C',
+    '--portal-muted': visualMode === 'dark' ? '#94a3b8' : '#6B7280',
+    '--portal-muted-strong': visualMode === 'dark' ? '#cbd5e1' : '#4B5563',
     '--portal-border':
-      visualMode === 'dark'
-        ? 'rgba(148, 163, 184, 0.18)'
-        : 'rgba(148, 163, 184, 0.22)',
+      visualMode === 'dark' ? 'rgba(148, 163, 184, 0.18)' : '#E5EAF0',
     '--portal-border-strong':
-      visualMode === 'dark'
-        ? 'rgba(148, 163, 184, 0.26)'
-        : 'rgba(148, 163, 184, 0.28)',
+      visualMode === 'dark' ? 'rgba(148, 163, 184, 0.26)' : '#CBD5E1',
     '--portal-header-bg':
-      visualMode === 'dark'
-        ? 'rgba(8, 17, 31, 0.86)'
-        : 'rgba(255, 255, 255, 0.84)',
+      visualMode === 'dark' ? 'rgba(10, 25, 41, 0.92)' : '#0D3B66',
     '--portal-footer-bg':
-      visualMode === 'dark'
-        ? 'rgba(8, 17, 31, 0.92)'
-        : 'rgba(255, 255, 255, 0.62)',
+      visualMode === 'dark' ? 'rgba(10, 25, 41, 0.95)' : '#0D3B66',
     '--portal-nav-hover-bg':
       visualMode === 'dark'
         ? 'rgba(148, 163, 184, 0.12)'
-        : 'rgba(15, 23, 42, 0.06)',
+        : 'rgba(255, 255, 255, 0.12)',
     '--portal-nav-active-bg':
       visualMode === 'dark'
-        ? 'rgba(45, 212, 191, 0.18)'
-        : 'rgba(15, 118, 110, 0.12)',
-    '--portal-nav-active-text': accentColor,
+        ? 'rgba(25, 118, 210, 0.18)'
+        : 'rgba(255, 255, 255, 0.18)',
+    '--portal-nav-active-text': visualMode === 'dark' ? accentColor : '#ffffff',
     '--portal-header-height': `${portalHeaderHeight}px`,
+    '--portal-link': accentColor,
+    '--portal-shadow-card':
+      '0 1px 3px rgba(13,59,102,0.06), 0 1px 2px rgba(13,59,102,0.04)',
+    '--portal-radius-md': '8px',
+    '--portal-radius-lg': '12px',
   } as CSSProperties;
   const pageContentStyle = {
     ...(currentPage?.rendering?.css_variables || {}),
@@ -1233,6 +1255,16 @@ export default function PublicLandingPage() {
             </BrandLabel>
           </Brand>
           <HeaderActions>
+            {currentPage && selectedDashboard ? (
+              <HeaderBackButton
+                type="button"
+                onClick={clearSelectedDashboard}
+                aria-label={dashboardBackLabel}
+              >
+                <Icons.LeftOutlined iconSize="s" />
+                {dashboardBackLabel}
+              </HeaderBackButton>
+            ) : null}
             <NavRow>
               {headerItems.map(item =>
                 item.children?.length ? (
@@ -1325,85 +1357,72 @@ export default function PublicLandingPage() {
         {currentPage && selectedDashboard ? (
           renderSelectedDashboardView(selectedDashboard)
         ) : (
-        <Main $maxWidth={contentMaxWidth}>
-          {error && (
-            <Alert
-              style={{ marginBottom: 20 }}
-              type="error"
-              showIcon
-              message={error}
-              action={
-                <Button size="small" onClick={() => reloadPortal(pageSlug)}>
-                  {t('Retry')}
-                </Button>
-              }
-            />
-          )}
+          <Main $maxWidth={contentMaxWidth}>
+            {error && (
+              <Alert
+                style={{ marginBottom: 20 }}
+                type="error"
+                showIcon
+                message={error}
+                action={
+                  <Button size="small" onClick={() => reloadPortal(pageSlug)}>
+                    {t('Retry')}
+                  </Button>
+                }
+              />
+            )}
 
-          {loading && !data ? (
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'center',
-                padding: '96px 0',
-              }}
-            >
-              <Spin size="large" />
-            </div>
-          ) : currentPage ? (
-            pageBlocks.length ? (
-              <>
-                <RenderBlockTree
-                  blocks={renderedRegions.header}
-                  charts={data?.available_charts || []}
-                  dashboards={data?.dashboards || []}
-                  page={currentPage}
-                  navigation={data?.navigation}
-                  highlights={data?.indicator_highlights || []}
-                  onNavigate={navigateToPath}
-                  onOpenDashboard={navigateToPublicDashboard}
-                />
-                <RenderBlockTree
-                  blocks={renderedRegions.hero}
-                  charts={data?.available_charts || []}
-                  dashboards={data?.dashboards || []}
-                  page={currentPage}
-                  navigation={data?.navigation}
-                  highlights={data?.indicator_highlights || []}
-                  onNavigate={navigateToPath}
-                  onOpenDashboard={navigateToPublicDashboard}
-                />
-                {renderedRegions.content.length ||
-                renderedRegions.sidebar.length ? (
-                  <div
-                    className="cms-template-content-shell"
-                    style={
-                      hasSidebar
-                        ? {
-                            display: 'grid',
-                            gridTemplateColumns: `minmax(0, 1fr) ${sidebarWidth}`,
-                            gap: contentShellGap,
-                            alignItems: 'start',
-                          }
-                        : undefined
-                    }
-                  >
-                    <div>
-                      <RenderBlockTree
-                        blocks={renderedRegions.content}
-                        charts={data?.available_charts || []}
-                        dashboards={data?.dashboards || []}
-                        page={currentPage}
-                        navigation={data?.navigation}
-                        highlights={data?.indicator_highlights || []}
-                        onNavigate={navigateToPath}
-                        onOpenDashboard={navigateToPublicDashboard}
-                      />
-                    </div>
-                    {hasSidebar ? (
-                      <aside>
+            {loading && !data ? (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  padding: '96px 0',
+                }}
+              >
+                <Spin size="large" />
+              </div>
+            ) : currentPage ? (
+              pageBlocks.length ? (
+                <>
+                  <RenderBlockTree
+                    blocks={renderedRegions.header}
+                    charts={data?.available_charts || []}
+                    dashboards={data?.dashboards || []}
+                    page={currentPage}
+                    navigation={data?.navigation}
+                    highlights={data?.indicator_highlights || []}
+                    onNavigate={navigateToPath}
+                    onOpenDashboard={navigateToPublicDashboard}
+                  />
+                  <RenderBlockTree
+                    blocks={renderedRegions.hero}
+                    charts={data?.available_charts || []}
+                    dashboards={data?.dashboards || []}
+                    page={currentPage}
+                    navigation={data?.navigation}
+                    highlights={data?.indicator_highlights || []}
+                    onNavigate={navigateToPath}
+                    onOpenDashboard={navigateToPublicDashboard}
+                  />
+                  {renderedRegions.content.length ||
+                  renderedRegions.sidebar.length ? (
+                    <div
+                      className="cms-template-content-shell"
+                      style={
+                        hasSidebar
+                          ? {
+                              display: 'grid',
+                              gridTemplateColumns: `minmax(0, 1fr) ${sidebarWidth}`,
+                              gap: contentShellGap,
+                              alignItems: 'start',
+                            }
+                          : undefined
+                      }
+                    >
+                      <div>
                         <RenderBlockTree
-                          blocks={renderedRegions.sidebar}
+                          blocks={renderedRegions.content}
                           charts={data?.available_charts || []}
                           dashboards={data?.dashboards || []}
                           page={currentPage}
@@ -1412,52 +1431,65 @@ export default function PublicLandingPage() {
                           onNavigate={navigateToPath}
                           onOpenDashboard={navigateToPublicDashboard}
                         />
-                      </aside>
-                    ) : null}
-                  </div>
-                ) : null}
-                <RenderBlockTree
-                  blocks={renderedRegions.cta}
-                  charts={data?.available_charts || []}
-                  dashboards={data?.dashboards || []}
-                  page={currentPage}
-                  navigation={data?.navigation}
-                  highlights={data?.indicator_highlights || []}
-                  onNavigate={navigateToPath}
-                  onOpenDashboard={navigateToPublicDashboard}
-                />
-                <RenderBlockTree
-                  blocks={renderedRegions.footer}
-                  charts={data?.available_charts || []}
-                  dashboards={data?.dashboards || []}
-                  page={currentPage}
-                  navigation={data?.navigation}
-                  highlights={data?.indicator_highlights || []}
-                  onNavigate={navigateToPath}
-                  onOpenDashboard={navigateToPublicDashboard}
-                />
-              </>
+                      </div>
+                      {hasSidebar ? (
+                        <aside>
+                          <RenderBlockTree
+                            blocks={renderedRegions.sidebar}
+                            charts={data?.available_charts || []}
+                            dashboards={data?.dashboards || []}
+                            page={currentPage}
+                            navigation={data?.navigation}
+                            highlights={data?.indicator_highlights || []}
+                            onNavigate={navigateToPath}
+                            onOpenDashboard={navigateToPublicDashboard}
+                          />
+                        </aside>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <RenderBlockTree
+                    blocks={renderedRegions.cta}
+                    charts={data?.available_charts || []}
+                    dashboards={data?.dashboards || []}
+                    page={currentPage}
+                    navigation={data?.navigation}
+                    highlights={data?.indicator_highlights || []}
+                    onNavigate={navigateToPath}
+                    onOpenDashboard={navigateToPublicDashboard}
+                  />
+                  <RenderBlockTree
+                    blocks={renderedRegions.footer}
+                    charts={data?.available_charts || []}
+                    dashboards={data?.dashboards || []}
+                    page={currentPage}
+                    navigation={data?.navigation}
+                    highlights={data?.indicator_highlights || []}
+                    onNavigate={navigateToPath}
+                    onOpenDashboard={navigateToPublicDashboard}
+                  />
+                </>
+              ) : (
+                <SurfaceCard>
+                  <CardTitle>{currentPage.title}</CardTitle>
+                  <CardBody>
+                    {currentPage.description ||
+                      data?.portal_layout.config.emptyPageMessage ||
+                      t('This page does not have any visible blocks yet.')}
+                  </CardBody>
+                </SurfaceCard>
+              )
             ) : (
               <SurfaceCard>
-                <CardTitle>{currentPage.title}</CardTitle>
-                <CardBody>
-                  {currentPage.description ||
-                    data?.portal_layout.config.emptyPageMessage ||
-                    t('This page does not have any visible blocks yet.')}
-                </CardBody>
+                <Empty
+                  description={
+                    data?.portal_layout.config.noPublicPageMessage ||
+                    t('No public page is available.')
+                  }
+                />
               </SurfaceCard>
-            )
-          ) : (
-            <SurfaceCard>
-              <Empty
-                description={
-                  data?.portal_layout.config.noPublicPageMessage ||
-                  t('No public page is available.')
-                }
-              />
-            </SurfaceCard>
-          )}
-        </Main>
+            )}
+          </Main>
         )}
       </PageContentShell>
 

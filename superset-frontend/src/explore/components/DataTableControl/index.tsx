@@ -164,17 +164,19 @@ export const useTableColumns = (
       return [];
     }
 
-    // Build a map of sanitized keys to original keys for faster lookups
-    const keyMap = new Map<string, string>();
-    colnames.forEach(originalKey => {
-      const sanitized = sanitizeColumnName(originalKey);
-      keyMap.set(sanitized, originalKey);
-    });
+    const duplicateCounts = new Map<string, number>();
 
     return colnames.map((key, index) => {
       const sanitizedKey = sanitizeColumnName(key);
+      const duplicateIndex = duplicateCounts.get(sanitizedKey) ?? 0;
+      duplicateCounts.set(sanitizedKey, duplicateIndex + 1);
+      const columnId =
+        duplicateIndex === 0
+          ? sanitizedKey || index
+          : `${sanitizedKey}_${duplicateIndex}`;
+
       return {
-        id: sanitizedKey || index,
+        id: columnId,
         // Header is required for react-table to display column headers
         Header: key,
         accessor: (row: Record<string, any> | any[]) => {

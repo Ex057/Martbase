@@ -67,8 +67,8 @@ export type PluginFilterSelectProps = PluginFilterStylesProps & {
   inputRef?: RefObject<any>;
   filterBarOrientation?: FilterBarOrientation;
   isOverflowingFilterBar?: boolean;
-  clearAllTrigger?: Record<string, boolean>;
-  onClearAllComplete?: (filterId: string) => void;
+  clearAllTrigger?: number;
+  onClearAllComplete?: () => void;
 } & PluginFilterHooks;
 
 export const DEFAULT_FORM_DATA: PluginFilterSelectCustomizeProps = {

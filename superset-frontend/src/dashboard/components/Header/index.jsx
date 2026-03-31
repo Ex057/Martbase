@@ -20,7 +20,14 @@
 import PropTypes from 'prop-types';
 import { Global, css } from '@emotion/react';
 import { extendedDayjs } from '@superset-ui/core/utils/dates';
-import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  Fragment,
+} from 'react';
 import {
   styled,
   isFeatureEnabled,
@@ -114,6 +121,11 @@ const headerContainerStyle = theme => css`
   .header-with-actions .title-panel > div {
     padding-left: ${theme.sizeUnit}px;
   }
+`;
+
+const publicHeaderContainerStyle = theme => css`
+  background: var(--portal-surface, ${theme.colorBgContainer});
+  position: relative;
 `;
 
 const editButtonStyle = theme => css`
@@ -271,14 +283,27 @@ const Header = ({ isPublicView, onBack, backLabel, badge, subtitle }) => {
     [dispatch],
   );
 
+  // Use refs to avoid recreating the periodic callback when Redux state
+  // changes. Without refs, dashboardInfo/chartIds cause startPeriodicRender
+  // to be recreated on every Redux update, which restarts the timer in an
+  // infinite loop (timer fires → fetchCharts → state change → callback
+  // recreated → useEffect restarts timer → repeat).
+  const dashboardInfoRef = useRef(dashboardInfo);
+  dashboardInfoRef.current = dashboardInfo;
+  const chartIdsRef = useRef(chartIds);
+  chartIdsRef.current = chartIds;
+  const isPublicViewRef = useRef(isPublicView);
+  isPublicViewRef.current = isPublicView;
+
   const startPeriodicRender = useCallback(
     interval => {
       let intervalMessage;
 
       if (interval) {
         const periodicRefreshOptions =
-          dashboardInfo.common?.conf?.DASHBOARD_AUTO_REFRESH_INTERVALS;
-        const predefinedValue = periodicRefreshOptions.find(
+          dashboardInfoRef.current.common?.conf
+            ?.DASHBOARD_AUTO_REFRESH_INTERVALS;
+        const predefinedValue = periodicRefreshOptions?.find(
           option => Number(option[0]) === interval / 1000,
         );
 
@@ -291,18 +316,12 @@ const Header = ({ isPublicView, onBack, backLabel, badge, subtitle }) => {
         }
       }
 
-      const fetchCharts = (charts, force = false) =>
-        boundActionCreators.fetchCharts(
-          charts,
-          force,
-          interval * 0.2,
-          dashboardInfo.id,
-        );
-
       const periodicRender = () => {
-        const { metadata } = dashboardInfo;
+        const info = dashboardInfoRef.current;
+        const currentChartIds = chartIdsRef.current;
+        const { metadata } = info;
         const immune = metadata.timed_refresh_immune_slices || [];
-        const affectedCharts = chartIds.filter(
+        const affectedCharts = currentChartIds.filter(
           chartId => immune.indexOf(chartId) === -1,
         );
 
@@ -310,19 +329,34 @@ const Header = ({ isPublicView, onBack, backLabel, badge, subtitle }) => {
           interval,
           chartCount: affectedCharts.length,
         });
-        boundActionCreators.addWarningToast(
-          t(
-            `This dashboard is currently auto refreshing; the next auto refresh will be in %s.`,
-            intervalMessage,
-          ),
-        );
-        if (
-          dashboardInfo.common?.conf?.DASHBOARD_AUTO_REFRESH_MODE === 'fetch'
-        ) {
-          // force-refresh while auto-refresh in dashboard
-          return fetchCharts(affectedCharts);
+
+        // In public view, refresh silently without toast notifications
+        if (!isPublicViewRef.current) {
+          boundActionCreators.addWarningToast(
+            t(
+              `This dashboard is currently auto refreshing; the next auto refresh will be in %s.`,
+              intervalMessage,
+            ),
+          );
         }
-        return fetchCharts(affectedCharts, true);
+
+        // In public view, always use soft fetch (force=false) to avoid
+        // visible loading spinners. In authenticated view, respect the
+        // DASHBOARD_AUTO_REFRESH_MODE config.
+        const forceRefresh = isPublicViewRef.current
+          ? false
+          : info.common?.conf?.DASHBOARD_AUTO_REFRESH_MODE !== 'fetch';
+
+        // Pass silent=true for public views so charts refresh in the
+        // background without showing loading spinners.
+        const silent = !!isPublicViewRef.current;
+        return boundActionCreators.fetchCharts(
+          affectedCharts,
+          forceRefresh,
+          interval * 0.2,
+          info.id,
+          { silent },
+        );
       };
 
       refreshTimer.current = setPeriodicRunner({
@@ -331,7 +365,8 @@ const Header = ({ isPublicView, onBack, backLabel, badge, subtitle }) => {
         refreshTimer: refreshTimer.current,
       });
     },
-    [boundActionCreators, chartIds, dashboardInfo],
+    // boundActionCreators is stable (memoized with [dispatch])
+    [boundActionCreators],
   );
 
   useEffect(() => {
@@ -611,119 +646,116 @@ const Header = ({ isPublicView, onBack, backLabel, badge, subtitle }) => {
     ],
   );
 
-  const titlePanelAdditionalItems = useMemo(
-    () => {
-      const items = [];
+  const titlePanelAdditionalItems = useMemo(() => {
+    const items = [];
 
-      if (isPublicView) {
-        if (badge) {
-          items.push(
-            <span
-              key="public-badge"
-              css={theme => css`
-                display: inline-flex;
-                align-items: center;
-                padding: 4px 8px;
-                border-radius: 999px;
-                background: rgba(15, 118, 110, 0.1);
-                color: var(--portal-accent, ${theme.colorPrimary});
-                font-size: 12px;
-                font-weight: 700;
-                letter-spacing: 0.08em;
-                text-transform: uppercase;
-                margin-left: 4px;
-              `}
-            >
-              {badge}
-            </span>
-          );
-        }
-        if (subtitle) {
-          items.push(
-            <span
-              key="public-subtitle"
-              css={theme => css`
-                margin-left: 12px;
-                font-size: 14px;
-                color: ${theme.colorTextSecondary};
-              `}
-            >
-              {subtitle}
-            </span>
-          );
-        }
-        return items;
-      }
-
-      if (!editMode) {
+    if (isPublicView) {
+      if (badge) {
         items.push(
-          <PublishedStatus
-            key="published-status"
-            dashboardId={dashboardInfo.id}
-            isPublished={isPublished}
-            savePublished={boundActionCreators.savePublished}
-            userCanEdit={userCanEdit}
-            userCanSave={userCanSaveAs}
-            visible={!editMode}
-          />,
+          <span
+            key="public-badge"
+            css={theme => css`
+              display: inline-flex;
+              align-items: center;
+              padding: 4px 8px;
+              border-radius: 999px;
+              background: rgba(15, 118, 110, 0.1);
+              color: var(--portal-accent, ${theme.colorPrimary});
+              font-size: 12px;
+              font-weight: 700;
+              letter-spacing: 0.08em;
+              text-transform: uppercase;
+              margin-left: 4px;
+            `}
+          >
+            {badge}
+          </span>,
         );
       }
-
-      if (!editMode && !isEmbedded && metadataBar) {
-        items.push(<Fragment key="metadata-bar">{metadataBar}</Fragment>);
+      if (subtitle) {
+        items.push(
+          <span
+            key="public-subtitle"
+            css={theme => css`
+              margin-left: 12px;
+              font-size: 14px;
+              color: ${theme.colorTextSecondary};
+            `}
+          >
+            {subtitle}
+          </span>,
+        );
       }
-
       return items;
-    },
-    [
-      boundActionCreators.savePublished,
-      dashboardInfo.id,
-      editMode,
-      metadataBar,
-      isEmbedded,
-      isPublished,
-      userCanEdit,
-      userCanSaveAs,
-      isPublicView,
-      badge,
-      subtitle,
-    ],
-  );
+    }
 
-  const rightPanelAdditionalItems = useMemo(
-    () => {
-      if (isPublicView) {
-        return (
-          <div className="button-container">
-            {onBack && (
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onBack();
-                }}
-                css={theme => css`
-                  color: var(--portal-muted-strong, ${theme.colorTextSecondary});
-                  font-weight: 600;
-                  font-size: 14px;
-                  text-decoration: none;
-                  margin-right: 16px;
-                  display: inline-flex;
-                  align-items: center;
-                  gap: 6px;
-                  &:hover {
-                    color: var(--portal-text, ${theme.colorText});
-                  }
-                `}
-              >
-                <Icons.LeftOutlined iconSize="s" />
-                {backLabel || t('Back')}
-              </a>
-            )}
-          </div>
-        );
+    if (!editMode) {
+      items.push(
+        <PublishedStatus
+          key="published-status"
+          dashboardId={dashboardInfo.id}
+          isPublished={isPublished}
+          savePublished={boundActionCreators.savePublished}
+          userCanEdit={userCanEdit}
+          userCanSave={userCanSaveAs}
+          visible={!editMode}
+        />,
+      );
+    }
+
+    if (!editMode && !isEmbedded && metadataBar) {
+      items.push(<Fragment key="metadata-bar">{metadataBar}</Fragment>);
+    }
+
+    return items;
+  }, [
+    boundActionCreators.savePublished,
+    dashboardInfo.id,
+    editMode,
+    metadataBar,
+    isEmbedded,
+    isPublished,
+    userCanEdit,
+    userCanSaveAs,
+    isPublicView,
+    badge,
+    subtitle,
+  ]);
+
+  const rightPanelAdditionalItems = useMemo(() => {
+    if (isPublicView) {
+      if (!onBack) {
+        return null;
       }
       return (
+        <div className="button-container">
+          <a
+            href="#"
+            onClick={e => {
+              e.preventDefault();
+              onBack();
+            }}
+            css={theme => css`
+              color: var(--portal-muted-strong, ${theme.colorTextSecondary});
+              font-weight: 600;
+              font-size: 14px;
+              text-decoration: none;
+              margin-right: 16px;
+              display: inline-flex;
+              align-items: center;
+              gap: 6px;
+              &:hover {
+                color: var(--portal-text, ${theme.colorText});
+              }
+            `}
+          >
+            <Icons.LeftOutlined iconSize="s" />
+            {backLabel || t('Back')}
+          </a>
+        </div>
+      );
+    }
+    return (
       <div className="button-container">
         {userCanSaveAs && (
           <div className="button-container" data-test="dashboard-edit-actions">
@@ -824,30 +856,28 @@ const Header = ({ isPublicView, onBack, backLabel, badge, subtitle }) => {
           </div>
         )}
       </div>
-      );
-    },
-    [
-      NavExtension,
-      boundActionCreators.onRedo,
-      boundActionCreators.onUndo,
-      boundActionCreators.clearDashboardHistory,
-      editMode,
-      emphasizeRedo,
-      emphasizeUndo,
-      handleCtrlY,
-      handleCtrlZ,
-      hasUnsavedChanges,
-      overwriteDashboard,
-      redoLength,
-      toggleEditMode,
-      undoLength,
-      userCanEdit,
-      userCanSaveAs,
-      isPublicView,
-      onBack,
-      backLabel,
-    ],
-  );
+    );
+  }, [
+    NavExtension,
+    boundActionCreators.onRedo,
+    boundActionCreators.onUndo,
+    boundActionCreators.clearDashboardHistory,
+    editMode,
+    emphasizeRedo,
+    emphasizeUndo,
+    handleCtrlY,
+    handleCtrlZ,
+    hasUnsavedChanges,
+    overwriteDashboard,
+    redoLength,
+    toggleEditMode,
+    undoLength,
+    userCanEdit,
+    userCanSaveAs,
+    isPublicView,
+    onBack,
+    backLabel,
+  ]);
 
   const handleReportDelete = async report => {
     await dispatch(deleteActiveReport(report));
@@ -887,7 +917,7 @@ const Header = ({ isPublicView, onBack, backLabel, badge, subtitle }) => {
   });
   return (
     <div
-      css={headerContainerStyle}
+      css={[headerContainerStyle, isPublicView && publicHeaderContainerStyle]}
       data-test="dashboard-header-container"
       data-test-id={dashboardInfo.id}
       className="dashboard-header-container"

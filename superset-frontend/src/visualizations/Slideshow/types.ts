@@ -41,6 +41,8 @@ export interface SlideshowSlide {
   deltaPositive?: boolean;
   /** Optional subtitle */
   subtitle?: string;
+  /** Optional semantic value color */
+  statusColor?: string | null;
   /** Metric name used to fetch (for ordering) */
   metricName: string;
 }

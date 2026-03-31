@@ -108,14 +108,21 @@ const StickyPanel = styled.div<{ width: number }>`
 `;
 
 // @z-index-above-dashboard-popovers (99) + 1 = 100
-const StyledHeader = styled.div`
-  ${({ theme }) => css`
+const StyledHeader = styled.div<{ $isPublicView?: boolean }>`
+  ${({ theme, $isPublicView }) => css`
     grid-column: 2;
     grid-row: 1;
-    position: sticky;
-    top: 0;
-    z-index: 99;
-    max-width: 100vw;
+    position: ${$isPublicView ? 'fixed' : 'sticky'};
+    top: ${$isPublicView ? 'var(--portal-header-height, 0px)' : '0'};
+    left: ${$isPublicView ? '0' : 'auto'};
+    right: ${$isPublicView ? '0' : 'auto'};
+    z-index: ${$isPublicView ? 24 : 99};
+    width: ${$isPublicView ? '100%' : 'auto'};
+    max-width: ${$isPublicView ? 'none' : '100vw'};
+    background: ${$isPublicView
+      ? `var(--portal-surface, ${theme.colorBgContainer})`
+      : 'transparent'};
+    box-shadow: ${$isPublicView ? '0 1px 0 rgba(15, 23, 42, 0.06)' : 'none'};
 
     .empty-droptarget:before {
       position: absolute;
@@ -134,11 +141,15 @@ const StyledHeader = styled.div`
 
 const StyledContent = styled.div<{
   fullSizeChartId: number | null;
+  $isPublicView?: boolean;
+  $headerOffset?: number;
 }>`
   grid-column: 2;
   grid-row: 2;
   // @z-index-above-dashboard-header (100) + 1 = 101
   ${({ fullSizeChartId }) => fullSizeChartId && `z-index: 101;`}
+  ${({ $isPublicView, $headerOffset }) =>
+    $isPublicView && `padding-top: ${Math.max(0, $headerOffset || 0)}px;`}
 `;
 
 const DashboardContentWrapper = styled.div`
@@ -333,7 +344,7 @@ const StyledDashboardContent = styled.div<{
     .dashboard-component-chart-holder {
       width: 100%;
       height: 100%;
-      background-color: ${theme.colorBgContainer};
+      background-color: transparent;
       position: relative;
       padding: ${theme.sizeUnit * 4}px;
       overflow-y: visible;
@@ -657,7 +668,7 @@ const DashboardBuilder: React.FC<DashboardBuilderProps> = ({
             </ResizableSidebar>
           </>
         )}
-      <StyledHeader ref={headerRef}>
+      <StyledHeader ref={headerRef} $isPublicView={!!isPublicView}>
         {/* @ts-ignore */}
         <Droppable
           data-test="top-level-tabs"
@@ -676,7 +687,11 @@ const DashboardBuilder: React.FC<DashboardBuilderProps> = ({
           {renderDraggableContent}
         </Droppable>
       </StyledHeader>
-      <StyledContent fullSizeChartId={fullSizeChartId}>
+      <StyledContent
+        fullSizeChartId={fullSizeChartId}
+        $isPublicView={!!isPublicView}
+        $headerOffset={barTopOffset}
+      >
         {!editMode &&
           !topLevelTabs &&
           dashboardLayout[DASHBOARD_GRID_ID]?.children?.length === 0 && (

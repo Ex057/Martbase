@@ -71,7 +71,7 @@ import { selectChartCustomizationItems } from '../../ChartCustomization/selector
 type FilterControlsProps = {
   dataMaskSelected: DataMaskStateWithId;
   onFilterSelectionChange: (filter: Filter, dataMask: DataMask) => void;
-  clearAllTriggers?: Record<string, boolean>;
+  clearAllTriggers?: Record<string, number>;
   onClearAllComplete?: (filterId: string) => void;
   hideHeader?: boolean;
 };

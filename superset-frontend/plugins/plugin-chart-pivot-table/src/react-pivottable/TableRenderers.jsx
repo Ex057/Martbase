@@ -40,6 +40,36 @@ function displayCell(value, allowRenderHtml) {
   }
   return parseLabel(value);
 }
+
+export function getCellValueColor(keys, aggValue, cellColorFormatters) {
+  let valueColor;
+
+  if (!cellColorFormatters) {
+    return valueColor;
+  }
+
+  Object.values(cellColorFormatters).forEach(cellColorFormatter => {
+    if (Array.isArray(cellColorFormatter)) {
+      keys.forEach(key => {
+        if (valueColor) {
+          return;
+        }
+
+        cellColorFormatter
+          .filter(formatter => formatter.column === key)
+          .forEach(formatter => {
+            const formatterResult = formatter.getColorFromValue(aggValue);
+            if (formatterResult) {
+              valueColor = formatterResult;
+            }
+          });
+      });
+    }
+  });
+
+  return valueColor;
+}
+
 function displayHeaderCell(
   needToggle,
   ArrowIcon,
@@ -714,30 +744,11 @@ export class TableRenderer extends Component {
       const aggValue = agg.value();
 
       const keys = [...rowKey, ...colKey];
-      let backgroundColor;
-      if (cellColorFormatters) {
-        Object.values(cellColorFormatters).forEach(cellColorFormatter => {
-          if (Array.isArray(cellColorFormatter)) {
-            keys.forEach(key => {
-              if (backgroundColor) {
-                return;
-              }
-              cellColorFormatter
-                .filter(formatter => formatter.column === key)
-                .forEach(formatter => {
-                  const formatterResult = formatter.getColorFromValue(aggValue);
-                  if (formatterResult) {
-                    backgroundColor = formatterResult;
-                  }
-                });
-            });
-          }
-        });
-      }
+      const valueColor = getCellValueColor(keys, aggValue, cellColorFormatters);
 
       const style = agg.isSubtotal
-        ? { fontWeight: 'bold' }
-        : { backgroundColor };
+        ? { fontWeight: 'bold', color: valueColor }
+        : { color: valueColor };
 
       return (
         <td
@@ -757,6 +768,11 @@ export class TableRenderer extends Component {
     if (rowTotals) {
       const agg = pivotData.getAggregator(rowKey, []);
       const aggValue = agg.value();
+      const totalValueColor = getCellValueColor(
+        rowKey,
+        aggValue,
+        cellColorFormatters,
+      );
       totalCell = (
         <td
           role="gridcell"
@@ -764,6 +780,7 @@ export class TableRenderer extends Component {
           className="pvtTotal"
           onClick={rowTotalCallbacks[flatRowKey]}
           onContextMenu={e => this.props.onContextMenu(e, undefined, rowKey)}
+          style={{ color: totalValueColor }}
         >
           {displayCell(agg.format(aggValue), allowRenderHtml)}
         </td>
@@ -819,6 +836,11 @@ export class TableRenderer extends Component {
       const flatColKey = flatKey(colKey);
       const agg = pivotData.getAggregator([], colKey);
       const aggValue = agg.value();
+      const totalValueColor = getCellValueColor(
+        colKey,
+        aggValue,
+        this.props.tableOptions.cellColorFormatters,
+      );
 
       return (
         <td
@@ -827,7 +849,7 @@ export class TableRenderer extends Component {
           key={`total-${flatColKey}`}
           onClick={colTotalCallbacks[flatColKey]}
           onContextMenu={e => this.props.onContextMenu(e, colKey, undefined)}
-          style={{ padding: '5px' }}
+          style={{ padding: '5px', color: totalValueColor }}
         >
           {displayCell(agg.format(aggValue), this.props.allowRenderHtml)}
         </td>
@@ -838,6 +860,11 @@ export class TableRenderer extends Component {
     if (rowTotals) {
       const agg = pivotData.getAggregator([], []);
       const aggValue = agg.value();
+      const grandTotalValueColor = getCellValueColor(
+        [],
+        aggValue,
+        this.props.tableOptions.cellColorFormatters,
+      );
       grandTotalCell = (
         <td
           role="gridcell"
@@ -845,6 +872,7 @@ export class TableRenderer extends Component {
           className="pvtGrandTotal pvtRowTotal"
           onClick={grandTotalCallback}
           onContextMenu={e => this.props.onContextMenu(e, undefined, undefined)}
+          style={{ color: grandTotalValueColor }}
         >
           {displayCell(agg.format(aggValue), this.props.allowRenderHtml)}
         </td>
@@ -921,7 +949,10 @@ export class TableRenderer extends Component {
     };
 
     return (
-      <Styles isDashboardEditMode={this.isDashboardEditMode()}>
+      <Styles
+        isDashboardEditMode={this.isDashboardEditMode()}
+        chartBackgroundColor={this.props.chartBackgroundColor}
+      >
         <table className="pvtTable" role="grid">
           <thead>
             {colAttrs.map((c, j) =>

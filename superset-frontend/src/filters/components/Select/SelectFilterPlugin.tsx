@@ -660,7 +660,7 @@ const StyledSpace = styled(Space)<{
 
 const PeriodPickerTrigger = styled(Button)`
   width: auto;
-  min-width: 180px;
+  min-width: 140px;
   justify-content: center;
   flex-shrink: 0;
 `;
@@ -671,16 +671,20 @@ const PeriodFilterRow = styled.div`
   gap: ${({ theme }) => theme.sizeUnit * 2}px;
   width: 100%;
 
-  ${StyledSpace} {
-    flex: 1;
-    min-width: 0;
+  .period-filter-space {
+    width: 140px;
+    flex-shrink: 0;
   }
 
   @media (max-width: 720px) {
     flex-direction: column;
     align-items: stretch;
 
-    ${PeriodPickerTrigger} {
+    .period-picker-trigger {
+      width: 100%;
+    }
+
+    .period-filter-space {
       width: 100%;
     }
   }
@@ -721,7 +725,8 @@ const PickerButtonRow = styled.div`
 `;
 
 const PeriodTypeSelect = styled(Select)`
-  width: 240px;
+  width: 100%;
+  max-width: 240px;
 `;
 
 const YearStepper = styled.div`
@@ -798,7 +803,9 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
   const [initialColtypeMap] = useState(coltypeMap);
   const [search, setSearch] = useState('');
   const isChangedByUser = useRef(false);
+  const skipAutoInitializationRef = useRef(false);
   const prevDataRef = useRef(data);
+  const handledClearAllTriggerRef = useRef<number | undefined>(undefined);
   const [dataMask, dispatchDataMask] = useImmerReducer(reducer, {
     extraFormData: {},
     filterState,
@@ -815,6 +822,9 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
     () => col?.toLowerCase() === 'period' || col?.toLowerCase() === 'pe',
     [col],
   );
+  const isHandlingClearAll =
+    clearAllTrigger !== undefined &&
+    clearAllTrigger !== handledClearAllTriggerRef.current;
   const effectiveData = useMemo(() => {
     if (data.length > 0) {
       return data;
@@ -1039,6 +1049,7 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
 
   const handleChange = useCallback(
     (value?: SelectValue | number | string) => {
+      skipAutoInitializationRef.current = false;
       const rawValues = value === null ? [null] : ensureIsArray(value);
       const values = rawValues.reduce<(number | string | null)[]>(
         (acc, selectedValue) => {
@@ -1230,6 +1241,7 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
   }, []);
 
   const handleApplyPeriodPicker = useCallback(() => {
+    skipAutoInitializationRef.current = false;
     const nextValues = [...draftPeriodValues].sort((a, b) => {
       const parsedA = parsePeriodValue(a);
       const parsedB = parsePeriodValue(b);
@@ -1343,6 +1355,10 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
       return;
     }
 
+    if (isHandlingClearAll) {
+      return;
+    }
+
     // Case 1: Handle disabled state first
     if (isDisabled) {
       updateDataMask(null);
@@ -1350,8 +1366,13 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
     }
 
     if (filterState.value !== undefined) {
+      skipAutoInitializationRef.current = false;
       // Set the filter state value if it is defined
       updateDataMask(filterState.value);
+      return;
+    }
+
+    if (skipAutoInitializationRef.current) {
       return;
     }
 
@@ -1376,6 +1397,7 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
     data,
     groupby,
     col,
+    isHandlingClearAll,
     inverseSelection,
   ]);
 
@@ -1401,6 +1423,10 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
   }, [data, col]);
 
   useEffect(() => {
+    if (isHandlingClearAll) {
+      return;
+    }
+
     if (
       isChangedByUser.current &&
       filterState.value &&
@@ -1431,6 +1457,7 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
     formData,
     data,
     JSON.stringify(filterState.value),
+    isHandlingClearAll,
     isChangedByUser.current,
   ]);
 
@@ -1439,7 +1466,10 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
   }, [JSON.stringify(dataMask)]);
 
   useEffect(() => {
-    if (clearAllTrigger) {
+    if (isHandlingClearAll) {
+      handledClearAllTriggerRef.current = clearAllTrigger;
+      skipAutoInitializationRef.current = true;
+      isChangedByUser.current = true;
       dispatchDataMask({
         type: 'filterState',
         extraFormData: {},
@@ -1450,10 +1480,12 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
       });
 
       updateDataMask(null);
+      setDraftPeriodValues([]);
+      setIsPeriodPickerOpen(false);
       setSearch('');
-      onClearAllComplete?.(formData.nativeFilterId);
+      onClearAllComplete?.();
     }
-  }, [clearAllTrigger, onClearAllComplete, updateDataMask]);
+  }, [clearAllTrigger, isHandlingClearAll, updateDataMask, onClearAllComplete]);
 
   useEffect(() => {
     if (prevExcludeFilterValues.current !== excludeFilterValues) {
@@ -1491,6 +1523,7 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
         {isPeriodColumn ? (
           <PeriodFilterRow>
             <StyledSpace
+              className="period-filter-space"
               appSection={appSection}
               inverseSelection={inverseSelection}
             >
@@ -1543,6 +1576,7 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
               />
             </StyledSpace>
             <PeriodPickerTrigger
+              className="period-picker-trigger"
               buttonStyle="secondary"
               onClick={handleOpenPeriodPicker}
             >

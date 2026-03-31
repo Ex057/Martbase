@@ -16,38 +16,33 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { ChartMetadata, ChartPlugin, t } from '@superset-ui/core';
-import buildQuery from './buildQuery';
-import controlPanel from './controlPanel';
-import SummaryViz from './SummaryViz';
-import thumbnail from './images/thumbnailUrl';
+import { Behavior, t, ChartMetadata, ChartPlugin } from '@superset-ui/core';
 import transformProps from './transformProps';
-
-const metadata = new ChartMetadata({
-  name: t('Summary'),
-  description: t(
-    'Compact multi-indicator summary panel for KPI blocks, executive statistics, operational snapshots, and dense analytics cards.',
-  ),
-  category: t('KPI'),
-  tags: [
-    t('Summary'),
-    t('KPI'),
-    t('Indicators'),
-    t('Executive'),
-    t('Compact'),
-    t('Multi-metric'),
-  ],
-  thumbnail,
-});
+import controlPanel from './control';
+import thumbnail from './images/thumbnail.png';
 
 export default class SummaryChartPlugin extends ChartPlugin {
   constructor() {
     super({
-      buildQuery,
+      metadata: new ChartMetadata({
+        name: t('Summary'),
+        description: t(
+          'High-density multi-indicator block with sparklines, progress bars, ' +
+            'threshold coloring, and configurable layouts.',
+        ),
+        thumbnail,
+        tags: [
+          t('KPI'),
+          t('Health'),
+          t('Summary'),
+          t('Multi-metric'),
+          t('Report'),
+        ],
+        behaviors: [Behavior.InteractiveChart],
+      }),
       controlPanel,
-      loadChart: () => Promise.resolve(SummaryViz),
-      metadata,
       transformProps,
+      loadChart: () => import('./Summary'),
     });
   }
 }

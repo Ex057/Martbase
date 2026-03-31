@@ -36,7 +36,7 @@ interface CommonFiltersBarProps {
     filter: Pick<Filter, 'id'> & Partial<Filter>,
     dataMask: Partial<DataMask>,
   ) => void;
-  clearAllTriggers?: Record<string, boolean>;
+  clearAllTriggers?: Record<string, number>;
   onClearAllComplete?: (filterId: string) => void;
 }
 

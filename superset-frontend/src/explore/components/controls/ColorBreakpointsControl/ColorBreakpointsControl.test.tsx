@@ -18,12 +18,12 @@
  */
 import { render, screen, waitFor } from 'spec/helpers/testing-library';
 import userEvent from '@testing-library/user-event';
-import ColorBreakpointsControl from '.';
 import {
   readCachedLegendSets,
   syncDHIS2LegendSchemesForDatabase,
 } from 'src/utils/dhis2LegendColorSchemes';
 import { readCachedLegendSetEnvelope } from 'src/visualizations/DHIS2Map/controlPanel';
+import ColorBreakpointsControl from '.';
 import { ColorBreakpointType, ColorBreakpointsControlProps } from './types';
 
 jest.mock('src/utils/dhis2LegendColorSchemes', () => ({
@@ -184,6 +184,30 @@ describe('ColorBreakpointsControl', () => {
     });
   });
 
+  test('auto-switches color mode to breakpoints when saving a breakpoint', async () => {
+    const setControlValue = jest.fn();
+    renderComponent({
+      colorMode: 'default',
+      hasColorModeControl: true,
+      actions: { setControlValue },
+    });
+
+    userEvent.click(screen.getByText('Click to add new breakpoint'));
+
+    userEvent.type(screen.getByTestId('min-value-input'), '10');
+    userEvent.type(screen.getByTestId('max-value-input'), '90');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('save-button')).toBeEnabled();
+    });
+
+    userEvent.click(screen.getByTestId('save-button'));
+
+    await waitFor(() =>
+      expect(setControlValue).toHaveBeenCalledWith('color_mode', 'breakpoints'),
+    );
+  });
+
   test('should remove breakpoint when delete is triggered', async () => {
     const existingBreakpoint: ColorBreakpointType = {
       id: 0,
@@ -269,7 +293,9 @@ describe('ColorBreakpointsControl', () => {
     );
     userEvent.click(toggle);
     await waitFor(() =>
-      expect(screen.queryByTestId('auto-generate-panel')).not.toBeInTheDocument(),
+      expect(
+        screen.queryByTestId('auto-generate-panel'),
+      ).not.toBeInTheDocument(),
     );
   });
 
@@ -337,6 +363,28 @@ describe('ColorBreakpointsControl', () => {
     );
   });
 
+  test('auto-switches color mode when importing a DHIS2 column legend', async () => {
+    const setControlValue = jest.fn();
+
+    renderComponent({
+      colorMode: 'default',
+      hasColorModeControl: true,
+      actions: { setControlValue },
+      dhis2LegendDefinition: {
+        items: [
+          { startValue: 0, endValue: 10, color: '#fee5d9' },
+          { startValue: 10, endValue: 50, color: '#de2d26' },
+        ],
+      },
+    });
+
+    userEvent.click(screen.getByTestId('import-dhis2-legend'));
+
+    await waitFor(() =>
+      expect(setControlValue).toHaveBeenCalledWith('color_mode', 'breakpoints'),
+    );
+  });
+
   test('loads staged DHIS2 legend sets automatically into the selector', async () => {
     readCachedLegendSetEnvelopeMock.mockReturnValue({
       data: [
@@ -391,9 +439,7 @@ describe('ColorBreakpointsControl', () => {
     await waitFor(() =>
       expect(syncDHIS2LegendSchemesForDatabaseMock).toHaveBeenCalledWith(5),
     );
-    userEvent.click(
-      screen.getByRole('combobox', { name: 'DHIS2 legend set' }),
-    );
+    userEvent.click(screen.getByRole('combobox', { name: 'DHIS2 legend set' }));
     await waitFor(() =>
       expect(screen.getByText('IRS Coverage')).toBeInTheDocument(),
     );
@@ -410,11 +456,53 @@ describe('ColorBreakpointsControl', () => {
     renderComponent({ databaseId: 5 });
 
     await waitFor(() =>
-      expect(
-        screen.getByTestId('dhis2-legendset-error'),
-      ).toHaveTextContent(
+      expect(screen.getByTestId('dhis2-legendset-error')).toHaveTextContent(
         'No DHIS2 legend sets found. Ensure the metadata has been synced.',
       ),
+    );
+  });
+
+  test('auto-switches color mode when loading a staged DHIS2 legend set', async () => {
+    const setControlValue = jest.fn();
+
+    readCachedLegendSetEnvelopeMock.mockReturnValue({
+      data: [
+        {
+          id: 'legend-a',
+          displayName: 'IRS Coverage',
+          legendDefinition: {
+            setName: 'IRS Coverage',
+            items: [
+              { startValue: 0, endValue: 90, color: '#FF0000' },
+              { startValue: 90, endValue: 95, color: '#FDCE0F' },
+              { startValue: 95, endValue: 100, color: '#008000' },
+            ],
+          },
+        },
+      ],
+      timestamp: Date.now(),
+      status: 'success',
+    });
+
+    renderComponent({
+      databaseId: 5,
+      colorMode: 'default',
+      hasColorModeControl: true,
+      actions: { setControlValue },
+    });
+
+    await waitFor(() =>
+      expect(syncDHIS2LegendSchemesForDatabaseMock).toHaveBeenCalledWith(5),
+    );
+
+    userEvent.click(screen.getByRole('combobox', { name: 'DHIS2 legend set' }));
+    await waitFor(() =>
+      expect(screen.getByText('IRS Coverage')).toBeInTheDocument(),
+    );
+    userEvent.click(screen.getByText('IRS Coverage'));
+
+    await waitFor(() =>
+      expect(setControlValue).toHaveBeenCalledWith('color_mode', 'breakpoints'),
     );
   });
 });

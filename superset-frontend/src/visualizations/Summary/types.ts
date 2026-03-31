@@ -16,222 +16,238 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import {
-  ContextMenuFilters,
-  QueryFormData,
-  QueryFormMetric,
-} from '@superset-ui/core';
+import { ChartProps, QueryFormData } from '@superset-ui/core';
 
-export type SummaryDisplayMode = 'metrics_as_items' | 'rows_as_items';
-export type SummaryQueryMode = 'aggregate' | 'raw';
-export type SummaryLayoutMode =
-  | 'vertical_list'
-  | 'horizontal_row'
+/* ── Enums ────────────────────────────────────────── */
+
+export type Layout =
   | 'grid'
-  | 'compact_matrix'
-  | 'split_summary'
-  | 'micro_card'
-  | 'mixed_summary';
-export type SummaryDensity = 'micro' | 'compact' | 'standard' | 'comfortable';
-export type SummaryValuePosition =
-  | 'right'
-  | 'left'
-  | 'below'
-  | 'above'
-  | 'inline'
-  | 'stacked'
-  | 'justified';
-export type SummaryLabelPosition =
+  | 'horizontal'
+  | 'vertical'
+  | 'split'
+  | 'micro-card'
+  | 'compact-kpi';
+
+export type ValuePosition =
   | 'above'
   | 'below'
   | 'left'
   | 'right'
   | 'inline';
-export type SummaryMicroVisualType =
+
+export type DensityTier = 'micro' | 'compact' | 'standard' | 'comfortable';
+
+export type CardStyle = 'elevated' | 'flat' | 'transparent';
+
+export type MicroVisualType =
   | 'none'
   | 'sparkline'
-  | 'mini_bar'
-  | 'progress'
+  | 'mini-bar'
+  | 'progress-bar'
   | 'bullet';
-export type SummaryDeltaDisplay =
-  | 'none'
-  | 'value'
-  | 'percent'
-  | 'value_and_percent'
-  | 'direction_only';
-export type SummaryTrendDirection = 'up' | 'down' | 'neutral';
-export type SummaryColorState =
-  | 'positive'
-  | 'negative'
-  | 'neutral'
-  | 'warning'
-  | 'critical'
-  | 'info';
 
-export interface RgbaColor {
+export type TrendDisplay = 'arrow' | 'value' | 'both' | 'badge';
+
+export type TrendLogic = 'higher-is-better' | 'lower-is-better';
+
+export type ValueColorMode = 'threshold' | 'metric' | 'fixed' | 'scheme';
+
+export type Alignment = 'start' | 'center' | 'end' | 'stretch';
+
+export type BorderStyle = 'solid' | 'dashed' | 'dotted' | 'none';
+
+export type ImagePlacement = 'before' | 'after' | 'above' | 'below';
+
+/* ── Per-variable configuration (from VariableConfigControl) ── */
+
+export interface VariableConfig {
+  label?: string;
+  subtitle?: string;
+  numberFormat?: string;
+  prefix?: string;
+  suffix?: string;
+  nullText?: string;
+  cardColor?: string;
+  labelColor?: string;
+  borderColor?: string;
+  imageUrl?: string;
+}
+
+export type VariableConfigMap = Record<string, VariableConfig>;
+
+/* ── RGBColor (from ColorPickerControl) ──────────── */
+
+export interface RGBColor {
   r: number;
   g: number;
   b: number;
-  a: number;
+  a?: number;
 }
+
+/* ── Form data from control panel ──────────────────── */
+
+export interface SummaryChartFormData extends QueryFormData {
+  metrics: any[];
+  groupby?: string[];
+
+  /* Per-variable config */
+  variableConfig?: VariableConfigMap;
+
+  /* Layout */
+  layoutMode?: Layout;
+  gridColumns?: number | 'auto';
+  densityTier?: DensityTier;
+  valuePosition?: ValuePosition;
+  cardStyle?: CardStyle;
+
+  /* Trend & comparison */
+  showTrendIndicator?: boolean;
+  invertSemanticColors?: boolean;
+  trendDisplay?: TrendDisplay;
+  trendLogic?: TrendLogic;
+
+  /* Thresholds */
+  thresholdUpper?: number;
+  thresholdLower?: number;
+
+  /* Micro visualizations */
+  microVisualType?: MicroVisualType;
+  progressMax?: number;
+
+  /* Global formatting defaults */
+  globalNumberFormat?: string;
+  trendValueFormat?: string;
+  nullValueText?: string;
+
+  /* Images */
+  imagePlacement?: ImagePlacement;
+  imageSize?: number;
+
+  /* Typography */
+  labelFontSize?: string;
+  valueFontSize?: string;
+  fontFamily?: string;
+  labelFontWeight?: string;
+  valueFontWeight?: string;
+  labelTextTransform?: string;
+  labelColor?: RGBColor | null;
+
+  /* Value coloring */
+  valueColorMode?: ValueColorMode;
+  fixedValueColor?: RGBColor | null;
+
+  /* Alignment */
+  alignment?: Alignment;
+
+  /* Visibility */
+  showLabels?: boolean;
+  showMicroViz?: boolean;
+  showDividers?: boolean;
+
+  /* Spacing & appearance */
+  itemPadding?: number;
+  itemGap?: number;
+  itemBorderRadius?: number;
+
+  /* Border styling */
+  borderWidth?: number;
+  borderColor?: RGBColor | null;
+  borderStyle?: BorderStyle;
+
+  /* Color */
+  colorScheme?: string;
+}
+
+/* ── Chart props (extends core ChartProps) ─────────── */
+
+export interface SummaryPluginChartProps extends ChartProps {
+  formData: SummaryChartFormData;
+  queriesData: any[];
+}
+
+/* ── Per-metric item produced by transformProps ─────── */
 
 export interface SummaryItem {
-  id: string;
+  key: string;
   label: string;
-  formattedValue: string;
-  rawValue: number | null;
-  formattedSecondary?: string;
-  rawSecondaryValue?: number | null;
-  formattedPercent?: string;
-  percentValue?: number | null;
-  formattedChange?: string;
-  changeValue?: number | null;
-  trendDirection: SummaryTrendDirection;
-  note?: string;
   subtitle?: string;
-  targetLabel?: string;
-  rawTargetValue?: number | null;
-  formattedTargetValue?: string;
-  icon?: string;
-  badge?: string;
-  itemColor?: string | null;
-  colorState: SummaryColorState;
-  valuePosition?: SummaryValuePosition;
-  labelPosition?: SummaryLabelPosition;
-  sparklineValues?: number[];
-  progressPercent?: number | null;
+  rawValue: number | null;
+  formattedValue: string;
+  trendValue?: number;
+  formattedTrendValue?: string;
+  trendDirection: 'up' | 'down' | 'flat';
+  sparklineData?: number[];
+  progressPercent?: number;
+  statusColor: string | null;
+  accentColor: string;
+  cardColor?: string;
+  labelColor?: string;
+  borderColor?: string;
+  imageUrl?: string;
 }
 
-export type SummaryFormData = QueryFormData & {
-  metrics?: QueryFormMetric[];
-  groupby?: string[];
-  display_mode?: SummaryDisplayMode;
-  query_mode?: SummaryQueryMode;
-  summary_row_limit?: number;
-  label_field?: string;
-  value_field?: string;
-  secondary_value_field?: string;
-  percent_field?: string;
-  change_field?: string;
-  direction_field?: string;
-  note_field?: string;
-  target_field?: string;
-  icon_field?: string;
-  badge_field?: string;
-  item_color_field?: string;
-  value_position_field?: string;
-  label_position_field?: string;
-  sparkline_field?: string;
-  sort_by_field?: string;
-  sort_desc?: boolean;
-  layout_mode?: SummaryLayoutMode;
-  columns_count?: number;
-  item_alignment?: 'start' | 'center' | 'end' | 'stretch';
-  label_position?: SummaryLabelPosition;
-  value_position?: SummaryValuePosition;
-  density?: SummaryDensity;
-  show_dividers?: boolean;
-  card_mode?: boolean;
-  shaded_rows?: boolean;
-  auto_columns?: boolean;
-  label_font_size?: number;
-  value_font_size?: number;
-  secondary_font_size?: number;
-  label_font_weight?: string;
-  value_font_weight?: string;
-  secondary_font_weight?: string;
-  truncate_label?: boolean;
-  wrap_label?: boolean;
-  value_format?: string;
-  secondary_format?: string;
-  percent_format?: string;
-  change_format?: string;
-  prefix?: string;
-  suffix?: string;
-  secondary_prefix?: string;
-  secondary_suffix?: string;
-  null_text?: string;
-  micro_visual_type?: SummaryMicroVisualType;
-  micro_visual_position?: 'left' | 'right' | 'bottom';
-  delta_display?: SummaryDeltaDisplay;
-  higher_is_better?: boolean;
-  threshold_mode?: 'none' | 'simple';
-  threshold_low?: number | null;
-  threshold_high?: number | null;
-  positive_color?: RgbaColor | null;
-  negative_color?: RgbaColor | null;
-  neutral_color?: RgbaColor | null;
-  warning_color?: RgbaColor | null;
-  critical_color?: RgbaColor | null;
-  info_color?: RgbaColor | null;
-  value_color?: RgbaColor | null;
-  label_color?: RgbaColor | null;
-  secondary_color?: RgbaColor | null;
-  delta_color?: RgbaColor | null;
-  background_color?: RgbaColor | null;
-  item_background_color?: RgbaColor | null;
-  border_color?: RgbaColor | null;
-  divider_color?: RgbaColor | null;
-  micro_visual_color?: RgbaColor | null;
-  border_radius?: number;
-  border_width?: number;
-  shadow_size?: 'none' | 'small' | 'medium';
-  spacing_scale?: number;
-  show_group_header?: boolean;
-  group_header_text?: string;
-};
+/* ── Props passed to the React rendering component ─── */
 
-export interface SummaryChartProps {
+export interface SummaryTransformedProps {
   width: number;
   height: number;
   items: SummaryItem[];
-  displayMode: SummaryDisplayMode;
-  layoutMode: SummaryLayoutMode;
-  density: SummaryDensity;
-  columnsCount: number;
-  autoColumns: boolean;
-  itemAlignment: 'start' | 'center' | 'end' | 'stretch';
-  labelPosition: SummaryLabelPosition;
-  valuePosition: SummaryValuePosition;
-  showDividers: boolean;
-  cardMode: boolean;
-  shadedRows: boolean;
-  labelFontSize: number;
-  valueFontSize: number;
-  secondaryFontSize: number;
+
+  /* Layout */
+  layoutMode: Layout;
+  gridColumns: number | 'auto';
+  densityTier: DensityTier;
+  valuePosition: ValuePosition;
+  cardStyle: CardStyle;
+
+  /* Typography */
+  labelFontSize: string;
+  valueFontSize: string;
+  fontFamily: string;
   labelFontWeight: string;
   valueFontWeight: string;
-  secondaryFontWeight: string;
-  truncateLabel: boolean;
-  wrapLabel: boolean;
-  microVisualType: SummaryMicroVisualType;
-  microVisualPosition: 'left' | 'right' | 'bottom';
-  deltaDisplay: SummaryDeltaDisplay;
-  higherIsBetter: boolean;
-  positiveColor?: string | null;
-  negativeColor?: string | null;
-  neutralColor?: string | null;
-  warningColor?: string | null;
-  criticalColor?: string | null;
-  infoColor?: string | null;
-  valueColor?: string | null;
-  labelColor?: string | null;
-  secondaryColor?: string | null;
-  deltaColor?: string | null;
-  backgroundColor?: string | null;
-  itemBackgroundColor?: string | null;
-  borderColor?: string | null;
-  dividerColor?: string | null;
-  microVisualColor?: string | null;
-  borderRadius: number;
+  labelTextTransform: string;
+  labelColor: string;
+
+  /* Value coloring */
+  valueColorMode: ValueColorMode;
+  fixedValueColor: string;
+
+  /* Alignment */
+  alignment: Alignment;
+
+  /* Visibility */
+  showLabels: boolean;
+  showTrendIndicator: boolean;
+  showMicroViz: boolean;
+  showDividers: boolean;
+
+  /* Trend */
+  invertSemanticColors: boolean;
+  trendDisplay: TrendDisplay;
+  trendLogic: TrendLogic;
+
+  /* Micro viz */
+  microVisualType: MicroVisualType;
+
+  /* Formatting */
+  nullValueText: string;
+
+  /* Thresholds */
+  thresholdUpper: number | null;
+  thresholdLower: number | null;
+
+  /* Images */
+  imagePlacement: ImagePlacement;
+  imageSize: number;
+
+  /* Spacing */
+  itemPadding: number;
+  itemGap: number;
+  itemBorderRadius: number;
+
+  /* Border */
   borderWidth: number;
-  shadowSize: 'none' | 'small' | 'medium';
-  spacingScale: number;
-  showGroupHeader: boolean;
-  groupHeaderText?: string;
-  onContextMenu?: (
-    clientX: number,
-    clientY: number,
-    filters?: ContextMenuFilters,
-  ) => void;
+  borderColor: string;
+  borderStyle: BorderStyle;
 }

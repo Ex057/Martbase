@@ -114,6 +114,7 @@ const FilterValue: FC<FilterControlProps> = ({
   const dependencies = useFilterDependencies(id, dataMaskSelected);
   const shouldRefresh = useShouldFilterRefresh();
   const allFilters = useFilters();
+  const handledClearAllTriggerRef = useRef<number | undefined>(undefined);
   const [state, setState] = useState<ChartDataResponseResult[]>([]);
   const dashboardId = useSelector<RootState, number>(
     state => state.dashboardInfo.id,
@@ -216,12 +217,6 @@ const FilterValue: FC<FilterControlProps> = ({
         dataMaskSelected?.[resolvedCascadeParentId]?.filterState?.value;
 
       if (!hasSelectedValue(parentValue)) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          '[NativeFilter] skip fetch: cascade parent not selected',
-          filter.id,
-          { resolvedCascadeParentId },
-        );
         return;
       }
     } else if (filter?.cascadeParentIds?.length) {
@@ -232,12 +227,6 @@ const FilterValue: FC<FilterControlProps> = ({
       const depsCount = filter.cascadeParentIds.length;
 
       if (selectedParentFiltersWithValue !== depsCount) {
-        // eslint-disable-next-line no-console
-        console.warn('[NativeFilter] skip fetch: deps not met', filter.id, {
-          selectedParentFiltersWithValue,
-          depsCount,
-          dependencies,
-        });
         return;
       }
     }
@@ -260,13 +249,6 @@ const FilterValue: FC<FilterControlProps> = ({
       if (!hasDataSource) {
         return;
       }
-      // eslint-disable-next-line no-console
-      console.warn('[NativeFilter] fetching options', filter.id, {
-        groupby,
-        datasetId,
-        cascadeParentInfo,
-        formData: newFormData,
-      });
       setIsRefreshing(true);
       getChartDataRequest({
         formData: newFormData,
@@ -387,13 +369,39 @@ const FilterValue: FC<FilterControlProps> = ({
     ],
   );
 
-  const filterState = useMemo(
-    () => ({
+  const filterState = useMemo(() => {
+    const isHandlingClearAll =
+      clearAllTrigger !== undefined &&
+      clearAllTrigger !== handledClearAllTriggerRef.current;
+    const nextFilterState: Record<string, unknown> & {
+      value?: unknown;
+      label?: string;
+      validateStatus?: string;
+    } = {
       ...filter.dataMask?.filterState,
+      ...dataMaskSelected?.[filter.id]?.filterState,
       validateStatus,
-    }),
-    [filter.dataMask?.filterState, validateStatus],
-  );
+    };
+
+    if (isHandlingClearAll) {
+      nextFilterState.value = undefined;
+      nextFilterState.label = undefined;
+    }
+
+    return nextFilterState;
+  }, [
+    clearAllTrigger,
+    dataMaskSelected,
+    filter.dataMask?.filterState,
+    filter.id,
+    validateStatus,
+  ]);
+
+  useEffect(() => {
+    if (clearAllTrigger !== undefined) {
+      handledClearAllTriggerRef.current = clearAllTrigger;
+    }
+  }, [clearAllTrigger]);
 
   const displaySettings = useMemo(
     () => ({
@@ -426,6 +434,7 @@ const FilterValue: FC<FilterControlProps> = ({
         <Loading position="inline-centered" size="s" muted />
       ) : (
         <SuperChart
+          key={`${filter.id}-${clearAllTrigger ?? 'ready'}`}
           height={HEIGHT}
           width={RESPONSIVE_WIDTH}
           showOverflow={showOverflow}

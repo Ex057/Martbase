@@ -81,7 +81,7 @@ const SectionTitle = styled.div`
 
 const HintText = styled.div`
   font-size: 11px;
-  color: #888;
+  color: ${({ theme }) => theme.colorTextSecondary};
   margin-top: 4px;
 `;
 
@@ -117,6 +117,11 @@ const LegendSetPreview = styled.div`
   border-radius: ${({ theme }) => theme.borderRadiusSM}px;
   border: 1px solid ${({ theme }) => theme.colorBorderSecondary};
   background: ${({ theme }) => theme.colorBgContainer};
+`;
+
+const PresetDescription = styled.div`
+  font-size: 11px;
+  color: ${({ theme }) => theme.colorTextSecondary};
 `;
 
 const LegendSetSwatch = styled.span<{ $color: string }>`
@@ -194,10 +199,12 @@ const gradientOptions = Object.entries(GRADIENT_PRESETS).map(([key, val]) => ({
   label: val.label,
 }));
 
-const healthPresetOptions = Object.entries(HEALTH_PRESETS).map(([key, val]) => ({
-  value: key,
-  label: val.label,
-}));
+const healthPresetOptions = Object.entries(HEALTH_PRESETS).map(
+  ([key, val]) => ({
+    value: key,
+    label: val.label,
+  }),
+);
 
 function getLegendSetValue(legendSet: StagedLegendSet): string {
   return String(
@@ -250,13 +257,20 @@ function buildLegendDefinition(
 
 const ColorBreakpointsControl = ({
   onChange,
+  actions,
+  colorMode,
+  hasColorModeControl,
   dhis2LegendDefinition,
   databaseId,
   ...props
 }: ColorBreakpointsControlProps) => {
   const [popoverVisible, setPopoverVisible] = useState(false);
-  const [colorBreakpoints, setColorBreakpoints] = useState<ColorBreakpointType[]>(
-    props?.value ? (props.value as ColorBreakpointType[]) : DEFAULT_COLOR_BREAKPOINTS,
+  const [colorBreakpoints, setColorBreakpoints] = useState<
+    ColorBreakpointType[]
+  >(
+    props?.value
+      ? (props.value as ColorBreakpointType[])
+      : DEFAULT_COLOR_BREAKPOINTS,
   );
 
   // Auto-generate state
@@ -309,6 +323,7 @@ const ColorBreakpointsControl = ({
         const maxAttempts = 5;
 
         while (!cancelled && attempts < maxAttempts) {
+          // eslint-disable-next-line no-await-in-loop -- polling until staged legend sets are available
           await syncDHIS2LegendSchemesForDatabase(databaseId);
 
           const envelope = readCachedLegendSetEnvelope(databaseId);
@@ -327,6 +342,7 @@ const ColorBreakpointsControl = ({
 
           attempts += 1;
           if (attempts < maxAttempts) {
+            // eslint-disable-next-line no-await-in-loop -- intentional backoff between polling attempts
             await new Promise(resolve => setTimeout(resolve, 2000));
           }
         }
@@ -336,7 +352,9 @@ const ColorBreakpointsControl = ({
           setDhis2LegendSets(final);
           if (final.length === 0) {
             setDhis2LoadError(
-              t('No DHIS2 legend sets found. Ensure the metadata has been synced.'),
+              t(
+                'No DHIS2 legend sets found. Ensure the metadata has been synced.',
+              ),
             );
           }
         }
@@ -365,8 +383,19 @@ const ColorBreakpointsControl = ({
     togglePopover(true);
   };
 
+  const applyBreakpoints = (nextBreakpoints: ColorBreakpointType[]) => {
+    setColorBreakpoints(nextBreakpoints);
+    if (
+      nextBreakpoints.length > 0 &&
+      hasColorModeControl &&
+      colorMode !== 'breakpoints'
+    ) {
+      actions.setControlValue?.('color_mode', 'breakpoints');
+    }
+  };
+
   const saveColorBreakpoint = (breakpoint: ColorBreakpointType) => {
-    setColorBreakpoints([
+    applyBreakpoints([
       ...colorBreakpoints,
       {
         ...breakpoint,
@@ -379,13 +408,16 @@ const ColorBreakpointsControl = ({
   const removeColorBreakpoint = (index: number) => {
     const newBreakpoints = [...colorBreakpoints];
     newBreakpoints.splice(index, 1);
-    setColorBreakpoints(newBreakpoints);
+    applyBreakpoints(newBreakpoints);
   };
 
-  const editColorBreakpoint = (breakpoint: ColorBreakpointType, index: number) => {
+  const editColorBreakpoint = (
+    breakpoint: ColorBreakpointType,
+    index: number,
+  ) => {
     const newBreakpoints = [...colorBreakpoints];
     newBreakpoints[index] = { ...breakpoint, id: index };
-    setColorBreakpoints(newBreakpoints);
+    applyBreakpoints(newBreakpoints);
   };
 
   const handleAutoGenerate = () => {
@@ -394,12 +426,17 @@ const ColorBreakpointsControl = ({
       setAutoError(t('Please enter both Min and Max values.'));
       return;
     }
-    const result = generateEqualBreakpoints(autoCount, autoMin, autoMax, autoGradient);
+    const result = generateEqualBreakpoints(
+      autoCount,
+      autoMin,
+      autoMax,
+      autoGradient,
+    );
     if (result.error) {
       setAutoError(result.error);
       return;
     }
-    setColorBreakpoints(result.breakpoints!);
+    applyBreakpoints(result.breakpoints!);
   };
 
   const handleImportDHIS2 = () => {
@@ -409,19 +446,19 @@ const ColorBreakpointsControl = ({
       setImportError(result.error);
       return;
     }
-    setColorBreakpoints(result.breakpoints!);
+    applyBreakpoints(result.breakpoints!);
   };
 
   const handleApplyHealthPreset = (key: string) => {
     const bps = getHealthPresetBreakpoints(key);
-    if (bps) setColorBreakpoints(bps);
+    if (bps) {
+      applyBreakpoints(bps);
+    }
     setShowHealthPresets(false);
   };
 
   const handleSelectDhis2LegendSet = (setId: string) => {
-    const legendSet = dhis2LegendSets.find(
-      s => getLegendSetValue(s) === setId,
-    );
+    const legendSet = dhis2LegendSets.find(s => getLegendSetValue(s) === setId);
     if (!legendSet) return;
 
     setSelectedLegendSetId(setId);
@@ -429,7 +466,7 @@ const ColorBreakpointsControl = ({
     if (result.error) {
       setDhis2LoadError(result.error);
     } else {
-      setColorBreakpoints(result.breakpoints!);
+      applyBreakpoints(result.breakpoints!);
       setDhis2LoadError(null);
     }
   };
@@ -461,7 +498,8 @@ const ColorBreakpointsControl = ({
           }
 
           const previewItems = getLegendSetItems(legendSet).filter(
-            item => typeof item.color === 'string' && item.color.trim().length > 0,
+            item =>
+              typeof item.color === 'string' && item.color.trim().length > 0,
           );
 
           return {
@@ -485,7 +523,9 @@ const ColorBreakpointsControl = ({
             ),
           };
         })
-        .filter((option): option is NonNullable<typeof option> => option !== null),
+        .filter(
+          (option): option is NonNullable<typeof option> => option !== null,
+        ),
     [dhis2LegendSets],
   );
 
@@ -537,7 +577,11 @@ const ColorBreakpointsControl = ({
         </Button>
 
         {dhis2LegendDefinition && (
-          <Tooltip title={t('Replace breakpoints with the DHIS2 legend set stored on this column')}>
+          <Tooltip
+            title={t(
+              'Replace breakpoints with the DHIS2 legend set stored on this column',
+            )}
+          >
             <Button
               buttonSize="xsmall"
               buttonStyle="tertiary"
@@ -554,11 +598,27 @@ const ColorBreakpointsControl = ({
       {/* ── Health presets panel ──────────────────────────────────────────── */}
       {showHealthPresets && (
         <AutoGenerateWrapper data-test="health-presets-panel">
-          <SectionTitle>{t('WHO / Epidemiology standard thresholds')}</SectionTitle>
-          <HintText>{t('Select a preset to replace existing breakpoints with evidence-based thresholds.')}</HintText>
-          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <SectionTitle>
+            {t('WHO / Epidemiology standard thresholds')}
+          </SectionTitle>
+          <HintText>
+            {t(
+              'Select a preset to replace existing breakpoints with evidence-based thresholds.',
+            )}
+          </HintText>
+          <div
+            style={{
+              marginTop: 8,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+            }}
+          >
             {healthPresetOptions.map(opt => (
-              <div key={opt.value} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              <div
+                key={opt.value}
+                style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}
+              >
                 <Button
                   buttonSize="xsmall"
                   buttonStyle="secondary"
@@ -568,10 +628,12 @@ const ColorBreakpointsControl = ({
                   {t('Apply')}
                 </Button>
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 600 }}>{opt.label}</div>
-                  <div style={{ fontSize: 11, color: '#888' }}>
-                    {HEALTH_PRESETS[opt.value].description}
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>
+                    {opt.label}
                   </div>
+                  <PresetDescription>
+                    {HEALTH_PRESETS[opt.value].description}
+                  </PresetDescription>
                 </div>
               </div>
             ))}
@@ -584,7 +646,9 @@ const ColorBreakpointsControl = ({
         <AutoGenerateWrapper data-test="dhis2-legendset-panel">
           <SectionTitle>{t('Load from DHIS2 legend set')}</SectionTitle>
           <HintText>
-            {t('Select a staged DHIS2 legend set to replace existing breakpoints.')}
+            {t(
+              'Select a staged DHIS2 legend set to replace existing breakpoints.',
+            )}
           </HintText>
           <div style={{ marginTop: 8 }} data-test="dhis2-legendset-select-wrap">
             <Select
@@ -619,10 +683,14 @@ const ColorBreakpointsControl = ({
       {/* ── Auto-generate equal-width ranges panel ───────────────────────── */}
       {showAutoGenerate && (
         <AutoGenerateWrapper data-test="auto-generate-panel">
-          <SectionTitle>{t('Auto-generate equal-width colour ranges')}</SectionTitle>
+          <SectionTitle>
+            {t('Auto-generate equal-width colour ranges')}
+          </SectionTitle>
           <AutoGenerateRow>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{t('Ranges:')}</span>
+              <span style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
+                {t('Ranges:')}
+              </span>
               <InputNumber
                 min={1}
                 max={20}
@@ -633,7 +701,9 @@ const ColorBreakpointsControl = ({
               />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{t('Min:')}</span>
+              <span style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
+                {t('Min:')}
+              </span>
               <InputNumber
                 value={autoMin}
                 onChange={(v: number) => setAutoMin(v)}
@@ -642,7 +712,9 @@ const ColorBreakpointsControl = ({
               />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{t('Max:')}</span>
+              <span style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
+                {t('Max:')}
+              </span>
               <InputNumber
                 value={autoMax}
                 onChange={(v: number) => setAutoMax(v)}
@@ -650,8 +722,17 @@ const ColorBreakpointsControl = ({
                 data-test="auto-max"
               />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 220 }}>
-              <span style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{t('Gradient:')}</span>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                minWidth: 220,
+              }}
+            >
+              <span style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
+                {t('Gradient:')}
+              </span>
               <Select
                 options={gradientOptions}
                 value={autoGradient}
@@ -670,9 +751,13 @@ const ColorBreakpointsControl = ({
               {t('Generate')}
             </Button>
           </AutoGenerateRow>
-          {autoError && <ErrorText data-test="auto-error">{autoError}</ErrorText>}
+          {autoError && (
+            <ErrorText data-test="auto-error">{autoError}</ErrorText>
+          )}
           <HintText>
-            {t('Replaces existing breakpoints. You can edit individual ranges afterwards.')}
+            {t(
+              'Replaces existing breakpoints. You can edit individual ranges afterwards.',
+            )}
           </HintText>
         </AutoGenerateWrapper>
       )}

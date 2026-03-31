@@ -36,6 +36,7 @@ export interface PivotTableStylesProps {
   height: number;
   width: number | string;
   margin: number;
+  chartBackgroundColor?: string;
 }
 
 export type FilterType = Record<string, DataRecordValue>;
@@ -77,6 +78,7 @@ interface PivotTableCustomizeProps {
   metricsLayout?: MetricsLayoutEnum;
   metricColorFormatters: ColorFormatters;
   dateFormatters: Record<string, DateFormatter | undefined>;
+  chartBackgroundColor?: string;
   legacy_order_by: QueryFormMetric[] | QueryFormMetric | null;
   order_desc: boolean;
   onContextMenu?: (

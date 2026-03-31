@@ -188,7 +188,7 @@ const FilterBar: FC<FiltersBarProps> = ({
 
   const [filtersInScope] = useSelectFiltersInScope(nativeFilterValues);
   const [clearAllTriggers, setClearAllTriggers] = useState<
-    Record<string, boolean>
+    Record<string, number>
   >({});
   const [initializedFilters, setInitializedFilters] = useState<Set<string>>(
     new Set(),
@@ -395,18 +395,32 @@ const FilterBar: FC<FiltersBarProps> = ({
   ]);
 
   const handleClearAll = useCallback(() => {
-    const newClearAllTriggers = { ...clearAllTriggers };
-    filtersInScope.filter(isNativeFilter).forEach(filter => {
-      const { id } = filter;
-      if (dataMaskSelected[id]) {
-        setDataMaskSelected(draft => {
-          if (draft[id].filterState?.value !== undefined) {
-            draft[id].filterState!.value = undefined;
-          }
-          draft[id].extraFormData = {};
+    const filterIdsToClear = filtersInScope
+      .filter(isNativeFilter)
+      .map(filter => filter.id);
+
+    if (filterIdsToClear.length > 0) {
+      setDataMaskSelected(draft => {
+        filterIdsToClear.forEach(id => {
+          const currentMask =
+            draft[id] || (getInitialDataMask(id) as DataMaskWithId);
+          draft[id] = {
+            ...currentMask,
+            extraFormData: {},
+            ownState: {},
+            filterState: {
+              ...currentMask.filterState,
+              value: undefined,
+              label: undefined,
+            },
+          };
         });
-        newClearAllTriggers[id] = true;
-      }
+      });
+    }
+
+    const newClearAllTriggers = { ...clearAllTriggers };
+    filterIdsToClear.forEach(id => {
+      newClearAllTriggers[id] = (newClearAllTriggers[id] || 0) + 1;
     });
 
     let hasChartCustomizationsToClear = false;
@@ -453,6 +467,7 @@ const FilterBar: FC<FiltersBarProps> = ({
     chartCustomizationItems,
     clearAllTriggers,
     dispatch,
+    setDataMaskSelected,
   ]);
 
   const handleClearAllComplete = useCallback((filterId: string) => {
