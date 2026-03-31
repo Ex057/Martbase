@@ -394,17 +394,17 @@ function persistTheme(theme: VisualMode) {
 
 function buildPortalSearch({
   pageSlug,
-  dashboardSlug,
+  dashboardRef,
 }: {
   pageSlug?: string | null;
-  dashboardSlug?: string | null;
+  dashboardRef?: string | null;
 }) {
   const normalizedPath = pageSlug
     ? `/superset/public/${pageSlug}/`
     : '/superset/public/';
   const params = new URLSearchParams();
-  if (dashboardSlug) {
-    params.set(DASHBOARD_QUERY_PARAM, dashboardSlug);
+  if (dashboardRef) {
+    params.set(DASHBOARD_QUERY_PARAM, dashboardRef);
   }
 
   const query = params.toString();
@@ -767,7 +767,7 @@ export default function PublicLandingPage() {
     history.push(
       buildPortalSearch({
         pageSlug: pageSlug || currentPage?.slug,
-        dashboardSlug: dashboard.slug || String(dashboard.id),
+        dashboardRef: String(dashboard.id),
       }),
     );
   }
@@ -1135,7 +1135,7 @@ export default function PublicLandingPage() {
 
     return (
       <DashboardPage
-        idOrSlug={dashboard.slug || String(dashboard.id)}
+        idOrSlug={String(dashboard.id)}
         isPublicView
         onBack={clearSelectedDashboard}
         backLabel={dashboardBackLabel}

@@ -31,6 +31,7 @@ cover
 .DS_Store
 .eggs
 .env
+.env.*
 .envrc
 .idea
 .mypy_cache
@@ -133,6 +134,9 @@ PROJECT.md
 .aider*
 .claude_rc*
 .env.local
+.secrets/
+*.service-account.json
+*.credentials.json
 
 # Temporary documentation files
 TODO.md
