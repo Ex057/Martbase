@@ -1016,6 +1016,7 @@ redis_status() {
 start_backend() {
   header "Starting Superset Backend"
 
+  ensure_backend_ready
   validate_backend
   ensure_log_dir
 
@@ -1426,6 +1427,7 @@ celery_beat_running() {
 start_celery_worker() {
   header "Starting Celery Worker"
 
+  ensure_backend_ready
   validate_backend
   ensure_log_dir
 
@@ -1487,6 +1489,7 @@ stop_celery_worker() {
 start_celery_beat() {
   header "Starting Celery Beat"
 
+  ensure_backend_ready
   validate_backend
   ensure_log_dir
 
