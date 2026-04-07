@@ -24,9 +24,9 @@ execution make it ideal for large-scale analytical workloads.
 Configuration (stored in ``local_staging_settings.clickhouse_config`` as JSON)::
 
     {
-        "host": "localhost",
-        "port": 9000,
-        "http_port": 8123,
+        "host": "127.0.0.1",
+        "port": 19001,
+        "http_port": 8124,
         "database": "dhis2_staging",
         "serving_database": "dhis2_serving",
         "user": "default",
@@ -48,7 +48,7 @@ Install with::
     pip install clickhouse-connect
 
 ``clickhouse-connect`` provides both the native binary protocol client and
-the ``clickhousedb://`` SQLAlchemy dialect (HTTP port 8123).
+the ``clickhousedb://`` SQLAlchemy dialect (HTTP port 8124 in this workspace).
 """
 
 from __future__ import annotations
@@ -56,6 +56,7 @@ from __future__ import annotations
 import csv
 import json as _json
 import logging
+import os
 import re
 import time
 from io import StringIO
@@ -75,6 +76,23 @@ logger = logging.getLogger(__name__)
 
 _IDENT_MAX = 63
 _SERVING_PREFIX = "sv"
+_DEFAULT_CLICKHOUSE_HOST = os.environ.get("CLICKHOUSE_HOST", "127.0.0.1")
+_DEFAULT_CLICKHOUSE_HTTP_PORT = int(os.environ.get("CLICKHOUSE_HTTP_PORT", "8124"))
+_DEFAULT_CLICKHOUSE_NATIVE_PORT = int(
+    os.environ.get("CLICKHOUSE_NATIVE_PORT", "19001")
+)
+_DEFAULT_CLICKHOUSE_STAGING_DATABASE = os.environ.get(
+    "CLICKHOUSE_STAGING_DATABASE",
+    "dhis2_staging",
+)
+_DEFAULT_CLICKHOUSE_SERVING_DATABASE = os.environ.get(
+    "CLICKHOUSE_SERVING_DATABASE",
+    "dhis2_serving",
+)
+_DEFAULT_CLICKHOUSE_SUPERSET_DB_NAME = os.environ.get(
+    "CLICKHOUSE_SUPERSET_DB_NAME",
+    "DHIS2 Serving (ClickHouse) - Martbase",
+)
 
 # ClickHouse column definitions for the staging table
 _CH_STAGING_COLUMNS = [
@@ -186,7 +204,7 @@ class ClickHouseStagingEngine(LocalStagingEngineBase):
     @property
     def _database(self) -> str:
         """Staging database (where raw ds_* tables live)."""
-        return self._config.get("database", "dhis2_staging")
+        return self._config.get("database", _DEFAULT_CLICKHOUSE_STAGING_DATABASE)
 
     @property
     def _serving_database(self) -> str:
@@ -362,13 +380,13 @@ class ClickHouseStagingEngine(LocalStagingEngineBase):
                 "ClickHouse engine requires 'host' in configuration"
             )
         if self._client is None:
-            # clickhouse-connect uses the HTTP port (default 8123), not the
-            # native TCP port (9000). Accept both 'http_port' (preferred) and
-            # the legacy 'port' key, defaulting to 8123.
+            # clickhouse-connect uses the HTTP port. Accept both 'http_port'
+            # (preferred) and the legacy native-port key, defaulting to the
+            # manager-script HTTP port for this workspace.
             http_port = int(
                 self._config.get("http_port")
                 or self._config.get("port")
-                or 8123
+                or _DEFAULT_CLICKHOUSE_HTTP_PORT
             )
             self._client = clickhouse_connect.get_client(
                 host=host,
@@ -1724,21 +1742,22 @@ class ClickHouseStagingEngine(LocalStagingEngineBase):
         """Return or create the Superset ``Database`` record for this ClickHouse.
 
         Uses the ``clickhousedb://`` SQLAlchemy dialect provided by
-        ``clickhouse-connect`` (HTTP port 8123 by default), which is the
-        recommended driver for Superset chart queries.
+        ``clickhouse-connect`` (HTTP port 8124 by default in this workspace),
+        which is the recommended driver for Superset chart queries.
         """
         import json as _j
 
         from superset import db as superset_db  # local import
         from superset.models.core import Database  # local import
 
-        host = self._config.get("host", "localhost")
-        http_port = int(self._config.get("http_port", 8123))
+        host = self._config.get("host", _DEFAULT_CLICKHOUSE_HOST)
+        http_port = int(self._config.get("http_port", _DEFAULT_CLICKHOUSE_HTTP_PORT))
         user = self._config.get("user", "default")
         password = self._config.get("password", "")
         secure = bool(self._config.get("secure", False))
         db_name_label = self._config.get(
-            "superset_db_name", "DHIS2 Serving (ClickHouse)"
+            "superset_db_name",
+            _DEFAULT_CLICKHOUSE_SUPERSET_DB_NAME,
         )
 
         scheme = "clickhousedb+https" if secure else "clickhousedb"
