@@ -28,8 +28,8 @@ import {
 } from 'react';
 import { styled, SupersetClient, t } from '@superset-ui/core';
 import { Spin } from 'antd';
-import { AimOutlined, FilterOutlined } from '@ant-design/icons';
-import { MapContainer, GeoJSON, useMap } from 'react-leaflet';
+import { FilterOutlined } from '@ant-design/icons';
+import { MapContainer, GeoJSON, ZoomControl, useMap } from 'react-leaflet';
 // @ts-ignore - react-leaflet types
 import L from 'leaflet';
 // @ts-ignore - leaflet styles
@@ -71,6 +71,7 @@ import {
 } from './components/BaseMaps';
 import {
   buildLegendEntries,
+  buildMetricMapStyleSignature,
   getColorScale,
   formatValue,
   calculateBounds,
@@ -124,41 +125,6 @@ function parseColumnExtra(extra: unknown): Record<string, any> | undefined {
   return undefined;
 }
 
-function resolveMatchingDataColumn(
-  requestedColumn: string | undefined,
-  allColumns: string[],
-): string | undefined {
-  if (!requestedColumn) {
-    return undefined;
-  }
-
-  if (allColumns.includes(requestedColumn)) {
-    return requestedColumn;
-  }
-
-  const sanitizedRequested = sanitizeDHIS2ColumnName(requestedColumn);
-  return allColumns.find(
-    columnName => sanitizeDHIS2ColumnName(columnName) === sanitizedRequested,
-  );
-}
-
-function dedupeQuickFilterDisplayColumns(columns: string[]): string[] {
-  const seen = new Set<string>();
-
-  return columns.filter(columnName => {
-    const normalized = sanitizeDHIS2ColumnName(String(columnName || ''));
-    const semanticKey =
-      normalized === 'period' || normalized === 'pe' ? 'period' : normalized;
-
-    if (!semanticKey || seen.has(semanticKey)) {
-      return false;
-    }
-
-    seen.add(semanticKey);
-    return true;
-  });
-}
-
 // Use hardcoded values for map styling to avoid theme context issues
 // These are legitimate map styling values, not UI theming
 const MapWrapper = styled.div`
@@ -168,31 +134,23 @@ const MapWrapper = styled.div`
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
   isolation: isolate;
+  z-index: 0;
 `;
 
 const MapCanvas = styled.div<{ $backgroundColor?: string }>`
   position: relative;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
-  isolation: isolate;
   background: ${({ $backgroundColor }) => $backgroundColor || '#ffffff'};
 
   .leaflet-container {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
-    overflow: hidden;
     background: ${({ $backgroundColor }) => $backgroundColor || '#ffffff'};
-  }
-
-  .leaflet-pane,
-  .leaflet-top,
-  .leaflet-bottom,
-  .leaflet-control-container {
-    max-width: 100%;
-    max-height: 100%;
   }
 
   .leaflet-container .leaflet-interactive:focus,
@@ -220,110 +178,53 @@ const MapCanvas = styled.div<{ $backgroundColor?: string }>`
     left: 0;
     right: 0;
     bottom: 0;
-    min-height: 50vh;
     background: rgba(255, 255, 255, 0.85);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-direction: column;
     gap: 16px;
-    z-index: 999;
+    z-index: 4;
   }
 
   .map-error-message {
     position: absolute;
     top: 8px;
     right: 8px;
-    background: var(--pro-error, #d32f2f);
+    background: var(--pro-error);
     color: #ffffff;
     padding: 8px 16px;
     border-radius: var(--pro-radius-sm, 6px);
-    z-index: 999;
+    z-index: 4;
     font-family: var(--pro-font-family, 'Inter', sans-serif);
     font-size: 13px;
-    box-shadow: var(--pro-shadow-md, 0 4px 12px rgba(0, 0, 0, 0.15));
+    box-shadow: var(--pro-shadow-md, 0 4px 12px rgba(0,0,0,0.15));
   }
 
   .auto-focus-button {
-    background: var(--pro-bg-card, #ffffff);
-    border: 1px solid var(--pro-border, rgba(0, 0, 0, 0.12));
-    border-radius: 999px;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    cursor: pointer;
-    font-size: 15px;
-    color: var(--pro-text-secondary, #334155);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: auto;
-    box-shadow: var(--pro-shadow-sm, 0 2px 6px rgba(0, 0, 0, 0.1));
-    transition:
-      background 0.15s ease,
-      box-shadow 0.15s ease;
-
-    &:hover {
-      background: var(--pro-bg-canvas, #f5f7fa);
-      box-shadow: var(--pro-shadow-md, 0 4px 12px rgba(0, 0, 0, 0.1));
-    }
-  }
-
-  .map-control-stack {
     position: absolute;
-    top: 12px;
-    right: 12px;
-    z-index: 1100;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    pointer-events: none;
-  }
-
-  .map-zoom-controls {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    border: 1px solid var(--pro-border, rgba(0, 0, 0, 0.12));
-    border-radius: 999px;
-    background: var(--pro-bg-card, #ffffff);
-    box-shadow: var(--pro-shadow-sm, 0 2px 6px rgba(0, 0, 0, 0.1));
-    pointer-events: auto;
-  }
-
-  .map-zoom-button {
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--pro-text-secondary, #334155);
+    bottom: 80px;
+    right: 8px;
+    z-index: 4;
+    background: var(--pro-bg-card);
+    border: 1px solid var(--pro-border);
+    border-radius: var(--pro-radius-sm, 6px);
+    padding: 4px 8px;
     cursor: pointer;
-    font-size: 18px;
-    line-height: 1;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s ease;
-
-    &:not(:last-of-type) {
-      border-bottom: 1px solid var(--pro-border, rgba(0, 0, 0, 0.12));
-    }
+    font-size: 16px;
+    box-shadow: var(--pro-shadow-sm, 0 2px 6px rgba(0, 0, 0, 0.1));
+    transition: background 0.15s ease, box-shadow 0.15s ease;
 
     &:hover {
-      background: var(--pro-bg-canvas, #f5f7fa);
-    }
-
-    &:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
+      background: var(--pro-bg-canvas);
+      box-shadow: var(--pro-shadow-md, 0 4px 12px rgba(0,0,0,0.1));
     }
   }
 
   .map-interaction-overlay {
     position: absolute;
     inset: 0;
-    z-index: 900;
+    z-index: 3;
     background: rgba(255, 255, 255, 0.55);
     display: flex;
     align-items: center;
@@ -331,7 +232,7 @@ const MapCanvas = styled.div<{ $backgroundColor?: string }>`
     pointer-events: auto;
     font-size: 12px;
     font-weight: 500;
-    color: var(--pro-text-primary, #1a1f2c);
+    color: var(--pro-text-primary);
     font-family: var(--pro-font-family, 'Inter', sans-serif);
   }
 `;
@@ -345,8 +246,8 @@ const MapFooterBar = styled.div`
   gap: 12px;
   padding: 6px 12px;
   min-height: 0;
-  background: var(--pro-bg-canvas, rgba(248, 250, 252, 0.92));
-  border-top: 1px solid var(--pro-border, rgba(148, 163, 184, 0.15));
+  background: var(--pro-bg-canvas);
+  border-top: 1px solid var(--pro-border);
   font-family: var(--pro-font-family, 'Inter', sans-serif);
 `;
 
@@ -365,31 +266,22 @@ const FooterActionButton = styled.button<{ $active?: boolean }>`
   gap: 8px;
   padding: 6px 10px;
   border-radius: 6px;
-  border: 1px solid
-    ${({ $active }) =>
-      $active
-        ? 'var(--pro-accent, #1976D2)'
-        : 'var(--pro-border, rgba(148, 163, 184, 0.35))'};
+  border: 1px solid ${({ $active }) =>
+    $active ? 'var(--pro-accent)' : 'var(--pro-border)'};
   background: ${({ $active }) =>
-    $active
-      ? 'var(--pro-accent, #1976D2)'
-      : 'var(--pro-bg-card, rgba(255, 255, 255, 0.96))'};
+    $active ? 'var(--pro-accent)' : 'var(--pro-bg-card)'};
   color: ${({ $active }) =>
-    $active ? '#ffffff' : 'var(--pro-text-secondary, #334155)'};
+    $active ? '#ffffff' : 'var(--pro-text-secondary)'};
   cursor: pointer;
   font-size: 11px;
   font-weight: 600;
   box-shadow: var(--pro-shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.06));
-  transition:
-    background 0.15s ease,
-    box-shadow 0.15s ease;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
 
   &:hover {
     background: ${({ $active }) =>
-      $active
-        ? 'var(--pro-accent-hover, #1565C0)'
-        : 'var(--pro-bg-canvas, #F5F7FA)'};
-    box-shadow: var(--pro-shadow-md, 0 4px 12px rgba(0, 0, 0, 0.08));
+      $active ? 'var(--pro-accent-hover)' : 'var(--pro-bg-canvas)'};
+    box-shadow: var(--pro-shadow-md, 0 4px 12px rgba(0,0,0,0.08));
   }
 `;
 
@@ -403,7 +295,7 @@ const FooterStatusPill = styled.div<{ $cacheHit?: boolean }>`
   background: ${({ $cacheHit }) =>
     $cacheHit ? 'rgba(46, 125, 50, 0.1)' : 'rgba(25, 118, 210, 0.1)'};
   color: ${({ $cacheHit }) =>
-    $cacheHit ? 'var(--pro-success, #2E7D32)' : 'var(--pro-accent, #1976D2)'};
+    $cacheHit ? 'var(--pro-success)' : 'var(--pro-accent)'};
 `;
 /* eslint-enable theme-colors/no-literal-colors */
 
@@ -422,9 +314,11 @@ function fitMapToBoundaries(
 
   const applyFit = (shouldAnimate: boolean) => {
     const size = map.getSize();
+    // Use actual map canvas dimensions. Fall back to viewport props only
+    // when the map container has no size yet (e.g. first render before layout).
     const fitConfig = getMapFitViewportConfig(
-      Math.max(size.x, viewportWidth),
-      Math.max(size.y, viewportHeight),
+      size.x > 0 ? size.x : viewportWidth,
+      size.y > 0 ? size.y : viewportHeight,
       {},
     );
 
@@ -487,8 +381,7 @@ function MapAutoFocus({
     [viewportHeight, viewportWidth],
   );
   const focusSignature = useMemo(
-    () =>
-      `${boundaryIdsKey}|${viewportSignature}|${layoutSignature || 'default'}`,
+    () => `${boundaryIdsKey}|${viewportSignature}|${layoutSignature || 'default'}`,
     [boundaryIdsKey, layoutSignature, viewportSignature],
   );
 
@@ -514,9 +407,7 @@ function MapAutoFocus({
     // Small delay to ensure map is fully initialized
     focusTimeoutRef.current = setTimeout(() => {
       try {
-        if (
-          fitMapToBoundaries(map, boundaries, viewportWidth, viewportHeight)
-        ) {
+        if (fitMapToBoundaries(map, boundaries, viewportWidth, viewportHeight)) {
           // Mark that we've focused on this boundary set + viewport size
           lastFocusSignatureRef.current = focusSignature;
         } else {
@@ -599,9 +490,7 @@ function BoundaryMask({
       [-180, 90],
     ];
 
-    const innerRings = boundaries.flatMap(feature =>
-      extractOuterRings(feature),
-    );
+    const innerRings = boundaries.flatMap(feature => extractOuterRings(feature));
     if (innerRings.length === 0) {
       return null;
     }
@@ -653,27 +542,20 @@ function BoundaryMask({
 // Component for manual focus button
 interface FocusButtonProps {
   boundaries: BoundaryFeature[];
-  map: L.Map | null;
-  viewportWidth: number;
-  viewportHeight: number;
 }
 
-function FocusButton({
-  boundaries,
-  map,
-  viewportWidth,
-  viewportHeight,
-}: FocusButtonProps): ReactElement | null {
+function FocusButton({ boundaries }: FocusButtonProps): ReactElement | null {
+  const map = useMap();
+
   const handleFocus = () => {
     if (boundaries.length > 0 && map) {
       try {
-        map.stop();
         fitMapToBoundaries(
           map,
           boundaries,
-          viewportWidth,
-          viewportHeight,
-          false,
+          map.getSize().x,
+          map.getSize().y,
+          true,
         );
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -686,51 +568,11 @@ function FocusButton({
     <button
       className="auto-focus-button"
       onClick={handleFocus}
-      aria-label={t('Fit map to selected boundaries')}
-      title={t('Fit map to selected boundaries')}
+      title="Fit to boundaries"
       type="button"
     >
-      <AimOutlined />
+      🎯
     </button>
-  );
-}
-
-function MapZoomButtons({
-  map,
-  disabled = false,
-}: {
-  map: L.Map | null;
-  disabled?: boolean;
-}): ReactElement | null {
-  return (
-    <div className="map-zoom-controls">
-      <button
-        className="map-zoom-button"
-        title={t('Zoom in')}
-        aria-label={t('Zoom in')}
-        type="button"
-        onClick={() => {
-          map?.stop();
-          map?.zoomIn(1, { animate: false });
-        }}
-        disabled={disabled || !map}
-      >
-        +
-      </button>
-      <button
-        className="map-zoom-button"
-        title={t('Zoom out')}
-        aria-label={t('Zoom out')}
-        type="button"
-        onClick={() => {
-          map?.stop();
-          map?.zoomOut(1, { animate: false });
-        }}
-        disabled={disabled || !map}
-      >
-        -
-      </button>
-    </div>
   );
 }
 
@@ -756,10 +598,10 @@ const DynamicGeoJSON: FC<DynamicGeoJSONProps> = ({
   useEffect(() => {
     if (geoJsonRef.current && prevStyleKeyRef.current !== styleKey) {
       prevStyleKeyRef.current = styleKey;
-
+      
       // Force style re-application
       geoJsonRef.current.setStyle(style as any);
-
+      
       // Also update tooltips and event handlers by re-creating them
       geoJsonRef.current.eachLayer((layer: any) => {
         const feature = layer.feature;
@@ -804,8 +646,7 @@ function convertToBoundaryFeatures(
         level: feature.properties.level || 1,
         parentId: feature.properties.parent || '',
         parentName: feature.properties.parentName || '',
-        hasChildrenWithCoordinates:
-          feature.properties.hasCoordinatesDown ?? true,
+        hasChildrenWithCoordinates: feature.properties.hasCoordinatesDown ?? true,
         hasParentWithCoordinates: feature.properties.hasCoordinatesUp ?? true,
       },
       geometry: feature.geometry,
@@ -1007,8 +848,7 @@ function resolveFallbackFocusHierarchyColumn(options: {
   requestedChildColumn: string;
   availableColumns: string[];
 }): string | undefined {
-  const { currentOrgUnitColumn, requestedChildColumn, availableColumns } =
-    options;
+  const { currentOrgUnitColumn, requestedChildColumn, availableColumns } = options;
   if (!availableColumns.length) {
     return undefined;
   }
@@ -1143,7 +983,11 @@ function DHIS2Map({
     if (!databaseId) return;
     let cancelled = false;
 
-    syncDHIS2LegendSchemesForDatabase(databaseId)
+    syncDHIS2LegendSchemesForDatabase(databaseId, {
+      isPublicView: true,
+      chartId,
+      dashboardId,
+    })
       .then(() => {
         if (cancelled) return;
         const cachedSets = readCachedLegendSets(databaseId);
@@ -1181,7 +1025,12 @@ function DHIS2Map({
     return () => {
       cancelled = true;
     };
-  }, [databaseId, metric, datasourceColumns]);
+  }, [databaseId, metric, datasourceColumns, chartId, dashboardId]);
+
+  // Stabilize the staged legend — once resolved, keep it locked so the
+  // legend doesn't flash between auto-computed and staged colors while
+  // data loads or filters change.
+  const stableStagedRef = useRef<DHIS2LegendDefinition | undefined>(undefined);
 
   const effectiveStagedLegendDefinition = useMemo(() => {
     // Use staged DHIS2 legend ranges by default, but leave explicit manual
@@ -1190,11 +1039,19 @@ function DHIS2Map({
     // views where the control-panel never pre-populates localStorage.
     const resolved = stagedLegendDefinition ?? liveLegendDefinition;
     if (!resolved?.items?.length) {
+      // If we previously had a stable staged legend, keep using it
+      // so the legend doesn't flash to auto-computed during re-renders
+      if (stableStagedRef.current?.items?.length && legendType !== 'manual') {
+        return stableStagedRef.current;
+      }
       return undefined;
     }
     if (legendType === 'manual') {
+      stableStagedRef.current = undefined;
       return undefined;
     }
+    // Lock in the resolved legend
+    stableStagedRef.current = resolved as DHIS2LegendDefinition;
     return resolved as DHIS2LegendDefinition;
   }, [legendType, stagedLegendDefinition, liveLegendDefinition]);
 
@@ -1208,30 +1065,36 @@ function DHIS2Map({
 
   const resolvedPrimaryBoundaryLevel = useMemo(
     () =>
-      resolvePrimaryBoundaryLevel(inferredPrimaryBoundaryLevel, boundaryLevels),
+      resolvePrimaryBoundaryLevel(
+        inferredPrimaryBoundaryLevel,
+        boundaryLevels,
+      ),
     [boundaryLevels, inferredPrimaryBoundaryLevel],
   );
 
-  const effectiveBoundaryLevels = useMemo(() => {
-    const configuredLevels = resolveEffectiveBoundaryLevels(
-      inferredPrimaryBoundaryLevel,
+  const effectiveBoundaryLevels = useMemo(
+    () => {
+      const configuredLevels = resolveEffectiveBoundaryLevels(
+        inferredPrimaryBoundaryLevel,
+        boundaryLevels,
+      );
+
+      // By default the map should render the thematic OU level only.
+      // Extra configured levels are preserved when the user explicitly keeps
+      // outer boundaries visible.
+      if (!showAllBoundaries) {
+        return [resolvedPrimaryBoundaryLevel];
+      }
+
+      return configuredLevels;
+    },
+    [
       boundaryLevels,
-    );
-
-    // By default the map should render the thematic OU level only.
-    // Extra configured levels are preserved when the user explicitly keeps
-    // outer boundaries visible.
-    if (!showAllBoundaries) {
-      return [resolvedPrimaryBoundaryLevel];
-    }
-
-    return configuredLevels;
-  }, [
-    boundaryLevels,
-    inferredPrimaryBoundaryLevel,
-    resolvedPrimaryBoundaryLevel,
-    showAllBoundaries,
-  ]);
+      inferredPrimaryBoundaryLevel,
+      resolvedPrimaryBoundaryLevel,
+      showAllBoundaries,
+    ],
+  );
 
   const maxAvailableBoundaryLevel = useMemo(() => {
     const knownLevels = [
@@ -1240,11 +1103,7 @@ function DHIS2Map({
       resolvedPrimaryBoundaryLevel,
     ].filter(value => Number.isFinite(value) && value > 0);
     return knownLevels.length ? Math.max(...knownLevels) : undefined;
-  }, [
-    boundaryLevelLabels,
-    effectiveBoundaryLevels,
-    resolvedPrimaryBoundaryLevel,
-  ]);
+  }, [boundaryLevelLabels, effectiveBoundaryLevels, resolvedPrimaryBoundaryLevel]);
 
   const [boundaries, setBoundaries] = useState<BoundaryFeature[]>([]);
   const [focusedParentBoundaries, setFocusedParentBoundaries] = useState<
@@ -1265,6 +1124,12 @@ function DHIS2Map({
     null,
   );
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
+  // Unique key to prevent "Map container is being reused" when React
+  // portals (e.g. gridstack) remount us with the same DOM node.
+  const mapContainerKeyRef = useRef(0);
+  const [mapContainerKey, setMapContainerKey] = useState(
+    () => `dhis2map-${chartId}-${mapContainerKeyRef.current}`,
+  );
   const [baseMapType, setBaseMapType] = useState<BaseMapType>('none');
   const [loadTime, setLoadTime] = useState<number | null>(null);
   const [cacheHit, setCacheHit] = useState(false);
@@ -1284,32 +1149,20 @@ function DHIS2Map({
   const [stagedLocalDataLoading, setStagedLocalDataLoading] = useState(false);
   const [showDataPreview, setShowDataPreview] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [localFilters, setLocalFilters] = useState<Record<string, string[]>>(
-    {},
-  );
-  const [quickFilterRows, setQuickFilterRows] = useState<
-    Record<string, any>[] | null
-  >(null);
-  const [quickFilterRowColumns, setQuickFilterRowColumns] = useState<
-    string[] | null
-  >(null);
+  const [localFilters, setLocalFilters] = useState<Record<string, string[]>>({});
   const [interactionEnabled, setInteractionEnabled] = useState(true);
   const [resolvedDatasetSql, setResolvedDatasetSql] = useState(datasetSql);
   const [resolvedIsDHIS2Dataset, setResolvedIsDHIS2Dataset] =
     useState(isDHIS2Dataset);
   const lastLoadedDhis2RequestKeyRef = useRef<string | null>(null);
   const lastLoadedBoundaryRequestKeyRef = useRef<string | null>(null);
-  const boundaryPendingRetryTimerRef = useRef<ReturnType<
-    typeof setTimeout
-  > | null>(null);
+  const boundaryPendingRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Track whether we've had a successful databaseId at least once — while it
   // has never been set, we suppress the "no database" error (the datasource
   // may still be loading).
   const everHadDatabaseIdRef = useRef<boolean>(false);
   const lastLoadedStagedLocalRequestKeyRef = useRef<string | null>(null);
   const inFlightStagedLocalRequestKeyRef = useRef<string | null>(null);
-  const lastLoadedQuickFilterRequestKeyRef = useRef<string | null>(null);
-  const inFlightQuickFilterRequestKeyRef = useRef<string | null>(null);
   const stagedLocalFocusCacheRef = useRef<
     Map<string, { rows: Record<string, any>[]; columns: string[] }>
   >(new Map());
@@ -1326,12 +1179,7 @@ function DHIS2Map({
       Boolean(effectiveStagedDatasetId) ||
       hasStagedLocalServingSql(resolvedDatasetSql) ||
       hasStagedLocalServingSql(datasetSql),
-    [
-      datasetSql,
-      effectiveStagedDatasetId,
-      isStagedLocalDataset,
-      resolvedDatasetSql,
-    ],
+    [datasetSql, effectiveStagedDatasetId, isStagedLocalDataset, resolvedDatasetSql],
   );
   const effectiveDataBoundaryLevel = useMemo(
     () =>
@@ -1342,7 +1190,8 @@ function DHIS2Map({
     [activeFocusedBoundaryRequest, drillState.currentLevel],
   );
   const parentSelectionColumn = useMemo(
-    () => boundaryLevelColumns?.[resolvedPrimaryBoundaryLevel] || orgUnitColumn,
+    () =>
+      boundaryLevelColumns?.[resolvedPrimaryBoundaryLevel] || orgUnitColumn,
     [boundaryLevelColumns, orgUnitColumn, resolvedPrimaryBoundaryLevel],
   );
   const hierarchyColumns = useMemo(
@@ -1380,18 +1229,24 @@ function DHIS2Map({
   const effectiveOrgUnitColumn = useMemo(
     () =>
       boundaryLevelColumns?.[effectiveDataBoundaryLevel] ||
+      orgUnitColumn ||
       (Number.isFinite(effectiveDataBoundaryLevel)
         ? `ou_level_${effectiveDataBoundaryLevel}`
-        : orgUnitColumn),
+        : undefined),
     [boundaryLevelColumns, effectiveDataBoundaryLevel, orgUnitColumn],
   );
   const prefetchFocusedOrgUnitColumn = useMemo(
     () =>
       boundaryLevelColumns?.[prefetchFocusedChildLevel || 0] ||
+      effectiveOrgUnitColumn ||
       (Number.isFinite(prefetchFocusedChildLevel)
         ? `ou_level_${prefetchFocusedChildLevel}`
-        : effectiveOrgUnitColumn),
-    [boundaryLevelColumns, effectiveOrgUnitColumn, prefetchFocusedChildLevel],
+        : undefined),
+    [
+      boundaryLevelColumns,
+      effectiveOrgUnitColumn,
+      prefetchFocusedChildLevel,
+    ],
   );
   const effectiveDataParentId = useMemo(() => {
     if (activeFocusedBoundaryRequest?.parentIds?.length === 1) {
@@ -1435,6 +1290,20 @@ function DHIS2Map({
   const handleMapInstanceReady = useCallback((map: L.Map) => {
     setMapInstance(currentMap => (currentMap === map ? currentMap : map));
   }, []);
+
+  // If the old map instance was destroyed by container reuse, recover
+  // by bumping the key to force a fresh MapContainer.
+  useEffect(() => {
+    if (!mapInstance) return undefined;
+    const container = mapInstance.getContainer?.();
+    if (container && (container as any)._leaflet_id === undefined) {
+      // Container was orphaned — force remount
+      mapContainerKeyRef.current += 1;
+      setMapContainerKey(`dhis2map-${chartId}-${mapContainerKeyRef.current}`);
+      setMapInstance(null);
+    }
+    return undefined;
+  }, [mapInstance, chartId]);
 
   useEffect(() => {
     setDrillState(previousState => {
@@ -1701,9 +1570,7 @@ function DHIS2Map({
   const chartDataColumns = useMemo(
     () =>
       Array.from(
-        new Set(
-          chartData.flatMap(row => Object.keys(row || {})).filter(Boolean),
-        ),
+        new Set(chartData.flatMap(row => Object.keys(row || {})).filter(Boolean)),
       ),
     [chartData],
   );
@@ -1931,9 +1798,8 @@ function DHIS2Map({
 
           const result = response.json?.result || {};
           if (page === 1 && Array.isArray(result.columns)) {
-            resolvedColumns = result.columns.filter(
-              (value: unknown): value is string =>
-                Boolean(String(value || '').trim()),
+            resolvedColumns = result.columns.filter((value: unknown): value is string =>
+              Boolean(String(value || '').trim()),
             );
           }
           if (Array.isArray(result.rows)) {
@@ -1953,15 +1819,14 @@ function DHIS2Map({
         }
 
         setStagedLocalData(collectedRows);
-        const finalColumns = resolvedColumns.length
-          ? resolvedColumns
-          : Array.from(
-              new Set(
-                collectedRows
-                  .flatMap(row => Object.keys(row || {}))
-                  .filter(Boolean),
-              ),
-            );
+        const finalColumns =
+          resolvedColumns.length
+            ? resolvedColumns
+            : Array.from(
+                new Set(
+                  collectedRows.flatMap(row => Object.keys(row || {})).filter(Boolean),
+                ),
+              );
         setStagedLocalDataColumns(finalColumns);
         stagedLocalFocusCacheRef.current.set(stagedLocalFocusRequestKey, {
           rows: collectedRows,
@@ -1980,8 +1845,7 @@ function DHIS2Map({
         // If a NEW key's fetch is now in-flight, its ref won't match, so we do
         // NOT clear loading — that fetch's own finally will handle it.
         if (
-          inFlightStagedLocalRequestKeyRef.current ===
-          stagedLocalFocusRequestKey
+          inFlightStagedLocalRequestKeyRef.current === stagedLocalFocusRequestKey
         ) {
           inFlightStagedLocalRequestKeyRef.current = null;
           setStagedLocalDataLoading(false);
@@ -2032,18 +1896,13 @@ function DHIS2Map({
       return unfilteredEffectiveData;
     }
 
-    const filterSourceData =
-      quickFilterRows && quickFilterRows.length > 0
-        ? quickFilterRows
-        : unfilteredEffectiveData;
-
-    return filterSourceData.filter(row =>
+    return unfilteredEffectiveData.filter(row =>
       filterEntries.every(([col, values]) => {
         const rowVal = String(row[col] ?? '');
         return values.includes(rowVal);
       }),
     );
-  }, [localFilters, quickFilterRows, unfilteredEffectiveData]);
+  }, [localFilters, unfilteredEffectiveData]);
 
   const effectiveDataColumns = useMemo(
     () =>
@@ -2051,268 +1910,11 @@ function DHIS2Map({
         ? stagedLocalDataColumns
         : Array.from(
             new Set(
-              effectiveData
-                .flatMap(row => Object.keys(row || {}))
-                .filter(Boolean),
+              effectiveData.flatMap(row => Object.keys(row || {})).filter(Boolean),
             ),
           ),
     [effectiveData, shouldUseStagedLocalFocusRows, stagedLocalDataColumns],
   );
-  const quickFilterRequestedColumns = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          [
-            sanitizeDHIS2ColumnName(String(metric || '')),
-            sanitizeDHIS2ColumnName(String(orgUnitColumn || '')),
-            sanitizeDHIS2ColumnName(String(effectiveOrgUnitColumn || '')),
-            sanitizeDHIS2ColumnName(String(parentSelectionColumn || '')),
-            ...(periodColumns || []),
-            ...datasourceColumns
-              .filter(column => {
-                const extra = parseColumnExtra(column.extra);
-                return (
-                  extra?.dhis2_is_period === true ||
-                  extra?.dhis2IsPeriod === true
-                );
-              })
-              .map(column => String(column.column_name || '').trim()),
-            'period',
-            'pe',
-            ...(ouHierarchyColumns || []),
-            ...Object.values(boundaryLevelColumns || {}),
-            ...tooltipColumns,
-            ...activeFilters.map(filter => String(filter.col || '').trim()),
-          ]
-            .map(columnName =>
-              sanitizeDHIS2ColumnName(String(columnName || '')),
-            )
-            .filter(Boolean),
-        ),
-      ),
-    [
-      activeFilters,
-      boundaryLevelColumns,
-      datasourceColumns,
-      effectiveOrgUnitColumn,
-      metric,
-      orgUnitColumn,
-      ouHierarchyColumns,
-      parentSelectionColumn,
-      periodColumns,
-      tooltipColumns,
-    ],
-  );
-  const quickFilterRequestKey = useMemo(
-    () =>
-      [
-        effectiveStagedDatasetId ?? 'none',
-        quickFilterRequestedColumns.join(',') || 'none',
-      ].join('|'),
-    [effectiveStagedDatasetId, quickFilterRequestedColumns],
-  );
-
-  useEffect(() => {
-    if (
-      !showFilters ||
-      !effectiveIsStagedLocalDataset ||
-      !effectiveStagedDatasetId ||
-      !quickFilterRequestedColumns.length
-    ) {
-      return;
-    }
-
-    if (
-      inFlightQuickFilterRequestKeyRef.current === quickFilterRequestKey ||
-      lastLoadedQuickFilterRequestKeyRef.current === quickFilterRequestKey
-    ) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadQuickFilterRows = async () => {
-      inFlightQuickFilterRequestKeyRef.current = quickFilterRequestKey;
-      try {
-        const collectedRows: Record<string, any>[] = [];
-        let resolvedColumns: string[] = [];
-        let page = 1;
-        let totalPages = 1;
-
-        do {
-          const response = await SupersetClient.post({
-            endpoint: `/api/v1/dhis2/staged-datasets/${effectiveStagedDatasetId}/query`,
-            jsonPayload: {
-              columns: quickFilterRequestedColumns,
-              limit: 1000,
-              page,
-            },
-          });
-
-          const result = response.json?.result || {};
-          if (page === 1 && Array.isArray(result.columns)) {
-            resolvedColumns = result.columns.filter(
-              (value: unknown): value is string =>
-                Boolean(String(value || '').trim()),
-            );
-          }
-          if (Array.isArray(result.rows)) {
-            collectedRows.push(...result.rows);
-          }
-
-          const nextTotalPages = Number(result.total_pages || 1);
-          totalPages =
-            Number.isFinite(nextTotalPages) && nextTotalPages > 0
-              ? nextTotalPages
-              : 1;
-          page += 1;
-        } while (page <= totalPages);
-
-        if (cancelled) {
-          return;
-        }
-
-        const finalColumns = resolvedColumns.length
-          ? resolvedColumns
-          : Array.from(
-              new Set(
-                collectedRows
-                  .flatMap(row => Object.keys(row || {}))
-                  .filter(Boolean),
-              ),
-            );
-        setQuickFilterRows(collectedRows);
-        setQuickFilterRowColumns(finalColumns);
-        lastLoadedQuickFilterRequestKeyRef.current = quickFilterRequestKey;
-      } catch (err) {
-        // Fall back to chart rows when the staged query is unavailable.
-        if (!cancelled) {
-          setQuickFilterRows(null);
-          setQuickFilterRowColumns(null);
-        }
-      } finally {
-        if (
-          inFlightQuickFilterRequestKeyRef.current === quickFilterRequestKey
-        ) {
-          inFlightQuickFilterRequestKeyRef.current = null;
-        }
-      }
-    };
-
-    void loadQuickFilterRows();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    effectiveIsStagedLocalDataset,
-    effectiveStagedDatasetId,
-    quickFilterRequestKey,
-    quickFilterRequestedColumns,
-    showFilters,
-  ]);
-
-  const quickFilterSourceData = useMemo(
-    () =>
-      quickFilterRows && quickFilterRows.length > 0
-        ? quickFilterRows
-        : unfilteredEffectiveData,
-    [quickFilterRows, unfilteredEffectiveData],
-  );
-  const quickFilterColumns = useMemo(() => {
-    const dataColumns =
-      quickFilterRowColumns && quickFilterRowColumns.length > 0
-        ? quickFilterRowColumns
-        : Array.from(
-            new Set(
-              quickFilterSourceData
-                .flatMap(row => Object.keys(row || {}))
-                .filter(Boolean),
-            ),
-          );
-
-    if (!dataColumns.length) {
-      return dedupeQuickFilterDisplayColumns(
-        Array.from(
-          new Set(
-            [
-              ...(periodColumns || []),
-              ...(ouHierarchyColumns || []),
-              ...Object.values(boundaryLevelColumns || {}),
-              'period',
-              'pe',
-            ]
-              .map(columnName =>
-                sanitizeDHIS2ColumnName(String(columnName || '')),
-              )
-              .filter(Boolean),
-          ),
-        ),
-      );
-    }
-
-    const periodColumnCandidates = Array.from(
-      new Set(
-        [
-          ...(periodColumns || []),
-          ...datasourceColumns
-            .filter(column => {
-              const extra = parseColumnExtra(column.extra);
-              return (
-                extra?.dhis2_is_period === true || extra?.dhis2IsPeriod === true
-              );
-            })
-            .map(column => String(column.column_name || '').trim()),
-          'period',
-          'pe',
-        ].filter(Boolean),
-      ),
-    )
-      .map(columnName => resolveMatchingDataColumn(columnName, dataColumns))
-      .filter((columnName): columnName is string => Boolean(columnName));
-
-    const hierarchyColumnCandidates = Array.from(
-      new Set(
-        [
-          ...(ouHierarchyColumns || []),
-          ...Object.values(boundaryLevelColumns || {}),
-        ].filter(Boolean),
-      ),
-    )
-      .map(columnName => resolveMatchingDataColumn(columnName, dataColumns))
-      .filter((columnName): columnName is string => Boolean(columnName));
-
-    const fallbackDisplayColumns = Array.from(
-      new Set(
-        [
-          ...(periodColumns || []),
-          ...(ouHierarchyColumns || []),
-          ...Object.values(boundaryLevelColumns || {}),
-          'period',
-          'pe',
-        ]
-          .map(columnName => sanitizeDHIS2ColumnName(String(columnName || '')))
-          .filter(Boolean),
-      ),
-    );
-
-    return dedupeQuickFilterDisplayColumns(
-      Array.from(
-        new Set([
-          ...periodColumnCandidates,
-          ...hierarchyColumnCandidates,
-          ...fallbackDisplayColumns,
-        ]),
-      ),
-    );
-  }, [
-    boundaryLevelColumns,
-    datasourceColumns,
-    ouHierarchyColumns,
-    periodColumns,
-    quickFilterRowColumns,
-    quickFilterSourceData,
-  ]);
 
   const fallbackFocusedOrgUnitColumn = useMemo(
     () =>
@@ -2673,6 +2275,12 @@ function DHIS2Map({
     [dataMap],
   );
 
+  const dataStyleSignature = useMemo(
+    () => buildMetricMapStyleSignature(dataMap),
+    [dataMap],
+  );
+
+
   // Determine which color scheme to use based on useLinearColorScheme setting
   const activeColorScheme = useMemo(() => {
     if (useLinearColorScheme) {
@@ -2813,16 +2421,11 @@ function DHIS2Map({
       let selectedParents: BoundaryFeature[] = [];
       let focusedRequest: FocusedBoundaryRequest | null = null;
 
-      if (
-        focusSelectedBoundaryWithChildren &&
-        resolvedPrimaryBoundaryLevel > 0
-      ) {
+      if (focusSelectedBoundaryWithChildren && resolvedPrimaryBoundaryLevel > 0) {
         const parentResult = await loadBoundaryResult([
           resolvedPrimaryBoundaryLevel,
         ]);
-        const parentFeatures = convertToBoundaryFeatures(
-          parentResult.allFeatures,
-        );
+        const parentFeatures = convertToBoundaryFeatures(parentResult.allFeatures);
         focusedRequest = resolveFocusedBoundaryRequest({
           enabled: true,
           currentLevel: resolvedPrimaryBoundaryLevel,
@@ -2846,10 +2449,7 @@ function DHIS2Map({
         setFocusedParentBoundaries([]);
       }
 
-      let result = await loadBoundaryResult(
-        requestedLevels,
-        requestedParentIds,
-      );
+      let result = await loadBoundaryResult(requestedLevels, requestedParentIds);
 
       if (requestedParentIds?.length && result.totalCount === 0) {
         // eslint-disable-next-line no-console
@@ -3041,25 +2641,15 @@ function DHIS2Map({
         onDrillDown(feature.id, feature.properties.name);
       }
 
-      if (setDataMask) {
+      // Apply drill-down as a local filter on this chart only (not cross-chart)
+      if (effectiveOrgUnitDataColumn) {
         const filterValues = Array.from(
           new Set([feature.properties.name, feature.id].filter(Boolean)),
         );
-        setDataMask({
-          extraFormData: {
-            filters: [
-              {
-                col: effectiveOrgUnitDataColumn,
-                op: 'IN',
-                val: filterValues,
-              },
-            ],
-          },
-          filterState: {
-            value: filterValues,
-            label: feature.properties.name,
-          },
-        });
+        setLocalFilters(prev => ({
+          ...prev,
+          [effectiveOrgUnitDataColumn]: filterValues,
+        }));
       }
     },
     [
@@ -3067,7 +2657,6 @@ function DHIS2Map({
       enableDrill,
       drillState,
       onDrillDown,
-      setDataMask,
     ],
   );
 
@@ -3105,14 +2694,16 @@ function DHIS2Map({
         breadcrumbs: newBreadcrumbs,
       });
 
-      if (setDataMask) {
-        setDataMask({
-          extraFormData: {},
-          filterState: {},
+      // Clear OU local filter on drill-up
+      if (effectiveOrgUnitDataColumn) {
+        setLocalFilters(prev => {
+          const next = { ...prev };
+          delete next[effectiveOrgUnitDataColumn];
+          return next;
         });
       }
     },
-    [drillState, resolvedPrimaryBoundaryLevel, setDataMask],
+    [drillState, resolvedPrimaryBoundaryLevel, effectiveOrgUnitDataColumn],
   );
 
   const selectedBoundaryIds = useMemo(() => {
@@ -3137,7 +2728,11 @@ function DHIS2Map({
     });
 
     return visibleBoundaries;
-  }, [boundaries, selectedBoundaryIds, showAllBoundaries]);
+  }, [
+    boundaries,
+    selectedBoundaryIds,
+    showAllBoundaries,
+  ]);
 
   const shouldStyleUnselectedAreas = useMemo(
     () =>
@@ -3188,7 +2783,7 @@ function DHIS2Map({
       const isSelected = selectedFeatureId === feature.id;
 
       // Auto-theme and level border colors only apply to selected/thematic areas.
-      if (isSelectedArea && autoThemeBorders) {
+        if (isSelectedArea && autoThemeBorders) {
         borderColor = darkenColor(fillColor, 0.4);
       } else if (
         isSelectedArea &&
@@ -3197,8 +2792,7 @@ function DHIS2Map({
       ) {
         // Convert level to number (API returns string like '3')
         const rawLevel = feature.properties.level;
-        const level =
-          typeof rawLevel === 'string' ? parseInt(rawLevel, 10) : rawLevel || 1;
+        const level = typeof rawLevel === 'string' ? parseInt(rawLevel, 10) : (rawLevel || 1);
         const levelColor = levelBorderColors.find(l => l.level === level);
 
         if (levelColor) {
@@ -3270,15 +2864,16 @@ function DHIS2Map({
           ${
             tooltipColumns
               ?.map(col => {
-                const row = filteredData.find(r =>
-                  matchesFeatureOrgUnit(
-                    getRowColumnValue(
-                      r,
-                      effectiveOrgUnitDataColumn,
-                      'dimension',
+                const row = filteredData.find(
+                  r =>
+                    matchesFeatureOrgUnit(
+                      getRowColumnValue(
+                        r,
+                        effectiveOrgUnitDataColumn,
+                        'dimension',
+                      ),
+                      feature,
                     ),
-                    feature,
-                  ),
                 );
                 return row
                   ? `<br/>${col}: ${String(
@@ -3391,10 +2986,6 @@ function DHIS2Map({
   // progressive and the chart can render data immediately once available.
   const showMapLoadingOverlay = dhis2DataLoading || stagedLocalDataLoading;
   const boundaryLoading = loading;
-  const mapControlTopOffset =
-    compassVisible && ((compassPosition as string) || 'topright') === 'topright'
-      ? 52
-      : 12;
 
   return (
     <MapWrapper style={{ width, height }}>
@@ -3402,218 +2993,207 @@ function DHIS2Map({
         $backgroundColor={chartBackgroundColor}
         onMouseLeave={() => setHoveredFeature(null)}
       >
+      {/* @ts-ignore - React 19 compatibility */}
+      <MapContainer
+        key={mapContainerKey}
+        center={[1.3733, 32.2903]}
+        zoom={7}
+        zoomSnap={0.25}
+        zoomDelta={0.25}
+        zoomControl={false}
+        scrollWheelZoom={interactionEnabled}
+        dragging={interactionEnabled}
+        doubleClickZoom={interactionEnabled}
+        boxZoom={interactionEnabled}
+        keyboard={interactionEnabled}
+        touchZoom={interactionEnabled}
+      >
+        <MapInstanceBridge onReady={handleMapInstanceReady} />
         {/* @ts-ignore - React 19 compatibility */}
-        <MapContainer
-          center={[1.3733, 32.2903]}
-          zoom={7}
-          zoomSnap={1}
-          zoomDelta={1}
-          zoomAnimation={false}
-          fadeAnimation={false}
-          markerZoomAnimation={false}
-          zoomControl={false}
-          scrollWheelZoom={false}
-          dragging={interactionEnabled}
-          doubleClickZoom={interactionEnabled}
-          boxZoom={interactionEnabled}
-          keyboard={interactionEnabled}
-          touchZoom={interactionEnabled}
-        >
-          <MapInstanceBridge onReady={handleMapInstanceReady} />
-          {/* @ts-ignore - React 19 compatibility */}
-          <BaseMapLayer mapType={baseMapType} />
+        <BaseMapLayer mapType={baseMapType} />
 
-          {/* Auto-focus map when boundaries load */}
-          {/* @ts-ignore - React 19 compatibility */}
-          <MapAutoFocus
-            boundaries={displayBoundaries}
-            enabled={!loading}
-            viewportWidth={width}
-            viewportHeight={height}
-            layoutSignature={showFilters ? 'filters-open' : 'filters-closed'}
-          />
+        {baseMapType !== 'none' && (
+          /* @ts-ignore - React 19 compatibility */
+          <ZoomControl position="topright" />
+        )}
 
-          {/* Light basemap focus mask to de-emphasize areas outside boundaries */}
-          {/* @ts-ignore - React 19 compatibility */}
-          <BoundaryMask
-            boundaries={displayBoundaries}
-            enabled={displayBoundaries.length > 0 && baseMapType !== 'none'}
-          />
+      {/* Auto-focus map when boundaries load */}
+      {/* @ts-ignore - React 19 compatibility */}
+      <MapAutoFocus
+        boundaries={displayBoundaries}
+        enabled={!loading}
+        viewportWidth={width}
+        viewportHeight={height}
+        layoutSignature={showFilters ? 'filters-open' : 'filters-closed'}
+      />
 
-          {displayBoundaries.length > 0 &&
-            /* @ts-ignore - React 19 compatibility */
-            focusSelectedBoundaryWithChildren &&
-            focusedParentBoundaries.length > 0 && (
-              <DynamicGeoJSON
-                data={
-                  {
-                    type: 'FeatureCollection',
-                    features: focusedParentBoundaries,
-                  } as any
-                }
-                style={getFocusedParentStyle as any}
-                onEachFeature={() => undefined}
-                styleKey={`focus-parents-${focusedParentBoundaries
-                  .map(feature => feature.id)
-                  .sort()
-                  .join(',')}-${strokeWidth}-${JSON.stringify(strokeColor)}`}
-              />
-            )}
-          {displayBoundaries.length > 0 && (
-            /* @ts-ignore - React 19 compatibility */
+      {/* Light basemap focus mask to de-emphasize areas outside boundaries */}
+      {/* @ts-ignore - React 19 compatibility */}
+      <BoundaryMask
+        boundaries={displayBoundaries}
+        enabled={displayBoundaries.length > 0 && baseMapType !== 'none'}
+      />
+
+        {/* Manual focus button */}
+        {displayBoundaries.length > 0 && baseMapType !== 'none' && (
+          <FocusButton boundaries={displayBoundaries} />
+        )}
+
+        {displayBoundaries.length > 0 && (
+          /* @ts-ignore - React 19 compatibility */
+          focusSelectedBoundaryWithChildren &&
+          focusedParentBoundaries.length > 0 && (
             <DynamicGeoJSON
               data={
                 {
                   type: 'FeatureCollection',
-                  features: displayBoundaries,
+                  features: focusedParentBoundaries,
                 } as any
               }
-              style={getFeatureStyle as any}
-              onEachFeature={onEachFeature as any}
-              styleKey={`levels-${boundaryLevelsKey}-drill-${drillState.currentLevel}-${drillState.parentId}-hover-${hoveredFeature ?? 'none'}-selected-${selectedFeatureId ?? 'none'}-colors-${JSON.stringify(levelBorderColors?.map(lc => lc.color))}-boundaries-${displayBoundaries
-                .map(b => b.id)
+              style={getFocusedParentStyle as any}
+              onEachFeature={() => undefined}
+              styleKey={`focus-parents-${focusedParentBoundaries
+                .map(feature => feature.id)
                 .sort()
-                .join(',')}`}
+                .join(',')}-${strokeWidth}-${JSON.stringify(strokeColor)}`}
             />
-          )}
-        </MapContainer>
-
-        <div className="map-control-stack" style={{ top: mapControlTopOffset }}>
-          <MapZoomButtons map={mapInstance} disabled={!mapInstance} />
-          {displayBoundaries.length > 0 && (
-            <FocusButton
-              boundaries={displayBoundaries}
-              map={mapInstance}
-              viewportWidth={width}
-              viewportHeight={height}
-            />
-          )}
-        </div>
-
-        {!interactionEnabled && (
-          <div
-            className="map-interaction-overlay"
-            role="button"
-            tabIndex={0}
-            onClick={() => setInteractionEnabled(true)}
-            onKeyDown={event => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                setInteractionEnabled(true);
-              }
-            }}
-          >
-            {t('Click to interact with map')}
-          </div>
+          )
         )}
-
-        {enableDrill && drillState.breadcrumbs.length > 0 && (
+        {displayBoundaries.length > 0 && (
           /* @ts-ignore - React 19 compatibility */
-          <DrillControls
-            breadcrumbs={drillState.breadcrumbs}
-            onDrillUp={() => handleDrillUp()}
-            onBreadcrumbClick={index => handleDrillUp(index)}
-          />
-        )}
-
-        {showMapLoadingOverlay && (
-          <div className="map-loading-overlay">
-            <Spin size="large" />
-            <span>{t('Loading map data...')}</span>
-          </div>
-        )}
-
-        {!showMapLoadingOverlay && boundaryLoading && (
-          <div
-            style={{
-              position: 'absolute',
-              bottom: 12,
-              right: 12,
-              zIndex: 1000,
-              background: 'rgba(255,255,255,0.85)',
-              borderRadius: 6,
-              padding: '4px 10px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              fontSize: 12,
-              pointerEvents: 'none',
-            }}
-          >
-            <Spin size="small" />
-            <span>{t('Loading boundaries…')}</span>
-          </div>
-        )}
-
-        {error && <div className="map-error-message">{error}</div>}
-
-        {/* Show message when no data is available (possibly due to query timeout) */}
-        {!showMapLoadingOverlay && !error && effectiveData.length === 0 && (
-          <div
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              background: 'rgba(255, 255, 255, 0.95)',
-              padding: '20px 30px',
-              borderRadius: '8px',
-              boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
-              zIndex: 1000,
-              textAlign: 'center',
-              maxWidth: '400px',
-            }}
-          >
-            <div
-              style={{ fontSize: '16px', fontWeight: 500, marginBottom: '8px' }}
-            >
-              {t('No data available')}
-            </div>
-            <div style={{ fontSize: '13px', color: '#666' }}>
-              {t('The query returned no results. This could be due to:')}
-              <ul
-                style={{
-                  textAlign: 'left',
-                  margin: '10px 0',
-                  paddingLeft: '20px',
-                }}
-              >
-                <li>{t('Query timeout (try reducing date range)')}</li>
-                <li>{t('No data for selected filters')}</li>
-                <li>{t('Missing data in the source system')}</li>
-              </ul>
-            </div>
-          </div>
-        )}
-
-        {/* Legend overlay — floats over the map */}
-        {showLegend && (
-          <LegendPanel
-            colorScale={colorScale}
-            valueRange={valueRange}
-            position={(legendPosition as any) || 'bottomright'}
-            displayType={
-              (legendDisplayType as LegendDisplayType) || 'vertical_list'
+          <DynamicGeoJSON
+            data={
+              { type: 'FeatureCollection', features: displayBoundaries } as any
             }
-            classes={legendClasses}
-            metricName={metricDisplayName}
-            noDataColor={legendNoDataColor}
-            levelBorderColors={levelBorderColors}
-            levelLabels={boundaryLevelLabels}
-            showBoundaryLegend={boundaryLevels && boundaryLevels.length > 1}
-            manualBreaks={manualBreaks}
-            manualColors={manualColors}
-            stagedLegendDefinition={effectiveStagedLegendDefinition}
-            legendEntries={computedLegendEntries}
+            style={getFeatureStyle as any}
+            onEachFeature={onEachFeature as any}
+            styleKey={`levels-${boundaryLevelsKey}-drill-${drillState.currentLevel}-${drillState.parentId}-hover-${hoveredFeature ?? 'none'}-selected-${selectedFeatureId ?? 'none'}-colors-${JSON.stringify(levelBorderColors?.map(lc => lc.color))}-data-${dataStyleSignature}-boundaries-${displayBoundaries.map(b => b.id).sort().join(',')}`}
           />
         )}
+      </MapContainer>
 
-        {/* Compass overlay */}
-        {compassVisible && (
-          <MapCompass
-            position={(compassPosition as any) || 'topright'}
-            style={(compassStyle as CompassStyle) || 'north_badge'}
-          />
-        )}
+      {!interactionEnabled && (
+        <div
+          className="map-interaction-overlay"
+          role="button"
+          tabIndex={0}
+          onClick={() => setInteractionEnabled(true)}
+          onKeyDown={event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              setInteractionEnabled(true);
+            }
+          }}
+        >
+          {t('Click to interact with map')}
+        </div>
+      )}
+
+      {enableDrill && drillState.breadcrumbs.length > 0 && (
+        /* @ts-ignore - React 19 compatibility */
+        <DrillControls
+          breadcrumbs={drillState.breadcrumbs}
+          onDrillUp={() => handleDrillUp()}
+          onBreadcrumbClick={index => handleDrillUp(index)}
+        />
+      )}
+
+      {showMapLoadingOverlay && (
+        <div className="map-loading-overlay">
+          <Spin size="large" />
+          <span>{t('Loading map data...')}</span>
+        </div>
+      )}
+
+      {!showMapLoadingOverlay && boundaryLoading && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 12,
+            right: 12,
+            zIndex: 4,
+            background: 'rgba(255,255,255,0.85)',
+            borderRadius: 6,
+            padding: '4px 10px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 12,
+            pointerEvents: 'none',
+          }}
+        >
+          <Spin size="small" />
+          <span>{t('Loading boundaries…')}</span>
+        </div>
+      )}
+
+      {error && <div className="map-error-message">{error}</div>}
+
+      {/* Show message when no data is available (possibly due to query timeout) */}
+      {!showMapLoadingOverlay && !error && effectiveData.length === 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: 'rgba(255, 255, 255, 0.95)',
+            padding: '20px 30px',
+            borderRadius: '8px',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
+            zIndex: 4,
+            textAlign: 'center',
+            maxWidth: '400px',
+          }}
+        >
+          <div
+            style={{ fontSize: '16px', fontWeight: 500, marginBottom: '8px' }}
+          >
+            {t('No data available')}
+          </div>
+          <div style={{ fontSize: '13px', color: '#666' }}>
+            {t('The query returned no results. This could be due to:')}
+            <ul
+              style={{
+                textAlign: 'left',
+                margin: '10px 0',
+                paddingLeft: '20px',
+              }}
+            >
+              <li>{t('Query timeout (try reducing date range)')}</li>
+              <li>{t('No data for selected filters')}</li>
+              <li>{t('Missing data in the source system')}</li>
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Legend overlay — floats over the map */}
+      {showLegend && (
+        <LegendPanel
+          colorScale={colorScale}
+          valueRange={valueRange}
+          position={(legendPosition as any) || 'bottomright'}
+          displayType={(legendDisplayType as LegendDisplayType) || 'vertical_list'}
+          classes={legendClasses}
+          metricName={metricDisplayName}
+          noDataColor={legendNoDataColor}
+          levelBorderColors={levelBorderColors}
+          levelLabels={boundaryLevelLabels}
+          showBoundaryLegend={boundaryLevels && boundaryLevels.length > 1}
+          manualBreaks={manualBreaks}
+          manualColors={manualColors}
+          stagedLegendDefinition={effectiveStagedLegendDefinition}
+          legendEntries={computedLegendEntries}
+        />
+      )}
+
+      {/* Compass overlay */}
+      {compassVisible && (
+        <MapCompass
+          position={(compassPosition as any) || 'topright'}
+          style={(compassStyle as CompassStyle) || 'north_badge'}
+        />
+      )}
       </MapCanvas>
 
       <MapFooterBar>
@@ -3621,9 +3201,7 @@ function DHIS2Map({
           {loadTime !== null && !loading && (
             <FooterStatusPill
               $cacheHit={cacheHit}
-              title={
-                cacheHit ? 'Loaded from browser cache' : 'Loaded from server'
-              }
+              title={cacheHit ? 'Loaded from browser cache' : 'Loaded from server'}
             >
               {cacheHit ? '⚡ ' : ''}
               {loadTime}ms
@@ -3642,10 +3220,7 @@ function DHIS2Map({
         </MapFooterControlSlot>
         <MapFooterControlSlot>
           {/* @ts-ignore - React 19 compatibility */}
-          <BaseMapSelector
-            currentMap={baseMapType}
-            onMapChange={setBaseMapType}
-          />
+          <BaseMapSelector currentMap={baseMapType} onMapChange={setBaseMapType} />
         </MapFooterControlSlot>
       </MapFooterBar>
 
@@ -3664,7 +3239,7 @@ function DHIS2Map({
             cursor: 'pointer',
             fontSize: '12px',
             fontWeight: 500,
-            zIndex: 1001,
+            zIndex: 5,
             boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)',
           }}
           title="Toggle data preview panel"
@@ -3684,8 +3259,34 @@ function DHIS2Map({
 
       {showFilters && (
         <FiltersPanel
-          data={quickFilterSourceData}
-          columns={quickFilterColumns}
+          data={unfilteredEffectiveData}
+          columns={(() => {
+            // Start with OU hierarchy and period columns
+            const known = new Set([
+              ...(ouHierarchyColumns || []),
+              ...(periodColumns || []),
+            ]);
+            // Add other string dimension columns from the data
+            // (exclude metric/numeric-only columns)
+            if (unfilteredEffectiveData.length > 0) {
+              const sample = unfilteredEffectiveData[0];
+              Object.keys(sample).forEach(col => {
+                if (known.has(col)) return;
+                if (col === metric || col === 'value') return;
+                const val = sample[col];
+                if (typeof val === 'string' || val === null || val === undefined) {
+                  known.add(col);
+                }
+              });
+            }
+            // Return OU hierarchy first, then periods, then others
+            const ouCols = ouHierarchyColumns || [];
+            const pCols = (periodColumns || []).filter(c => !ouCols.includes(c));
+            const rest = Array.from(known).filter(
+              c => !ouCols.includes(c) && !pCols.includes(c),
+            );
+            return [...ouCols, ...pCols, ...rest];
+          })()}
           filters={localFilters}
           onChange={(col, values) => {
             setLocalFilters(prev => ({

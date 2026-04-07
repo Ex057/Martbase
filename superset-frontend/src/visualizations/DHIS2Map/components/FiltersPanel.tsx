@@ -79,16 +79,6 @@ export function FiltersPanel({
   onChange,
   onClose,
 }: FiltersPanelProps): React.ReactElement | null {
-  const formatFilterLabel = (columnName: string) => {
-    const normalized = String(columnName || '')
-      .trim()
-      .toLowerCase();
-    if (normalized === 'period' || normalized === 'pe') {
-      return t('Period');
-    }
-    return columnName.replace(/_/g, ' ');
-  };
-
   const columnValues = useMemo(() => {
     const map: Record<string, string[]> = {};
     columns.forEach(col => {
@@ -118,7 +108,7 @@ export function FiltersPanel({
       <div className="panel-body">
         {columns.map(col => (
           <div key={col} className="filter-group">
-            <div className="filter-label">{formatFilterLabel(col)}</div>
+            <div className="filter-label">{col.replace(/_/g, ' ')}</div>
             <Select
               mode="multiple"
               allowClear
@@ -131,11 +121,6 @@ export function FiltersPanel({
                 value: v,
               }))}
               maxTagCount="responsive"
-              placement="topLeft"
-              getPopupContainer={triggerNode =>
-                triggerNode?.ownerDocument?.body || document.body
-              }
-              dropdownStyle={{ zIndex: 2100 }}
             />
           </div>
         ))}

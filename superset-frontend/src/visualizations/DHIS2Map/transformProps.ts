@@ -399,45 +399,6 @@ function isPeriodColumn(col: DatasourceColumn): boolean {
   );
 }
 
-function resolveSelectedGranularityColumnName(
-  granularityValue: unknown,
-): string | undefined {
-  if (typeof granularityValue === 'string' && granularityValue.trim()) {
-    return granularityValue.trim();
-  }
-
-  if (
-    granularityValue &&
-    typeof granularityValue === 'object' &&
-    'column_name' in (granularityValue as Record<string, unknown>)
-  ) {
-    const columnName = (granularityValue as Record<string, unknown>).column_name;
-    if (typeof columnName === 'string' && columnName.trim()) {
-      return columnName.trim();
-    }
-  }
-
-  return undefined;
-}
-
-function resolveMatchingDataColumn(
-  requestedColumn: string | undefined,
-  allColumns: string[],
-): string | undefined {
-  if (!requestedColumn) {
-    return undefined;
-  }
-
-  if (allColumns.includes(requestedColumn)) {
-    return requestedColumn;
-  }
-
-  const sanitizedRequested = sanitizeDHIS2ColumnName(requestedColumn);
-  return allColumns.find(
-    columnName => sanitizeDHIS2ColumnName(columnName) === sanitizedRequested,
-  );
-}
-
 function mergeBoundaryLevels(
   primaryBoundaryLevel: number | undefined,
   configuredLevels: number[],
@@ -480,7 +441,6 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     boundary_level,
     enable_drill,
     tooltip_columns,
-    granularity_sqla,
   } = formData as QueryFormData;
 
   // Extract style props with camelCase fallback (formData is camelCase, controls are snake_case)
@@ -491,9 +451,6 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     formDataAny?.useLinearColorScheme ?? formDataAny?.use_linear_color_scheme;
   const chart_background_color = colorValueToCss(
     formDataAny?.chartBackgroundColor || formDataAny?.chart_background_color,
-  );
-  const label_text_color = colorValueToCss(
-    formDataAny?.labelTextColor || formDataAny?.label_text_color,
   );
   const opacity = formDataAny?.opacity;
   const stroke_color = formDataAny?.strokeColor || formDataAny?.stroke_color;
@@ -570,24 +527,12 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     .map(level => level.columnName)
     .filter(
       (columnName): columnName is string =>
-        typeof columnName === 'string' && allColumns.includes(columnName),
+        Boolean(columnName) && allColumns.includes(columnName),
     );
 
-  const periodColumns = Array.from(
-    new Set(
-      [
-        ...datasourceColumns
-          .filter(column => isPeriodColumn(column) && column.column_name)
-          .map(column => resolveMatchingDataColumn(column.column_name, allColumns)),
-        resolveMatchingDataColumn(
-          resolveSelectedGranularityColumnName(granularity_sqla),
-          allColumns,
-        ),
-        resolveMatchingDataColumn('period', allColumns),
-        resolveMatchingDataColumn('pe', allColumns),
-      ].filter((columnName): columnName is string => Boolean(columnName)),
-    ),
-  );
+  const periodColumns = datasourceColumns
+    .filter(c => isPeriodColumn(c) && c.column_name && allColumns.includes(c.column_name))
+    .map(c => c.column_name as string);
 
   const extraRaw = datasourceAny?.extra;
   let extraParsed: any;
@@ -983,15 +928,7 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
       : undefined);
   const dashboardId =
     coercePositiveInteger(formDataAny?.dashboard_id) ||
-    coercePositiveInteger(formDataAny?.dashboardId) ||
-    (typeof window !== 'undefined'
-      ? coercePositiveInteger(
-          new URLSearchParams(window.location.search).get('dashboard_id'),
-        ) ||
-        coercePositiveInteger(
-          new URLSearchParams(window.location.search).get('dashboard'),
-        )
-      : undefined);
+    coercePositiveInteger(formDataAny?.dashboardId);
 
   const effectiveAggregationMethod = (() => {
     if (aggregation_method) {
@@ -1033,7 +970,6 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     linearColorScheme: linear_color_scheme || 'superset_seq_1',
     useLinearColorScheme: effectiveUseLinearColorScheme,
     chartBackgroundColor: chart_background_color,
-    labelTextColor: label_text_color,
     opacity: opacity ?? 0.7,
     strokeColor: stroke_color || { r: 255, g: 255, b: 255, a: 1 },
     strokeWidth: stroke_width ?? 1,

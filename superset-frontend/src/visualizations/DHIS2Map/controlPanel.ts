@@ -27,6 +27,7 @@ import {
   ControlPanelConfig,
   sharedControls,
 } from '@superset-ui/chart-controls';
+import { getDatasourceBoundaryLevels } from './boundaryLevels';
 
 type DatasourceColumn = {
   column_name?: string;
@@ -50,29 +51,6 @@ type CachedLegendSetEnvelope = {
   status?: string;
 };
 
-type BoundaryLevelDefinition = {
-  level: number;
-  columnName?: string;
-  label: string;
-};
-
-type HierarchyColumnCandidate = {
-  columnName?: string;
-  label: string;
-  level: number;
-  hasExplicitLevel: boolean;
-};
-
-const LEGACY_DHIS2_BOUNDARY_LEVELS: Array<[string, number]> = [
-  ['national', 1],
-  ['region', 2],
-  ['district city', 3],
-  ['dlg municipality city council', 4],
-  ['sub county town council division', 5],
-  ['health facility', 6],
-  ['ward department', 7],
-];
-
 function parseColumnExtra(extra: unknown): Record<string, any> | undefined {
   if (!extra) {
     return undefined;
@@ -88,129 +66,6 @@ function parseColumnExtra(extra: unknown): Record<string, any> | undefined {
     return extra as Record<string, any>;
   }
   return undefined;
-}
-
-function normalizeLevelName(value?: string): string {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/[_-]+/g, ' ')
-    .replace(/[()[\]{}.,/\\]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function coerceLevelNumber(value: unknown): number | undefined {
-  const numericValue = Number(value);
-  if (Number.isFinite(numericValue) && numericValue > 0) {
-    return numericValue;
-  }
-  return undefined;
-}
-
-function getLegacyBoundaryLevel(
-  columnName?: string,
-  label?: string,
-): number | undefined {
-  const normalizedNames = [
-    normalizeLevelName(columnName),
-    normalizeLevelName(label),
-  ].filter(Boolean);
-  for (const [knownName, level] of LEGACY_DHIS2_BOUNDARY_LEVELS) {
-    if (normalizedNames.includes(knownName)) {
-      return level;
-    }
-  }
-  return undefined;
-}
-
-function getHierarchyColumnCandidates(
-  datasourceColumns: DatasourceColumn[] = [],
-): HierarchyColumnCandidate[] {
-  const rawCandidates = datasourceColumns.reduce<
-    Array<{
-      explicitLevel?: number;
-      legacyLevel?: number;
-      columnName?: string;
-      label: string;
-    }>
-  >((result, column) => {
-    const extra = parseColumnExtra(column.extra);
-    const isHierarchyColumn =
-      extra?.dhis2_is_ou_hierarchy === true ||
-      extra?.dhis2IsOuHierarchy === true;
-    if (!isHierarchyColumn) {
-      return result;
-    }
-
-    const columnName = String(column.column_name || '').trim() || undefined;
-    const label =
-      String(column.verbose_name || column.column_name || '').trim() ||
-      'Boundary level';
-    result.push({
-      explicitLevel: coerceLevelNumber(
-        extra?.dhis2_ou_level ?? extra?.dhis2OuLevel,
-      ),
-      legacyLevel: getLegacyBoundaryLevel(columnName, label),
-      columnName,
-      label,
-    });
-    return result;
-  }, []);
-
-  const hasAnchoredLevels = rawCandidates.some(
-    candidate =>
-      candidate.explicitLevel !== undefined || candidate.legacyLevel !== undefined,
-  );
-
-  let fallbackLevel = 0;
-  return rawCandidates.reduce<HierarchyColumnCandidate[]>((result, candidate) => {
-    const anchoredLevel = candidate.explicitLevel ?? candidate.legacyLevel;
-    if (anchoredLevel !== undefined) {
-      result.push({
-        level: anchoredLevel,
-        hasExplicitLevel: candidate.explicitLevel !== undefined,
-        columnName: candidate.columnName,
-        label: candidate.label,
-      });
-      return result;
-    }
-
-    if (hasAnchoredLevels) {
-      return result;
-    }
-
-    fallbackLevel += 1;
-    result.push({
-      level: fallbackLevel,
-      hasExplicitLevel: false,
-      columnName: candidate.columnName,
-      label: candidate.label,
-    });
-    return result;
-  }, []);
-}
-
-function getDatasourceBoundaryLevels(
-  datasourceColumns?: DatasourceColumn[],
-): BoundaryLevelDefinition[] {
-  const definitions = new Map<number, BoundaryLevelDefinition>();
-
-  getHierarchyColumnCandidates(datasourceColumns).forEach(candidate => {
-    const existing = definitions.get(candidate.level);
-    if (existing && !candidate.hasExplicitLevel) {
-      return;
-    }
-
-    definitions.set(candidate.level, {
-      level: candidate.level,
-      columnName: candidate.columnName,
-      label: candidate.label,
-    });
-  });
-
-  return Array.from(definitions.values()).sort(
-    (left, right) => left.level - right.level,
-  );
 }
 
 function getLegendSetsCacheKey(databaseId?: number | string): string | null {
@@ -1002,18 +857,6 @@ const config: ControlPanelConfig = {
               label: t('Background color'),
               description: t('Background behind the map viewport'),
               default: { r: 255, g: 255, b: 255, a: 1 },
-              renderTrigger: true,
-            },
-          },
-        ],
-        [
-          {
-            name: 'label_text_color',
-            config: {
-              type: 'ColorPickerControl',
-              label: t('Label text color'),
-              description: t('Text color for organisation unit labels shown inside the map'),
-              default: { r: 31, g: 41, b: 55, a: 1 },
               renderTrigger: true,
             },
           },

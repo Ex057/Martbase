@@ -262,6 +262,7 @@ export default function buildQuery(formData: QueryFormData) {
     const normalizedAggregationMethod = String(
       aggregation_method || '',
     ).toLowerCase();
+    const isLatestAggregation = normalizedAggregationMethod === 'latest';
     const usesRawMetricRows =
       normalizedAggregationMethod === 'latest' ||
       normalizedAggregationMethod === 'none';
