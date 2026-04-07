@@ -17,15 +17,11 @@
  * under the License.
  */
 import { ControlPanelSectionConfig } from '@superset-ui/chart-controls';
-import type { ControlSetItem } from '@superset-ui/chart-controls';
 
 type ControlRow = ControlPanelSectionConfig['controlSetRows'][number];
 type ControlRowItem = ControlRow[number];
-type NamedControlItem = Exclude<ControlSetItem, string | null> & {
-  name: string;
-};
 
-function isNamedControlItem(item: ControlRowItem): item is NamedControlItem {
+function isNamedControlItem(item: ControlRowItem): item is { name: string } {
   return Boolean(
     item && typeof item === 'object' && 'name' in item && item.name,
   );

@@ -127,34 +127,18 @@ const defaultProps: Partial<ChartProps> = {
   isInView: true,
 };
 
-function normalizeExplicitChartColor(value?: string): string | undefined {
-  const normalized = value?.trim().replace(/\s+/g, '').toLowerCase();
-  if (
-    !normalized ||
-    normalized === 'transparent' ||
-    /^rgba\(\d+,\d+,\d+,0(?:\.0+)?\)$/.test(normalized)
-  ) {
-    return undefined;
-  }
-
-  return value;
-}
-
 const Styles = styled.div<{
   height: number;
   width?: number;
   $backgroundColor?: string;
-  $textColor?: string;
 }>`
   min-height: ${p => p.height}px;
   position: relative;
-  background-color: ${({ $backgroundColor }) =>
-    $backgroundColor || 'transparent'};
-  --superset-chart-background-color: ${({ $backgroundColor }) =>
-    $backgroundColor || 'transparent'};
-  --superset-chart-text-color: ${({ $textColor, theme }) =>
-    $textColor || theme.colorText};
-  color: ${({ $textColor, theme }) => $textColor || theme.colorText};
+  max-width: 100%;
+  width: 100%;
+  overflow: hidden;
+  flex: 1 1 0;
+  background-color: ${({ $backgroundColor }) => $backgroundColor || 'transparent'};
 
   .chart-tooltip {
     opacity: 0.75;
@@ -167,6 +151,9 @@ const Styles = styled.div<{
     justify-content: center;
 
     height: ${p => p.height}px;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
 
     .pivot_table tbody tr {
       font-feature-settings: 'tnum' 1;
@@ -349,37 +336,15 @@ class Chart extends PureComponent<ChartProps, {}> {
       queriesResponse = [],
       width,
     } = this.props;
-    const chartBackgroundColor = normalizeExplicitChartColor(
-      colorValueToCss(
-        (
-          this.props.formData as QueryFormData & {
-            chart_background_color?: unknown;
-            chartBackgroundColor?: unknown;
-          }
-        )?.chart_background_color ??
-          (
-            this.props.formData as QueryFormData & {
-              chart_background_color?: unknown;
-              chartBackgroundColor?: unknown;
-            }
-          )?.chartBackgroundColor,
-      ),
-    );
-    const chartTextColor = normalizeExplicitChartColor(
-      colorValueToCss(
-        (
-          this.props.formData as QueryFormData & {
-            default_breakpoint_color?: unknown;
-            color_picker?: unknown;
-          }
-        )?.default_breakpoint_color ??
-          (
-            this.props.formData as QueryFormData & {
-              default_breakpoint_color?: unknown;
-              color_picker?: unknown;
-            }
-          )?.color_picker,
-      ),
+    const chartBackgroundColor = colorValueToCss(
+      (this.props.formData as QueryFormData & {
+        chart_background_color?: unknown;
+        chartBackgroundColor?: unknown;
+      })?.chart_background_color ??
+        (this.props.formData as QueryFormData & {
+          chart_background_color?: unknown;
+          chartBackgroundColor?: unknown;
+        })?.chartBackgroundColor,
     );
 
     // For staged DHIS2 local datasets the datasource is backed by a local
@@ -392,9 +357,7 @@ class Chart extends PureComponent<ChartProps, {}> {
       try {
         const extraRaw = (datasource as any)?.extra;
         const extra: Record<string, any> =
-          typeof extraRaw === 'string'
-            ? JSON.parse(extraRaw)
-            : (extraRaw ?? {});
+          typeof extraRaw === 'string' ? JSON.parse(extraRaw) : (extraRaw ?? {});
         const servingName = extra?.dhis2_serving_database_name;
         if (typeof servingName === 'string' && servingName) {
           // Always prefer the serving database name for staged DHIS2 datasets —
@@ -468,7 +431,6 @@ class Chart extends PureComponent<ChartProps, {}> {
           height={height}
           width={width}
           $backgroundColor={chartBackgroundColor}
-          $textColor={chartTextColor}
         >
           {isLoading
             ? this.renderSpinner(databaseName)

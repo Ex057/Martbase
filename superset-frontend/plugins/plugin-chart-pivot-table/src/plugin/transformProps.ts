@@ -30,10 +30,8 @@ import {
   getDHIS2PeriodColumnNames,
 } from '@superset-ui/core';
 import { GenericDataType } from '@apache-superset/core/api/core';
-import {
-  ColorFormatters,
-  getColorFormatters,
-} from '@superset-ui/chart-controls';
+import { ColorFormatters, getColorFormatters } from '@superset-ui/chart-controls';
+import { matchesBreakpoint } from 'src/explore/components/controls/ColorBreakpointsControl/colorBreakpointUtils';
 import { DateFormatter } from '../types';
 
 const { DATABASE_DATETIME } = TimeFormats;
@@ -45,61 +43,6 @@ function isNumeric(key: string, data: DataRecord[] = []) {
       record[key] === undefined ||
       typeof record[key] === 'number',
   );
-}
-
-function toFiniteNumber(value: unknown): number | undefined {
-  const numericValue =
-    typeof value === 'number' ? value : Number.parseFloat(String(value));
-  return Number.isFinite(numericValue) ? numericValue : undefined;
-}
-
-function resolveVisibleChartColor(value: unknown): string | undefined {
-  let cssColor: string | undefined;
-  if (typeof value === 'string') {
-    cssColor = value.trim() || undefined;
-  } else if (value && typeof value === 'object') {
-    const rgbaValue = value as Record<string, unknown>;
-    const r = toFiniteNumber(rgbaValue.r);
-    const g = toFiniteNumber(rgbaValue.g);
-    const b = toFiniteNumber(rgbaValue.b);
-    if (r !== undefined && g !== undefined && b !== undefined) {
-      const rawAlpha = toFiniteNumber(rgbaValue.a);
-      const alpha =
-        rawAlpha === undefined ? 1 : rawAlpha > 1 ? rawAlpha / 100 : rawAlpha;
-      cssColor = `rgba(${Math.round(r)},${Math.round(g)},${Math.round(
-        b,
-      )},${Math.max(0, Math.min(alpha, 1))})`;
-    }
-  }
-
-  const normalized = cssColor?.trim().replace(/\s+/g, '').toLowerCase();
-
-  if (
-    !normalized ||
-    normalized === 'transparent' ||
-    /^rgba\(\d+,\d+,\d+,0(?:\.0+)?\)$/.test(normalized)
-  ) {
-    return undefined;
-  }
-
-  return cssColor;
-}
-
-function matchesBreakpoint(value: number, bp: Record<string, any>): boolean {
-  const minOp = bp.minOperator ?? '>=';
-  const maxOp = bp.maxOperator ?? '<';
-
-  if (bp.minValue !== undefined && bp.minValue !== null) {
-    if (minOp === '>=' && !(value >= bp.minValue)) return false;
-    if (minOp === '>' && !(value > bp.minValue)) return false;
-  }
-
-  if (bp.maxValue !== undefined && bp.maxValue !== null) {
-    if (maxOp === '<' && !(value < bp.maxValue)) return false;
-    if (maxOp === '<=' && !(value <= bp.maxValue)) return false;
-  }
-
-  return true;
 }
 
 export default function transformProps(chartProps: ChartProps<QueryFormData>) {
@@ -233,13 +176,10 @@ export default function transformProps(chartProps: ChartProps<QueryFormData>) {
   // and getColorFromValue returning a CSS colour or undefined.
   const colorMode: string | undefined = (formData as any).color_mode;
   const breakpointsRaw: any[] | undefined = (formData as any).color_breakpoints;
-  const metricColorsMap: Record<string, string> | undefined = (formData as any)
-    .metric_colors;
-  const defaultBreakpointColor: any = (formData as any)
-    .default_breakpoint_color;
+  const metricColorsMap: Record<string, string> | undefined = (formData as any).metric_colors;
+  const defaultBreakpointColor: any = (formData as any).default_breakpoint_color;
 
-  const hasBreakpoints =
-    Array.isArray(breakpointsRaw) && breakpointsRaw.length > 0;
+  const hasBreakpoints = Array.isArray(breakpointsRaw) && breakpointsRaw.length > 0;
   const hasMetricColors =
     metricColorsMap != null && Object.keys(metricColorsMap).length > 0;
 
@@ -255,11 +195,13 @@ export default function transformProps(chartProps: ChartProps<QueryFormData>) {
   let customColorFormatters: ColorFormatters = [];
 
   const applyBreakpoints =
-    colorMode === 'breakpoints' || (colorMode == null && hasBreakpoints);
+    colorMode === 'breakpoints' ||
+    (colorMode == null && hasBreakpoints);
 
   const applyMetricColors =
     !applyBreakpoints &&
-    (colorMode === 'metric' || (colorMode == null && hasMetricColors));
+    (colorMode === 'metric' ||
+      (colorMode == null && hasMetricColors));
 
   if (applyBreakpoints && hasBreakpoints) {
     const hasDefault =
@@ -298,10 +240,6 @@ export default function transformProps(chartProps: ChartProps<QueryFormData>) {
     colorMode === 'breakpoints' || colorMode === 'metric'
       ? customColorFormatters
       : [...customColorFormatters, ...conditionalColorFormatters];
-  const chartBackgroundColor = resolveVisibleChartColor(
-    (formData as any).chart_background_color ??
-      (formData as any).chartBackgroundColor,
-  );
 
   return {
     width,
@@ -333,7 +271,6 @@ export default function transformProps(chartProps: ChartProps<QueryFormData>) {
     metricsLayout,
     metricColorFormatters,
     dateFormatters,
-    ...(chartBackgroundColor && { chartBackgroundColor }),
     onContextMenu,
     timeGrainSqla,
     allowRenderHtml,

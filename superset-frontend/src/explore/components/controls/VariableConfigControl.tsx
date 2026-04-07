@@ -180,6 +180,31 @@ const ColorFieldRow = styled.div`
   align-items: center;
 `;
 
+const ColorSwatch = styled.div<{ $color?: string }>`
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--pro-border, #E5EAF0);
+  background: ${({ $color }) => $color || 'transparent'};
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+
+  ${({ $color }) =>
+    !$color
+      ? `
+    &::after {
+      content: '';
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 1px; height: 16px;
+      background: var(--pro-text-muted, #9CA3AF);
+      transform: translate(-50%, -50%) rotate(45deg);
+    }
+  `
+      : ''}
+`;
+
 const ClearButton = styled.button`
   font-size: 11px;
   padding: 2px 6px;

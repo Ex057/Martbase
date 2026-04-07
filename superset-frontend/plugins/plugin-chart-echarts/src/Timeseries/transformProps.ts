@@ -83,6 +83,11 @@ import {
   getAnnotationData,
 } from '../utils/annotation';
 import {
+  discoverOuLevels,
+  findOuGroupbyColumn,
+  getChildLevel,
+} from '../utils/ouDrillDown';
+import {
   extractForecastSeriesContext,
   extractForecastSeriesContexts,
   extractForecastValuesFromTooltipParams,
@@ -177,6 +182,7 @@ export default function transformProps(
     seriesType,
     showLegend,
     showValue,
+    labelPosition,
     sliceId,
     sortSeriesType,
     sortSeriesAscending,
@@ -382,6 +388,7 @@ export default function transformProps(
               labelMap?.[seriesName]?.[0],
             ) ?? defaultFormatter),
         showValue,
+        labelPosition,
         onlyTotal,
         totalStackedValues: sortedTotalValues,
         showValueIndexes,
@@ -838,6 +845,21 @@ export default function transformProps(
   const onFocusedSeries = (seriesName: string | null) => {
     focusedSeries = seriesName;
   };
+
+  // ── OU drill-down metadata ──
+  const ouLevels = discoverOuLevels(columns as any[]);
+  const currentOuLevel = findOuGroupbyColumn(groupBy, ouLevels);
+  const childOuLevel = currentOuLevel
+    ? getChildLevel(currentOuLevel.level, ouLevels)
+    : undefined;
+  const drillMeta = {
+    ouLevels,
+    currentOuLevel,
+    childOuLevel,
+    canDrill: !!childOuLevel,
+    originalOuColumn: currentOuLevel?.columnName,
+  };
+
   return {
     echartOptions,
     emitCrossFilters,
@@ -861,5 +883,6 @@ export default function transformProps(
     refs,
     coltypeMapping: dataTypes,
     onLegendScroll,
+    drillMeta,
   };
 }

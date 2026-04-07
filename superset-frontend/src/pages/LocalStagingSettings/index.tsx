@@ -1128,8 +1128,8 @@ export default function LocalStagingSettingsPage() {
     threads: 2,
   });
   const [clickhouseInitialValues, setClickhouseInitialValues] = useState<ClickHouseConfig>({
-    host: '127.0.0.1',
-    http_port: 8124,
+    host: '',
+    http_port: 8123,
     database: 'dhis2_staging',
     serving_database: 'dhis2_serving',
     user: 'dhis2_user',

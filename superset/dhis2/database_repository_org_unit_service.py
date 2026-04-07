@@ -191,23 +191,9 @@ class DatabaseRepositoryOrgUnitService:
         database_id: int,
     ) -> None:
         session = db.session()
-        flask_app = current_app._get_current_object() if has_app_context() else None
 
         def _fire() -> None:
             cls.schedule_finalization(database_id)
-
-        def _fire_with_app_context() -> None:
-            if flask_app is not None:
-                with flask_app.app_context():
-                    _fire()
-                return
-            _fire()
-
-        def _defer_fire() -> None:
-            # Avoid issuing new SQL from the session that just committed.
-            timer = threading.Timer(0, _fire_with_app_context)
-            timer.daemon = True
-            timer.start()
 
         def _remove_listener(event_name: str, callback: Any) -> None:
             try:
@@ -217,7 +203,7 @@ class DatabaseRepositoryOrgUnitService:
 
         def _after_commit(_session: Any) -> None:
             try:
-                _defer_fire()
+                _fire()
             except Exception:  # pylint: disable=broad-except
                 logger.warning(
                     "Deferred repository finalization scheduling failed for database id=%s",

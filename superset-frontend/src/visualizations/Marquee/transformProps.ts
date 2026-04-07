@@ -23,55 +23,7 @@ import {
   getNumberFormatter,
   t,
 } from '@superset-ui/core';
-import { colorValueToCss } from 'src/utils/colorValue';
-import {
-  MarqueeChartProps,
-  MarqueeColorThreshold,
-  MarqueeFormData,
-  MarqueeKpiItem,
-} from './types';
-
-const DEFAULT_LABEL_COLOR = '#6b7280';
-const DEFAULT_VALUE_COLOR = '#111827';
-const DEFAULT_SUBTITLE_COLOR = '#9ca3af';
-const DEFAULT_CONTAINER_BACKGROUND = 'transparent';
-
-function normalizeColorLiteral(value: string | undefined): string | undefined {
-  return value?.trim().replace(/\s+/g, '').toLowerCase();
-}
-
-function isTransparentColor(value: string | undefined): boolean {
-  const normalized = normalizeColorLiteral(value);
-  if (!normalized) {
-    return true;
-  }
-  return (
-    normalized === 'transparent' ||
-    /^rgba\(\d+,\d+,\d+,0(?:\.0+)?\)$/.test(normalized)
-  );
-}
-
-function resolveCssColor(value: unknown): string | undefined {
-  return colorValueToCss(value);
-}
-
-function isMatchingDefaultColor(
-  value: unknown,
-  defaults: readonly string[],
-): boolean {
-  const normalizedRaw =
-    typeof value === 'string' ? normalizeColorLiteral(value) : undefined;
-  const normalizedCss = normalizeColorLiteral(resolveCssColor(value));
-  const normalizedDefaults = defaults.map(defaultValue =>
-    normalizeColorLiteral(defaultValue),
-  );
-
-  return normalizedDefaults.some(
-    defaultValue =>
-      Boolean(defaultValue) &&
-      (normalizedRaw === defaultValue || normalizedCss === defaultValue),
-  );
-}
+import { MarqueeChartProps, MarqueeFormData, MarqueeKpiItem, ColorThreshold } from './types';
 
 function resolveMetricLabel(metric: any, index: number): string {
   if (typeof metric === 'string') return metric;
@@ -87,11 +39,7 @@ function resolveMetricLabel(metric: any, index: number): string {
   return `${t('Metric')} ${index + 1}`;
 }
 
-function resolveMetricValue(
-  row: Record<string, any>,
-  metric: any,
-  index: number,
-) {
+function resolveMetricValue(row: Record<string, any>, metric: any, index: number) {
   const candidateKeys = new Set<string>();
 
   if (typeof metric === 'string') {
@@ -121,38 +69,40 @@ function resolveMetricValue(
   return undefined;
 }
 
-function formatDelta(value: number | null | undefined): {
-  str: string;
-  positive: boolean;
-} {
+function formatDelta(value: number | null | undefined): { str: string; positive: boolean } {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return { str: '', positive: true };
   }
   const positive = value >= 0;
   const abs = Math.abs(value);
-  const str = positive
-    ? `+${abs.toLocaleString()}`
-    : `-${abs.toLocaleString()}`;
+  const str = positive ? `+${abs.toLocaleString()}` : `-${abs.toLocaleString()}`;
   return { str, positive };
 }
 
-export default function transformProps(
-  chartProps: ChartProps,
-): MarqueeChartProps {
+/**
+ * Parse color threshold string: "50:#D32F2F;80:#F9A825;100:#2E7D32"
+ * Each entry is value:hexColor separated by semicolons.
+ */
+function parseColorThresholds(raw: string | undefined | null): ColorThreshold[] {
+  if (!raw || typeof raw !== 'string') return [];
+  return raw
+    .split(';')
+    .map(entry => entry.trim())
+    .filter(Boolean)
+    .map(entry => {
+      const colonIdx = entry.indexOf(':');
+      if (colonIdx === -1) return null;
+      const val = parseFloat(entry.slice(0, colonIdx).trim());
+      const color = entry.slice(colonIdx + 1).trim();
+      if (Number.isNaN(val) || !color) return null;
+      return { value: val, color };
+    })
+    .filter((t): t is ColorThreshold => t !== null);
+}
+
+export default function transformProps(chartProps: ChartProps): MarqueeChartProps {
   const { formData, queriesData, height, width } = chartProps;
   const fd = formData as MarqueeFormData;
-  const defaultTextColor = resolveCssColor(
-    fd.default_breakpoint_color ?? fd.color_picker,
-  );
-  const sharedTextColor = isTransparentColor(defaultTextColor)
-    ? undefined
-    : defaultTextColor;
-  const chartBackgroundColor = resolveCssColor(
-    fd.chart_background_color ?? fd.chartBackgroundColor,
-  );
-  const sharedBackgroundColor = isTransparentColor(chartBackgroundColor)
-    ? undefined
-    : chartBackgroundColor;
 
   const metrics: any[] = fd.metrics || [];
   const numberFormat = fd.number_format || 'SMART_NUMBER';
@@ -160,52 +110,7 @@ export default function transformProps(
   const prefix = fd.prefix || '';
   const suffix = fd.suffix || '';
   const nullText = fd.null_text || t('N/A');
-  const labelColor = isMatchingDefaultColor(fd.label_color, [
-    DEFAULT_LABEL_COLOR,
-    'rgba(107,114,128,1)',
-  ])
-    ? sharedTextColor || DEFAULT_LABEL_COLOR
-    : resolveCssColor(fd.label_color) || DEFAULT_LABEL_COLOR;
-  const valueColor = isMatchingDefaultColor(fd.value_color, [
-    DEFAULT_VALUE_COLOR,
-    'rgba(17,24,39,1)',
-  ])
-    ? sharedTextColor || DEFAULT_VALUE_COLOR
-    : resolveCssColor(fd.value_color) || DEFAULT_VALUE_COLOR;
-  const subtitleColor = isMatchingDefaultColor(fd.subtitle_color, [
-    DEFAULT_SUBTITLE_COLOR,
-    'rgba(156,163,175,1)',
-  ])
-    ? sharedTextColor || DEFAULT_SUBTITLE_COLOR
-    : resolveCssColor(fd.subtitle_color) || DEFAULT_SUBTITLE_COLOR;
-  const containerBackground = isMatchingDefaultColor(fd.container_background, [
-    DEFAULT_CONTAINER_BACKGROUND,
-    'rgba(255,255,255,0)',
-    'rgba(0,0,0,0)',
-  ])
-    ? sharedBackgroundColor || DEFAULT_CONTAINER_BACKGROUND
-    : resolveCssColor(fd.container_background) || DEFAULT_CONTAINER_BACKGROUND;
-  const colorThresholds: MarqueeColorThreshold[] = (
-    fd.color_thresholds || []
-  )
-    .map(threshold => {
-      const numericValue = Number(threshold?.value);
-      const color = resolveCssColor(threshold?.color);
 
-      if (Number.isNaN(numericValue) || !color) {
-        return null;
-      }
-
-      return {
-        value: numericValue,
-        color,
-      };
-    })
-    .filter(
-      (threshold): threshold is MarqueeColorThreshold => threshold !== null,
-    );
-
-  // Extract the first (aggregated) row from query results
   const row = queriesData?.[0]?.data?.[0] || {};
 
   const items: MarqueeKpiItem[] = metrics.map((metric, index) => {
@@ -232,12 +137,10 @@ export default function transformProps(
       label,
       value: numericValue,
       formattedValue,
-      deltaValue,
+      deltaValue: deltaValue,
       formattedDelta: delta.str || undefined,
       deltaPositive: delta.positive,
-      subtitle: fd.subtitle_column
-        ? String(row[fd.subtitle_column] ?? '')
-        : undefined,
+      subtitle: fd.subtitle_column ? String(row[fd.subtitle_column] ?? '') : undefined,
       prefix,
       suffix,
     };
@@ -253,35 +156,35 @@ export default function transformProps(
     pauseOnHover: fd.pause_on_hover ?? true,
     autoLoop: fd.auto_loop ?? true,
     scrollDirection: fd.scroll_direction || 'forward',
-    variant: fd.variant || 'default',
-    colorThresholds,
     itemSpacing: fd.item_spacing ?? 12,
     itemPadding: fd.item_padding ?? 16,
-    itemMinWidth: fd.item_min_width ?? 140,
-    itemMaxWidth: fd.item_max_width ?? 260,
-    containerHeight: fd.container_height ?? 72,
-    gapBetweenItems: fd.gap_between_items ?? 32,
-    labelFontSize: fd.label_font_size ?? 11,
-    labelFontWeight: fd.label_font_weight || '500',
-    labelColor,
-    valueFontSize: fd.value_font_size ?? 22,
+    itemMinWidth: fd.item_min_width ?? 160,
+    itemMaxWidth: fd.item_max_width ?? 280,
+    containerHeight: fd.container_height ?? 80,
+    gapBetweenItems: fd.gap_between_items ?? 16,
+    labelFontSize: fd.label_font_size ?? 10,
+    labelFontWeight: fd.label_font_weight || '600',
+    labelColor: fd.label_color || '#64748B',
+    valueFontSize: fd.value_font_size ?? 24,
     valueFontWeight: fd.value_font_weight || '700',
-    valueColor,
+    valueColor: fd.value_color || 'var(--pro-text-primary)',
     subtitleFontSize: fd.subtitle_font_size ?? 11,
-    subtitleColor,
-    containerBackground,
-    itemBackground: resolveCssColor(fd.item_background) || '#ffffff',
-    itemBorderColor: resolveCssColor(fd.item_border_color) || '#e5e7eb',
+    subtitleColor: fd.subtitle_color || '#94A3B8',
+    containerBackground: fd.container_background || 'transparent',
+    itemBackground: fd.item_background || '#ffffff',
+    itemBorderColor: fd.item_border_color || '#E5EAF0',
     itemBorderWidth: fd.item_border_width ?? 1,
-    itemBorderRadius: fd.item_border_radius ?? 8,
+    itemBorderRadius: fd.item_border_radius ?? 10,
     showShadow: fd.show_shadow ?? true,
-    hoverBackground: resolveCssColor(fd.hover_background) || '#f9fafb',
-    deltaPositiveColor: resolveCssColor(fd.delta_positive_color) || '#10b981',
-    deltaNegativeColor: resolveCssColor(fd.delta_negative_color) || '#ef4444',
-    dividerColor: resolveCssColor(fd.divider_color) || '#e5e7eb',
+    hoverBackground: fd.hover_background || '#f8fafc',
+    deltaPositiveColor: fd.delta_positive_color || 'var(--pro-success)',
+    deltaNegativeColor: fd.delta_negative_color || 'var(--pro-danger)',
+    dividerColor: fd.divider_color || '#E5EAF0',
     showLabel: fd.show_label ?? true,
     showSubtitle: fd.show_subtitle ?? true,
     showDelta: fd.show_delta ?? true,
     showSeparators: fd.show_separators ?? false,
+    variant: fd.variant || 'default',
+    colorThresholds: parseColorThresholds(fd.color_thresholds),
   };
 }

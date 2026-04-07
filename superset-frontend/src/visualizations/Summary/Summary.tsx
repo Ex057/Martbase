@@ -17,15 +17,18 @@
  * under the License.
  */
 /* eslint-disable theme-colors/no-literal-colors */
-import { styled } from '@superset-ui/core';
-import type {
+import React, { useState, useCallback, useMemo } from 'react';
+import { styled, t } from '@superset-ui/core';
+import {
   SummaryTransformedProps,
   SummaryItem,
+  SummaryGroup,
   TrendDisplay,
   TrendLogic,
   Layout,
   Alignment,
   BorderStyle,
+  ImagePlacement,
 } from './types';
 
 /* ── Styled Components ─────────────────────────────── */
@@ -68,7 +71,9 @@ const Grid = styled.div<GridProps>`
     return 'none';
   }};
   flex-direction: ${({ $layout }) =>
-    $layout === 'vertical' || $layout === 'split' ? 'column' : 'row'};
+    $layout === 'vertical' || $layout === 'split' || $layout === 'summary-row'
+      ? 'column'
+      : 'row'};
   flex-wrap: ${({ $layout }) =>
     $layout === 'horizontal' ? 'wrap' : 'nowrap'};
   gap: ${({ $gap }) => $gap}px;
@@ -76,7 +81,13 @@ const Grid = styled.div<GridProps>`
   height: 100%;
   width: 100%;
   align-content: start;
-  align-items: ${({ $alignment }) => {
+  align-items: ${({ $layout, $alignment }) => {
+    /* Grid: always stretch cards to equal height; Card uses justify-content
+       to vertically center its own content. Flex: respect alignment.
+       summary-row: always stretch to full width. */
+    if ($layout === 'grid' || $layout === 'micro-card' || $layout === 'compact-kpi')
+      return 'stretch';
+    if ($layout === 'summary-row') return 'stretch';
     if ($alignment === 'center') return 'center';
     if ($alignment === 'end') return 'flex-end';
     if ($alignment === 'stretch') return 'stretch';
@@ -85,8 +96,7 @@ const Grid = styled.div<GridProps>`
   justify-items: ${({ $alignment }) => {
     if ($alignment === 'center') return 'center';
     if ($alignment === 'end') return 'end';
-    if ($alignment === 'stretch') return 'stretch';
-    return 'start';
+    return 'stretch';
   }};
 `;
 
@@ -107,23 +117,30 @@ const Card = styled.div<CardProps>`
   position: relative;
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  align-items: ${({ $alignment }) => {
+    if ($alignment === 'stretch') return 'stretch';
+    if ($alignment === 'center') return 'center';
+    if ($alignment === 'end') return 'flex-end';
+    return 'stretch';
+  }};
   padding: ${({ $padding }) => $padding}px;
   border-radius: ${({ $cardStyle, $borderRadius }) =>
     $cardStyle !== 'transparent' ? `${$borderRadius}px` : '0'};
   background: ${({ $cardStyle, $cardBgColor }) => {
     if ($cardBgColor) return $cardBgColor;
     if ($cardStyle === 'elevated' || $cardStyle === 'flat')
-      return 'var(--pro-bg-card, #FFFFFF)';
+      return 'var(--pro-bg-card)';
     return 'transparent';
   }};
   box-shadow: ${({ $cardStyle }) =>
     $cardStyle === 'elevated'
-      ? 'var(--pro-shadow-sm, 0 1px 3px rgba(13,59,102,0.06))'
+      ? 'var(--pro-shadow-sm)'
       : 'none'};
   border: ${({ $cardStyle, $borderWidth, $borderColor, $borderStyle }) => {
     if ($borderStyle === 'none' || $borderWidth === 0) return 'none';
     if ($cardStyle === 'transparent') return 'none';
-    const color = $borderColor || 'var(--pro-border, #E5EAF0)';
+    const color = $borderColor || 'var(--pro-border)';
     return `${$borderWidth}px ${$borderStyle} ${color}`;
   }};
   border-bottom: ${({
@@ -133,7 +150,7 @@ const Card = styled.div<CardProps>`
     $borderStyle,
   }) =>
     $cardStyle === 'transparent' && $showDivider
-      ? `1px ${$borderStyle || 'solid'} ${$borderColor || 'var(--pro-border, #E5EAF0)'}`
+      ? `1px ${$borderStyle || 'solid'} ${$borderColor || 'var(--pro-border)'}`
       : undefined};
   overflow: hidden;
   transition: box-shadow 0.15s ease;
@@ -162,7 +179,7 @@ const Card = styled.div<CardProps>`
   &:hover {
     box-shadow: ${({ $cardStyle }) =>
       $cardStyle === 'elevated'
-        ? 'var(--pro-shadow-md, 0 4px 12px rgba(13,59,102,0.08))'
+        ? 'var(--pro-shadow-md)'
         : 'none'};
   }
 `;
@@ -171,20 +188,34 @@ const Card = styled.div<CardProps>`
 const ContentColumn = styled.div`
   display: flex;
   flex-direction: column;
+  align-items: inherit;
+  width: 100%;
 `;
 
 const ContentRow = styled.div<{ $reverse?: boolean }>`
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
+  justify-content: inherit;
   gap: 12px;
+  width: 100%;
   flex-direction: ${({ $reverse }) => ($reverse ? 'row-reverse' : 'row')};
 `;
 
 const ContentInline = styled.div`
   display: flex;
   align-items: baseline;
+  justify-content: inherit;
   gap: 8px;
+  width: 100%;
+`;
+
+/** Summary-row layout: label left, value pushed to far right */
+const ContentSummaryRow = styled.div`
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
 `;
 
 interface LabelProps {
@@ -198,7 +229,7 @@ const LabelText = styled.div<LabelProps>`
   font-size: ${({ $size }) => $size};
   font-weight: ${({ $weight }) => $weight};
   color: ${({ $color }) =>
-    $color || 'var(--pro-text-secondary, #6B7280)'};
+    $color || 'var(--pro-text-secondary)'};
   text-transform: ${({ $transform }) => $transform};
   letter-spacing: 0.04em;
   line-height: 1.3;
@@ -210,9 +241,9 @@ const LabelText = styled.div<LabelProps>`
 const SubtitleText = styled.div`
   font-size: 11px;
   font-weight: 400;
-  color: var(--pro-text-muted, #9CA3AF);
+  color: var(--pro-text-muted);
   line-height: 1.3;
-  margin-top: 1px;
+  margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -259,7 +290,7 @@ interface ValueProps {
 const ValueText = styled.div<ValueProps>`
   font-size: ${({ $size }) => $size};
   font-weight: ${({ $weight }) => $weight};
-  color: ${({ $color }) => $color || 'var(--pro-text-primary, #1A1F2C)'};
+  color: ${({ $color }) => $color || 'var(--pro-text-primary)'};
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
   white-space: nowrap;
@@ -268,6 +299,7 @@ const ValueText = styled.div<ValueProps>`
 const TrendRow = styled.div`
   display: flex;
   align-items: center;
+  justify-content: inherit;
   gap: 4px;
   margin-top: 4px;
 `;
@@ -287,29 +319,30 @@ const TrendBadge = styled.span<TrendBadgeProps>`
   border-radius: var(--pro-radius-chip, 999px);
   background: ${({ $positive }) =>
     $positive
-      ? 'var(--pro-success-bg, rgba(46,125,50,0.08))'
-      : 'var(--pro-danger-bg, rgba(211,47,47,0.08))'};
+      ? 'var(--pro-success-bg)'
+      : 'var(--pro-danger-bg)'};
   color: ${({ $positive }) =>
     $positive
-      ? 'var(--pro-success, #2E7D32)'
-      : 'var(--pro-danger, #D32F2F)'};
+      ? 'var(--pro-success)'
+      : 'var(--pro-danger)'};
 `;
 
 const FlatTrend = styled.span`
   font-size: 12px;
-  color: var(--pro-text-muted, #9CA3AF);
+  color: var(--pro-text-muted);
 `;
 
 /* ── Micro Visualization components ──────────────── */
 
 const MicroVizContainer = styled.div`
   margin-top: 8px;
+  width: 100%;
 `;
 
 const ProgressTrack = styled.div`
   width: 100%;
   height: 6px;
-  background: var(--pro-border, #E5EAF0);
+  background: var(--pro-border);
   border-radius: 3px;
   overflow: hidden;
 `;
@@ -332,8 +365,75 @@ const EmptyState = styled.div`
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--pro-text-muted, #9CA3AF);
+  color: var(--pro-text-muted);
   font-size: 14px;
+`;
+
+/* ── Group header ──────────────────────────────────── */
+
+const GroupSection = styled.div`
+  &:not(:first-of-type) {
+    margin-top: 6px;
+  }
+`;
+
+const GroupHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--pro-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--pro-border);
+  margin-bottom: 4px;
+`;
+
+/* ── Pagination controls ──────────────────────────── */
+
+const PaginationBar = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 8px;
+  flex-shrink: 0;
+`;
+
+const PageButton = styled.button<{ $disabled?: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--pro-border);
+  border-radius: 6px;
+  background: ${({ $disabled }) =>
+    $disabled ? 'var(--pro-bg-card)' : 'var(--pro-bg-card)'};
+  color: ${({ $disabled }) =>
+    $disabled
+      ? 'var(--pro-text-muted)'
+      : 'var(--pro-text-primary)'};
+  font-size: 12px;
+  font-weight: 600;
+  cursor: ${({ $disabled }) => ($disabled ? 'default' : 'pointer')};
+  pointer-events: ${({ $disabled }) => ($disabled ? 'none' : 'auto')};
+  transition: background 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    background: var(--pro-bg-hover);
+    border-color: var(--pro-border-hover);
+  }
+`;
+
+const PageInfo = styled.span`
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--pro-text-secondary);
+  white-space: nowrap;
 `;
 
 /* ── Sparkline SVG ─────────────────────────────────── */
@@ -439,14 +539,14 @@ function BulletIndicator({
   const markerX = (pct / 100) * width;
 
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ color: 'var(--pro-border)' }}>
       <rect
         x={0}
         y={(height - barH) / 2}
         width={width}
         height={barH}
         rx={barH / 2}
-        fill="#E5EAF0"
+        fill="currentColor"
       />
       <rect
         x={0}
@@ -512,6 +612,8 @@ export default function Summary(props: SummaryTransformedProps) {
     width,
     height,
     items,
+    groups,
+    groupsPerPage = 6,
     layoutMode,
     gridColumns,
     valuePosition,
@@ -542,10 +644,31 @@ export default function Summary(props: SummaryTransformedProps) {
     borderStyle,
   } = props;
 
-  if (!items || items.length === 0) {
+  const isGrouped = groups && groups.length > 0;
+  const totalGroups = groups?.length ?? 0;
+  const totalPages = isGrouped
+    ? Math.ceil(totalGroups / groupsPerPage)
+    : 1;
+
+  const [page, setPage] = useState(0);
+  const safeSetPage = useCallback(
+    (p: number) => setPage(Math.max(0, Math.min(p, totalPages - 1))),
+    [totalPages],
+  );
+
+  const visibleGroups = useMemo(() => {
+    if (!isGrouped) return [];
+    const start = page * groupsPerPage;
+    return groups!.slice(start, start + groupsPerPage);
+  }, [isGrouped, groups, page, groupsPerPage]);
+
+  if (
+    (!isGrouped && (!items || items.length === 0)) ||
+    (isGrouped && totalGroups === 0)
+  ) {
     return (
       <Wrapper $fontFamily={fontFamily} style={{ width, height }}>
-        <EmptyState>No metrics configured</EmptyState>
+        <EmptyState>{t('No metrics configured')}</EmptyState>
       </Wrapper>
     );
   }
@@ -575,6 +698,16 @@ export default function Summary(props: SummaryTransformedProps) {
         {item.subtitle && <SubtitleText>{item.subtitle}</SubtitleText>}
       </>
     ) : null;
+
+    /* summary-row always renders label left, value far right */
+    if (layoutMode === 'summary-row') {
+      return (
+        <ContentSummaryRow>
+          <div>{labelEl}</div>
+          {valueEl}
+        </ContentSummaryRow>
+      );
+    }
 
     let inner;
     switch (valuePosition) {
@@ -697,48 +830,93 @@ export default function Summary(props: SummaryTransformedProps) {
     );
   };
 
+  const renderCards = (cardItems: SummaryItem[]) => (
+    <Grid
+      $layout={layoutMode}
+      $columns={gridColumns}
+      $gap={itemGap}
+      $padding={itemPadding}
+      $alignment={alignment}
+    >
+      {cardItems.map((item, idx) => (
+        <Card
+          key={item.key}
+          $cardStyle={cardStyle}
+          $borderRadius={itemBorderRadius}
+          $padding={
+            cardStyle !== 'transparent' ? itemPadding : itemPadding / 2
+          }
+          $showDivider={showDividers && idx < cardItems.length - 1}
+          $statusColor={item.statusColor}
+          $borderWidth={borderWidth}
+          $borderColor={item.borderColor || borderColor}
+          $borderStyle={borderStyle}
+          $alignment={alignment}
+          $cardBgColor={item.cardColor}
+        >
+          {renderContent(item)}
+
+          {showTrendIndicator && item.trendValue !== undefined && (
+            <TrendRow>
+              <TrendIndicator
+                direction={item.trendDirection}
+                formattedValue={item.formattedTrendValue}
+                display={trendDisplay}
+                logic={trendLogic}
+              />
+            </TrendRow>
+          )}
+
+          {renderMicroViz(item)}
+        </Card>
+      ))}
+    </Grid>
+  );
+
+  /* ── Flat mode (no groupby) ──────────────────────── */
+  if (!isGrouped) {
+    return (
+      <Wrapper $fontFamily={fontFamily} style={{ width, height }}>
+        {renderCards(items)}
+      </Wrapper>
+    );
+  }
+
+  /* ── Grouped + paginated mode ────────────────────── */
   return (
-    <Wrapper $fontFamily={fontFamily} style={{ width, height }}>
-      <Grid
-        $layout={layoutMode}
-        $columns={gridColumns}
-        $gap={itemGap}
-        $padding={itemPadding}
-        $alignment={alignment}
-      >
-        {items.map((item, idx) => (
-          <Card
-            key={item.key}
-            $cardStyle={cardStyle}
-            $borderRadius={itemBorderRadius}
-            $padding={
-              cardStyle !== 'transparent' ? itemPadding : itemPadding / 2
-            }
-            $showDivider={showDividers && idx < items.length - 1}
-            $statusColor={item.statusColor}
-            $borderWidth={borderWidth}
-            $borderColor={item.borderColor || borderColor}
-            $borderStyle={borderStyle}
-            $alignment={alignment}
-            $cardBgColor={item.cardColor}
-          >
-            {renderContent(item)}
-
-            {showTrendIndicator && item.trendValue !== undefined && (
-              <TrendRow>
-                <TrendIndicator
-                  direction={item.trendDirection}
-                  formattedValue={item.formattedTrendValue}
-                  display={trendDisplay}
-                  logic={trendLogic}
-                />
-              </TrendRow>
-            )}
-
-            {renderMicroViz(item)}
-          </Card>
+    <Wrapper
+      $fontFamily={fontFamily}
+      style={{ width, height, display: 'flex', flexDirection: 'column' }}
+    >
+      <div style={{ flex: '1 1 auto', overflow: 'auto' }}>
+        {visibleGroups.map((group: SummaryGroup) => (
+          <GroupSection key={group.groupKey}>
+            <GroupHeader>{group.groupLabel}</GroupHeader>
+            {renderCards(group.items)}
+          </GroupSection>
         ))}
-      </Grid>
+      </div>
+
+      {totalPages > 1 && (
+        <PaginationBar>
+          <PageButton
+            $disabled={page === 0}
+            onClick={() => safeSetPage(page - 1)}
+          >
+            ‹
+          </PageButton>
+          <PageInfo>
+            {page + 1} / {totalPages}
+            {' '}({totalGroups} {t('groups')})
+          </PageInfo>
+          <PageButton
+            $disabled={page >= totalPages - 1}
+            onClick={() => safeSetPage(page + 1)}
+          >
+            ›
+          </PageButton>
+        </PaginationBar>
+      )}
     </Wrapper>
   );
 }

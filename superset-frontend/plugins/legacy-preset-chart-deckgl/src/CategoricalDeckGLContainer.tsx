@@ -200,8 +200,6 @@ const CategoricalDeckGLContainer = (props: CategoricalDeckGLContainerProps) => {
             const breakpointForPoint: ColorBreakpointType =
               fd.color_breakpoints?.find(
                 (breakpoint: ColorBreakpointType) =>
-                  typeof breakpoint.minValue === 'number' &&
-                  typeof breakpoint.maxValue === 'number' &&
                   d.metric >= breakpoint.minValue &&
                   d.metric <= breakpoint.maxValue,
               );

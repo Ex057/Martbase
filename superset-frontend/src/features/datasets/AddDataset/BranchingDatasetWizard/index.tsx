@@ -37,7 +37,7 @@ import {
 } from 'antd';
 
 import { useToasts } from 'src/components/MessageToasts/withToasts';
-import type { DatabaseObject } from 'src/features/databases/types';
+import type { DatabaseObject } from 'src/components';
 import type {
   DatabaseRepositoryEnabledDimensions,
   RepositoryEnabledGroupDimension,
@@ -90,11 +90,6 @@ type RepositoryDimensionOption = {
   value: string;
   label: string;
 };
-type WorkflowDatabase = Partial<DatabaseObject> &
-  Pick<DatabaseObject, 'id' | 'database_name'> & {
-    backend?: string;
-    allow_multi_catalog?: boolean;
-  };
 
 interface SelectedOrgUnitDetail {
   id: string;
@@ -162,7 +157,7 @@ interface VariableMapping {
 interface WorkflowState {
   datasetType: DatasetType | null;
   sourceKind: 'dhis2' | 'database' | 'table' | 'sql' | null;
-  database: WorkflowDatabase | null;
+  database: DatabaseObject | null;
   databaseId: number | null;
   dhis2SourceId: number | null;
   stagingCapabilities: StagingCapabilities | null;
@@ -210,7 +205,7 @@ interface WorkflowState {
 
 type WorkflowAction =
   | { type: 'SET_DATASET_TYPE'; payload: DatasetType | null }
-  | { type: 'SET_SOURCE'; payload: WorkflowDatabase | null }
+  | { type: 'SET_SOURCE'; payload: DatabaseObject | null }
   | {
       type: 'SET_SOURCE_METADATA';
       payload: {
@@ -389,7 +384,7 @@ const USER_SCOPE_IDS = new Set([
   'USER_ORGUNIT_GRANDCHILDREN',
 ]);
 
-function buildFallbackCapabilities(database: WorkflowDatabase | null): StagingCapabilities {
+function buildFallbackCapabilities(database: DatabaseObject | null): StagingCapabilities {
   const sourceType = database?.backend === 'dhis2' ? 'dhis2' : 'sql_database';
   return {
     source_type: sourceType,
@@ -973,7 +968,7 @@ function useResponsiveShell(breakpoint = SHELL_BREAKPOINT): boolean {
 }
 
 function useAvailableDatabases() {
-  const [databases, setDatabases] = useState<WorkflowDatabase[]>([]);
+  const [databases, setDatabases] = useState<DatabaseObject[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
@@ -1004,9 +999,9 @@ function useAvailableDatabases() {
       }
 
       const nextDatabases = (
-        (response.json as { result?: WorkflowDatabase[] })?.result || []
+        (response.json as { result?: DatabaseObject[] })?.result || []
       )
-        .map((database): WorkflowDatabase => ({
+        .map(database => ({
           id: database.id,
           database_name: database.database_name,
           backend: database.backend,

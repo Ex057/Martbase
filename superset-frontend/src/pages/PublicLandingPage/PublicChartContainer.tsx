@@ -280,24 +280,6 @@ function buildEmbeddedChartCss(
           height: 100% !important;
           max-width: 100% !important;
         }
-
-        .leaflet-container,
-        .leaflet-pane,
-        .leaflet-map-pane,
-        .leaflet-overlay-pane,
-        .leaflet-marker-pane,
-        .leaflet-shadow-pane,
-        .leaflet-tooltip-pane,
-        .leaflet-popup-pane,
-        .leaflet-control-container {
-          max-width: 100% !important;
-          max-height: 100% !important;
-        }
-
-        .leaflet-container,
-        .leaflet-pane-container {
-          overflow: hidden !important;
-        }
       `
         : ''
     }

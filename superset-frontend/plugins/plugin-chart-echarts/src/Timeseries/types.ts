@@ -35,6 +35,7 @@ import {
   StackType,
   TitleFormData,
 } from '../types';
+import type { OuDrillMeta } from '../utils/ouDrillDown';
 
 export enum OrientationType {
   Vertical = 'vertical',
@@ -93,6 +94,7 @@ export type EchartsTimeseriesFormData = QueryFormData & {
   xAxisLabelRotation: number;
   xAxisLabelInterval: number | string;
   showValue: boolean;
+  labelPosition: string;
   onlyTotal: boolean;
   showExtraControls: boolean;
   percentageThreshold: number;
@@ -116,4 +118,5 @@ export type TimeseriesChartTransformedProps =
         type: AxisType;
       };
       onFocusedSeries: (series: string | null) => void;
+      drillMeta?: OuDrillMeta;
     };

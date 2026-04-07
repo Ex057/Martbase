@@ -1377,21 +1377,16 @@ function DatabaseList({
         }}
       />
       <Modal
-        show={repositoryViewerOpen}
-        onHide={handleRepositoryViewerClose}
-        onHandledPrimaryAction={handleRepositoryViewerClose}
-        primaryButtonName={t('Close')}
+        open={repositoryViewerOpen}
+        onCancel={handleRepositoryViewerClose}
+        onOk={handleRepositoryViewerClose}
+        okText={t('Close')}
+        cancelButtonProps={{ style: { display: 'none' } }}
         width={900}
         title={
           <ModalTitleWithIcon
-            title={
-              repositoryViewerDatabase?.database_name
-                ? t(
-                    'Repository Organisation Units: %s',
-                    repositoryViewerDatabase.database_name,
-                  )
-                : t('Repository Organisation Units')
-            }
+            title={t('Repository Organisation Units')}
+            subtitle={repositoryViewerDatabase?.database_name || t('Loading...')}
           />
         }
       >

@@ -42,6 +42,9 @@ import DashboardComponent from '../containers/DashboardComponent';
 import { Droppable } from './dnd/DragDroppable';
 import { GRID_GUTTER_SIZE, GRID_COLUMN_COUNT } from '../util/constants';
 import { TAB_TYPE } from '../util/componentTypes';
+import GridOverlay from './GridOverlay';
+import AddRowButton from './AddRowButton';
+import GridStackGrid from './GridStackGrid';
 
 const propTypes = {
   depth: PropTypes.number.isRequired,
@@ -53,6 +56,7 @@ const propTypes = {
   setDirectPathToChild: PropTypes.func.isRequired,
   width: PropTypes.number.isRequired,
   dashboardId: PropTypes.number,
+  addRow: PropTypes.func,
 };
 
 const defaultProps = {};
@@ -70,11 +74,17 @@ const DashboardEmptyStateContainer = styled.div`
 
 const GridContent = styled.div`
   ${({ theme, editMode }) => css`
+    position: relative;
     display: flex;
     flex-direction: column;
     /* gutters between rows */
     & > div:not(:last-child):not(.empty-droptarget) {
       ${!editMode && `margin-bottom: ${theme.sizeUnit * 4}px`};
+    }
+
+    /* Smooth transitions for layout reflow */
+    & > .dragdroppable {
+      transition: transform 0.15s ease, margin 0.15s ease;
     }
 
     .empty-droptarget {
@@ -203,6 +213,7 @@ class DashboardGrid extends PureComponent {
       setEditMode,
       dashboardId,
       theme,
+      addRow,
     } = this.props;
     const columnPlusGutterWidth =
       (width + GRID_GUTTER_SIZE) / GRID_COLUMN_COUNT;
@@ -276,7 +287,7 @@ class DashboardGrid extends PureComponent {
 
     return width < 100 ? null : (
       <>
-        {shouldDisplayEmptyState && (
+        {shouldDisplayEmptyState && !editMode && (
           <DashboardEmptyStateContainer>
             {shouldDisplayTopLevelTabEmptyState
               ? topLevelTabEmptyState
@@ -284,77 +295,21 @@ class DashboardGrid extends PureComponent {
           </DashboardEmptyStateContainer>
         )}
         <div className="dashboard-grid" ref={this.setGridRef}>
-          <GridContent
-            className="grid-content"
-            data-test="grid-content"
-            editMode={editMode}
-          >
-            {/* make the area above components droppable */}
-            {editMode && (
-              <Droppable
-                component={gridComponent}
-                depth={depth}
-                parentComponent={null}
-                index={0}
-                orientation="column"
-                onDrop={this.handleTopDropTargetDrop}
-                className={classNames({
-                  'empty-droptarget': true,
-                  'empty-droptarget--full':
-                    gridComponent?.children?.length === 0,
-                })}
-                editMode
-                dropToChild={gridComponent?.children?.length === 0}
-              >
-                {renderDraggableContent}
-              </Droppable>
-            )}
-            {gridComponent?.children?.map((id, index) => (
-              <Fragment key={id}>
-                <DashboardComponent
-                  id={id}
-                  parentId={gridComponent.id}
-                  depth={depth + 1}
-                  index={index}
-                  availableColumnCount={GRID_COLUMN_COUNT}
-                  columnWidth={columnWidth}
-                  isComponentVisible={isComponentVisible}
-                  onResizeStart={this.handleResizeStart}
-                  onResize={this.handleResize}
-                  onResizeStop={this.handleResizeStop}
-                  onChangeTab={this.handleChangeTab}
-                />
-                {/* make the area below components droppable */}
-                {editMode && (
-                  <Droppable
-                    component={gridComponent}
-                    depth={depth}
-                    parentComponent={null}
-                    index={index + 1}
-                    orientation="column"
-                    onDrop={handleComponentDrop}
-                    className="empty-droptarget"
-                    editMode
-                  >
-                    {renderDraggableContent}
-                  </Droppable>
-                )}
-              </Fragment>
-            ))}
-            {isResizing &&
-              Array(GRID_COLUMN_COUNT)
-                .fill(null)
-                .map((_, i) => (
-                  <GridColumnGuide
-                    key={`grid-column-${i}`}
-                    className="grid-column-guide"
-                    style={{
-                      left: i * GRID_GUTTER_SIZE + i * columnWidth,
-                      width: columnWidth,
-                    }}
-                  />
-                ))}
-          </GridContent>
+          {/* GridStack-powered layout — always render in edit mode so it
+              acts as a drop target even when the dashboard is empty */}
+          {(!shouldDisplayEmptyState || editMode) && (
+            <GridStackGrid
+              gridComponent={gridComponent}
+              width={width}
+              editMode={editMode}
+              isComponentVisible={isComponentVisible}
+              depth={depth}
+              handleComponentDrop={handleComponentDrop}
+              resizeComponent={this.props.resizeComponent}
+              setDirectPathToChild={this.props.setDirectPathToChild}
+            />
+          )}
+          {shouldDisplayEmptyState && editMode && dashboardEmptyState}
         </div>
       </>
     );

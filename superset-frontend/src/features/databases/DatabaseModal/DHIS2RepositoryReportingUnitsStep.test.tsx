@@ -17,7 +17,6 @@
  * under the License.
  */
 
-/* eslint-disable no-restricted-globals */
 import fetchMock from 'fetch-mock';
 import { render, waitFor } from 'spec/helpers/testing-library';
 
@@ -25,8 +24,6 @@ import DHIS2RepositoryReportingUnitsStep from './DHIS2RepositoryReportingUnitsSt
 
 const DHIS2_ORG_UNITS_ENDPOINT =
   'glob:*/api/v1/database/10/dhis2_metadata/?type=organisationUnits*&staged=true*';
-const DHIS2_INSTANCES_ENDPOINT =
-  'glob:*/api/v1/dhis2/instances/?database_id=10&include_inactive=true';
 const DHIS2_ORG_UNIT_LEVELS_ENDPOINT =
   'glob:*/api/v1/database/10/dhis2_metadata/?type=organisationUnitLevels*&staged=true*';
 const DHIS2_ORG_UNIT_GROUPS_ENDPOINT =
@@ -36,19 +33,6 @@ const DHIS2_ORG_UNIT_GROUPSETS_ENDPOINT =
 
 describe('DHIS2RepositoryReportingUnitsStep', () => {
   beforeEach(() => {
-    fetchMock.get(DHIS2_INSTANCES_ENDPOINT, {
-      result: [
-        {
-          id: 101,
-          database_id: 10,
-          name: 'National eHMIS DHIS2',
-          url: 'https://example.org',
-          auth_type: 'basic',
-          is_active: true,
-          display_order: 1,
-        },
-      ],
-    });
     fetchMock.get(DHIS2_ORG_UNITS_ENDPOINT, {
       status: 'success',
       result: [
@@ -56,15 +40,6 @@ describe('DHIS2RepositoryReportingUnitsStep', () => {
           id: 'OU_ROOT',
           displayName: 'Uganda',
           level: 1,
-          source_instance_id: 101,
-          source_instance_name: 'National eHMIS DHIS2',
-        },
-        {
-          id: 'OU_CHILD',
-          displayName: 'Kampala',
-          parent: { id: 'OU_ROOT' },
-          level: 2,
-          path: '/OU_ROOT/OU_CHILD',
           source_instance_id: 101,
           source_instance_name: 'National eHMIS DHIS2',
         },
@@ -80,7 +55,9 @@ describe('DHIS2RepositoryReportingUnitsStep', () => {
     });
     fetchMock.get(DHIS2_ORG_UNIT_LEVELS_ENDPOINT, {
       status: 'success',
-      result: [{ level: 1, displayName: 'National' }],
+      result: [
+        { level: 1, displayName: 'National' },
+      ],
     });
     fetchMock.get(DHIS2_ORG_UNIT_GROUPS_ENDPOINT, {
       status: 'success',
@@ -109,14 +86,18 @@ describe('DHIS2RepositoryReportingUnitsStep', () => {
           displayName: 'Ownership',
           source_instance_id: 101,
           source_instance_name: 'National eHMIS DHIS2',
-          organisationUnitGroups: [{ id: 'g_public', displayName: 'Public' }],
+          organisationUnitGroups: [
+            { id: 'g_public', displayName: 'Public' },
+          ],
         },
         {
           id: 'gs_settlement',
           displayName: 'Settlement',
           source_instance_id: 101,
           source_instance_name: 'National eHMIS DHIS2',
-          organisationUnitGroups: [{ id: 'g_urban', displayName: 'Urban' }],
+          organisationUnitGroups: [
+            { id: 'g_urban', displayName: 'Urban' },
+          ],
         },
       ],
     });
@@ -259,5 +240,4 @@ describe('DHIS2RepositoryReportingUnitsStep', () => {
       expect(latestValue?.validationError).toBeNull();
     });
   });
-
 });

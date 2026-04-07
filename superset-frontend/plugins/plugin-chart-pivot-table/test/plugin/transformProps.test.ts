@@ -124,18 +124,4 @@ describe('PivotTableChart transformProps', () => {
 
     expect(transformed.dateFormatters.period?.('202503')).toBe('March 2025');
   });
-
-  it('passes through an explicit chart background color', () => {
-    const coloredChartProps = new ChartProps<QueryFormData>({
-      ...chartProps,
-      formData: {
-        ...formData,
-        chart_background_color: { r: 15, g: 23, b: 42, a: 0.4 },
-      },
-    });
-
-    const transformed = transformProps(coloredChartProps);
-
-    expect(transformed.chartBackgroundColor).toBe('rgba(15,23,42,0.4)');
-  });
 });

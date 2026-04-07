@@ -188,7 +188,6 @@ class DashboardRestApi(BaseSupersetModelRestApi):
         "dhis2_filter_blueprint",
         "get_public_dashboards",
         "get_public_dashboard",
-        "get_public_dashboard_datasets",
         "get_public_entry_dashboard",
     }
     resource_name = "dashboard"
@@ -780,7 +779,6 @@ class DashboardRestApi(BaseSupersetModelRestApi):
     @expose("/<pk>/dhis2-filter-blueprint", methods=("GET",))
     @protect()
     @safe
-    @permission_name("read")
     @statsd_metrics
     @event_logger.log_this_with_context(
         action=lambda self, *args, **kwargs: f"{self.__class__.__name__}.dhis2_filter_blueprint",
@@ -813,10 +811,11 @@ class DashboardRestApi(BaseSupersetModelRestApi):
               $ref: '#/components/responses/500'
         """
         try:
-            dashboard = DashboardDAO.get_by_id_or_slug(str(pk))
-        except DashboardAccessDeniedError:
-            return self.response_403()
-        except DashboardNotFoundError:
+            from superset.daos.dashboard import DashboardDAO  # pylint: disable=import-outside-toplevel
+            dashboard = DashboardDAO.find_by_id(pk)
+        except Exception:  # pylint: disable=broad-except
+            return self.response_404()
+        if dashboard is None:
             return self.response_404()
 
         try:
@@ -2178,28 +2177,6 @@ class DashboardRestApi(BaseSupersetModelRestApi):
             logger.error(f"Error fetching public dashboards: {ex}")
             return self.response_500(message=str(ex))
 
-    def _serialize_public_dashboard_payload(
-        self,
-        dash: Dashboard,
-        *,
-        is_public_entry: bool = False,
-    ) -> dict[str, Any]:
-        return {
-            "id": dash.id,
-            "dashboard_title": dash.dashboard_title,
-            "slug": dash.slug or "",
-            "position_json": dash.position_json,
-            # Keep both keys during the transition. DashboardPage expects
-            # json_metadata, while some existing public-page code still reads
-            # metadata from this custom endpoint.
-            "json_metadata": dash.json_metadata,
-            "metadata": dash.json_metadata,
-            "css": dash.css,
-            "published": dash.published,
-            "is_public_entry": is_public_entry
-            or bool(getattr(dash, "is_public_entry", False)),
-        }
-
     @expose("/public/entry", methods=("GET",))
     @statsd_metrics
     @event_logger.log_this_with_context(
@@ -2228,22 +2205,26 @@ class DashboardRestApi(BaseSupersetModelRestApi):
                     message="No public entry dashboard has been designated"
                 )
 
-            result = self._serialize_public_dashboard_payload(
-                dash,
-                is_public_entry=True,
-            )
+            result = {
+                "id": dash.id,
+                "dashboard_title": dash.dashboard_title,
+                "slug": dash.slug or "",
+                "position_json": dash.position_json,
+                "metadata": dash.params,
+                "is_public_entry": True,
+            }
             return self.response(200, result=result)
         except Exception as ex:
             logger.error(f"Error fetching public entry dashboard: {ex}")
             return self.response_500(message=str(ex))
 
-    @expose("/public/<path:pk>", methods=("GET",))
+    @expose("/public/<int:pk>", methods=("GET",))
     @statsd_metrics
     @event_logger.log_this_with_context(
         action=lambda self, *args, **kwargs: f"{self.__class__.__name__}.get_public_dashboard",
         log_to_statsd=False,
     )
-    def get_public_dashboard(self, pk: str) -> Response:
+    def get_public_dashboard(self, pk: int) -> Response:
         """Get a single dashboard for public view (no authentication required)."""
         from flask import current_app
 
@@ -2254,10 +2235,7 @@ class DashboardRestApi(BaseSupersetModelRestApi):
             )
 
         try:
-            try:
-                dash = db.session.query(Dashboard).filter_by(id=int(pk)).first()
-            except ValueError:
-                dash = db.session.query(Dashboard).filter_by(slug=pk).first()
+            dash = db.session.query(Dashboard).filter_by(id=pk).first()
             if not dash:
                 return self.response_404()
 
@@ -2267,46 +2245,19 @@ class DashboardRestApi(BaseSupersetModelRestApi):
                     403, message="This dashboard is not published for public access"
                 )
 
-            result = self._serialize_public_dashboard_payload(dash)
+            result = {
+                "id": dash.id,
+                "dashboard_title": dash.dashboard_title,
+                "slug": dash.slug or "",
+                "position_json": dash.position_json,
+                "json_metadata": dash.params,
+                "css": dash.css or "",
+                "published": dash.published,
+                "changed_on": dash.changed_on.isoformat() if dash.changed_on else None,
+                "owners": [{"id": o.id, "first_name": o.first_name, "last_name": o.last_name} for o in (dash.owners or [])],
+                "is_public_entry": getattr(dash, "is_public_entry", False),
+            }
             return self.response(200, result=result)
         except Exception as ex:
             logger.error(f"Error fetching public dashboard {pk}: {ex}")
-            return self.response_500(message=str(ex))
-
-    @expose("/public/<path:pk>/datasets", methods=("GET",))
-    @statsd_metrics
-    @event_logger.log_this_with_context(
-        action=lambda self, *args, **kwargs: f"{self.__class__.__name__}.get_public_dashboard_datasets",
-        log_to_statsd=False,
-    )
-    def get_public_dashboard_datasets(self, pk: str) -> Response:
-        """Get datasets for a published dashboard in public view."""
-        from flask import current_app
-
-        if not current_app.config.get("PUBLIC_DASHBOARD_ENTRY_ENABLED", False):
-            return self.response(
-                403, message="Public dashboard access is not enabled on this server"
-            )
-
-        try:
-            try:
-                dash = db.session.query(Dashboard).filter_by(id=int(pk)).first()
-            except ValueError:
-                dash = db.session.query(Dashboard).filter_by(slug=pk).first()
-
-            if not dash:
-                return self.response_404()
-
-            if not dash.published:
-                return self.response(
-                    403, message="This dashboard is not published for public access"
-                )
-
-            result = [
-                self.dashboard_dataset_schema.dump(dataset)
-                for dataset in dash.datasets_trimmed_for_slices()
-            ]
-            return self.response(200, result=result)
-        except Exception as ex:
-            logger.error(f"Error fetching public dashboard datasets for {pk}: {ex}")
             return self.response_500(message=str(ex))

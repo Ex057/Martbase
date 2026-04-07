@@ -127,7 +127,7 @@ def register_metadata_dataset_as_superset_dataset(
 
     existing = None
     stale_metadata_records: list[Any] = []
-    candidates = _get_staged_local_candidates(dataset_id)
+    candidates = _get_staged_local_candidates(dataset_id, database_id=source_database_id)
     metadata_candidates: list[Any] = []
     for candidate in candidates:
         if getattr(candidate, "dataset_role", None) == DatasetRole.METADATA.value or _is_metadata_wrapper_candidate(
@@ -141,16 +141,6 @@ def register_metadata_dataset_as_superset_dataset(
         normalized_target = _normalized_dataset_name(dataset_name)
         metadata_candidates.sort(
             key=lambda candidate: (
-                0
-                if getattr(candidate, "database_id", None) == source_database_id
-                else 1,
-                0
-                if _is_metadata_wrapper_candidate(
-                    candidate,
-                    source_database_id=source_database_id,
-                    serving_table_ref=serving_table_ref,
-                )
-                else 1,
                 0
                 if str(getattr(candidate, "table_name", "") or "") == dataset_name
                 else 1
@@ -276,25 +266,17 @@ def register_metadata_dataset_as_superset_dataset(
             normalized_target = _normalized_dataset_name(dataset_name)
             retry_candidates = (
                 db.session.query(SqlaTable)
-                .filter(SqlaTable.schema.is_(None))
+                .filter(
+                    SqlaTable.database_id == source_database_id,
+                    SqlaTable.schema.is_(None),
+                )
                 .all()
             )
             matching_candidates = [
                 candidate
                 for candidate in retry_candidates
-                if (
-                    _normalized_dataset_name(getattr(candidate, "table_name", None))
-                    == normalized_target
-                    and (
-                        getattr(candidate, "dataset_role", None)
-                        == DatasetRole.METADATA.value
-                        or _is_metadata_wrapper_candidate(
-                            candidate,
-                            source_database_id=source_database_id,
-                            serving_table_ref=serving_table_ref,
-                        )
-                    )
-                )
+                if _normalized_dataset_name(getattr(candidate, "table_name", None))
+                == normalized_target
                 or _is_metadata_wrapper_candidate(
                     candidate,
                     source_database_id=source_database_id,
@@ -304,10 +286,6 @@ def register_metadata_dataset_as_superset_dataset(
             if matching_candidates:
                 matching_candidates.sort(
                     key=lambda candidate: (
-                        0
-                        if getattr(candidate, "database_id", None)
-                        == source_database_id
-                        else 1,
                         0
                         if str(getattr(candidate, "table_name", "") or "") == dataset_name
                         else 1

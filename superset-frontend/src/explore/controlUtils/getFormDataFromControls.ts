@@ -22,7 +22,7 @@ import { omit } from 'lodash';
 import { RESERVED_CHART_URL_PARAMS } from 'src/constants';
 
 export function sanitizeFormDataUrlParams(
-  formData: QueryFormData = {} as QueryFormData,
+  formData: QueryFormData = {},
 ): QueryFormData {
   if (!formData.url_params) {
     return formData;
@@ -58,7 +58,7 @@ export function getFormDataFromControls(
 
 export function getMergedFormDataWithControls(
   controlsState: ControlStateMapping,
-  baseFormData: QueryFormData = {} as QueryFormData,
+  baseFormData: QueryFormData = {},
   keysToOmit: string[] = [],
 ): QueryFormData {
   return sanitizeFormDataUrlParams(

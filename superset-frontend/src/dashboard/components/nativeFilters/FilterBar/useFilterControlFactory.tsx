@@ -33,7 +33,7 @@ import FilterDivider from './FilterControls/FilterDivider';
 export const useFilterControlFactory = (
   dataMaskSelected: DataMaskStateWithId,
   onFilterSelectionChange: (filter: Filter, dataMask: DataMask) => void,
-  clearAllTriggers?: Record<string, number>,
+  clearAllTriggers?: Record<string, boolean>,
   onClearAllComplete?: (filterId: string) => void,
 ) => {
   const filters = useFilters();

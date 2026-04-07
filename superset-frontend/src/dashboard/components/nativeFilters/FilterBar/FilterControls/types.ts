@@ -44,6 +44,6 @@ export interface FilterControlProps extends BaseFilterProps {
   parentRef?: RefObject<any>;
   setFilterActive?: (isActive: boolean) => void;
   validateStatus?: string;
-  clearAllTrigger?: number;
+  clearAllTrigger?: boolean;
   onClearAllComplete?: () => void;
 }

@@ -22,93 +22,70 @@ import { Chart } from 'src/types/Chart';
 import { Currency } from '@superset-ui/core';
 import { useApiV1Resource, useTransformedResource } from './apiResources';
 
-type DashboardPayload = Dashboard & {
-  metadata?: unknown;
-};
-
-function parseDashboardMetadata(dashboard: DashboardPayload) {
-  const metadataPayload =
-    (typeof dashboard.json_metadata === 'string' && dashboard.json_metadata) ||
-    (typeof dashboard.metadata === 'string' && dashboard.metadata) ||
-    null;
-
-  if (metadataPayload) {
-    try {
-      return JSON.parse(metadataPayload);
-    } catch {
-      return {};
-    }
-  }
-
-  if (dashboard.metadata && typeof dashboard.metadata === 'object') {
-    return dashboard.metadata;
-  }
-
-  return {};
-}
-
-function parseDashboardPosition(positionJson?: string | null) {
-  if (!positionJson) {
-    return positionJson;
-  }
-
-  try {
-    return JSON.parse(positionJson);
-  } catch {
-    return null;
-  }
-}
-
 export const useDashboard = (
-  idOrSlug: string | number | null | undefined,
-  isPublic = false,
+  idOrSlug: string | number,
+  enabled = true,
 ) =>
   useTransformedResource(
-    useApiV1Resource<DashboardPayload>(
-      idOrSlug
-        ? isPublic
-          ? `/api/v1/dashboard/public/${idOrSlug}`
-          : `/api/v1/dashboard/${idOrSlug}`
-        : null,
+    useApiV1Resource<Dashboard>(
+      enabled ? `/api/v1/dashboard/${idOrSlug}` : undefined,
     ),
     dashboard => ({
       ...dashboard,
       // TODO: load these at the API level
-      metadata: parseDashboardMetadata(dashboard),
-      position_data: parseDashboardPosition(dashboard.position_json),
+      metadata:
+        (dashboard.json_metadata && JSON.parse(dashboard.json_metadata)) || {},
+      position_data:
+        dashboard.position_json && JSON.parse(dashboard.position_json),
+      owners: dashboard.owners || [],
+    }),
+  );
+
+export const usePublicDashboard = (
+  idOrSlug: string | number,
+  enabled = true,
+) =>
+  useTransformedResource(
+    useApiV1Resource<Dashboard>(
+      enabled ? `/api/v1/dashboard/public/${idOrSlug}` : undefined,
+    ),
+    dashboard => ({
+      ...dashboard,
+      metadata:
+        (dashboard.json_metadata && JSON.parse(dashboard.json_metadata)) || {},
+      position_data:
+        dashboard.position_json && JSON.parse(dashboard.position_json),
       owners: dashboard.owners || [],
     }),
   );
 
 // gets the chart definitions for a dashboard
 export const useDashboardCharts = (
-  idOrSlug: string | number | null | undefined,
-  isPublic = false,
+  idOrSlug: string | number,
+  enabled = true,
 ) =>
-  // Use the path-based charts endpoint for public views because the
-  // generic GET helper can overwrite inline query params on fetch.
   useApiV1Resource<Chart[]>(
-    idOrSlug
-      ? isPublic
-        ? `/api/v1/chart/dashboard/${idOrSlug}/charts`
-        : `/api/v1/dashboard/${idOrSlug}/charts`
-      : null,
+    enabled ? `/api/v1/chart/dashboard/${idOrSlug}/charts` : undefined,
+  );
+
+export const usePublicDashboardCharts = (
+  idOrSlug: string | number,
+  enabled = true,
+) =>
+  useApiV1Resource<Chart[]>(
+    enabled ? `/api/v1/chart/public/?dashboard_id=${idOrSlug}` : undefined,
   );
 
 // gets the datasets for a dashboard
 // important: this endpoint only returns the fields in the dataset
 // that are necessary for rendering the given dashboard
 export const useDashboardDatasets = (
-  idOrSlug: string | number | null | undefined,
-  isPublic = false,
+  idOrSlug: string | number,
+  enabled = true,
 ) =>
   useTransformedResource(
     useApiV1Resource<Datasource[]>(
-      idOrSlug
-        ? isPublic
-          ? `/api/v1/dashboard/public/${idOrSlug}/datasets`
-          : `/api/v1/dashboard/${idOrSlug}/datasets`
-        : null,
+      enabled ? `/api/v1/dashboard/${idOrSlug}/datasets` : undefined,
     ),
     datasets =>
       datasets.map(dataset => ({

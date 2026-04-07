@@ -29,7 +29,6 @@ POST /api/v1/local-staging/health-check      — run a fresh health check
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
 from flask import Blueprint, jsonify, request
@@ -57,11 +56,6 @@ from superset.views.base_api import BaseSupersetApi
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_CLICKHOUSE_HTTP_PORT = int(os.environ.get("CLICKHOUSE_HTTP_PORT", "8124"))
-_DEFAULT_CLICKHOUSE_NATIVE_PORT = int(
-    os.environ.get("CLICKHOUSE_NATIVE_PORT", "19001")
-)
-
 
 # ------------------------------------------------------------------
 # Marshmallow schemas
@@ -76,10 +70,9 @@ class DuckDBConfigSchema(Schema):
 
 class ClickHouseConfigSchema(Schema):
     host = fields.Str(required=True)
-    http_port = fields.Int(load_default=_DEFAULT_CLICKHOUSE_HTTP_PORT)
-    port = fields.Int(load_default=_DEFAULT_CLICKHOUSE_NATIVE_PORT)
+    http_port = fields.Int(load_default=8123)  # HTTP port used by clickhouse-connect
+    port = fields.Int(load_default=9000)        # native TCP port (kept for reference)
     database = fields.Str(load_default="dhis2_staging")
-    serving_database = fields.Str(load_default="dhis2_serving")
     user = fields.Str(load_default="default")
     password = fields.Str(load_default="")
     secure = fields.Bool(load_default=False)
@@ -281,12 +274,10 @@ class LocalStagingRestApi(BaseSupersetApi):
                 engine = SupersetDBStagingEngine(0)
 
             elif engine_name == ENGINE_DUCKDB:
-                config = DuckDBConfigSchema().load(config)
                 from superset.local_staging.duckdb_engine import DuckDBStagingEngine
                 engine = DuckDBStagingEngine(0, config)
 
             elif engine_name == ENGINE_CLICKHOUSE:
-                config = ClickHouseConfigSchema().load(config)
                 from superset.local_staging.clickhouse_engine import (
                     ClickHouseStagingEngine,
                 )
@@ -300,8 +291,6 @@ class LocalStagingRestApi(BaseSupersetApi):
             result = engine.health_check()
             return self.response(200, result=result)
 
-        except ValidationError as err:
-            return self.response_400(message=str(err.messages))
         except Exception as ex:  # pylint: disable=broad-except
             logger.exception("Test connection failed")
             return self.response_500(message=str(ex))

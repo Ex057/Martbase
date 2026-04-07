@@ -130,17 +130,18 @@ test('useTableColumns with no options', () => {
           value: col.accessor(row),
           row: { original: row },
         }),
-      ).toBe(expectedDisplayValues[originalKey]);
+      ).toBe(
+        expectedDisplayValues[originalKey],
+      );
     });
   });
 });
 
 test('useTableColumns with options', () => {
-  const hook = renderHook(
-    () =>
-      useTableColumns(colnames, coltypes, data, undefined, true, {
-        col01: { Header: 'Header' },
-      }),
+  const hook = renderHook(() =>
+    useTableColumns(colnames, coltypes, data, undefined, true, {
+      col01: { Header: 'Header' },
+    }),
     {
       wrapper: createWrapper({ useTheme: true }),
     },
@@ -198,34 +199,9 @@ test('useTableColumns with options', () => {
           value: col.accessor(row),
           row: { original: row },
         }),
-      ).toBe(expectedDisplayValues[originalKey]);
+      ).toBe(
+        expectedDisplayValues[originalKey],
+      );
     });
   });
-});
-
-test('useTableColumns assigns unique ids when sanitized column names collide', () => {
-  const duplicateColnames = [
-    'cch_relative_humidity_era5_land',
-    'cch relative humidity era5 land',
-  ];
-  const duplicateData = [
-    {
-      cch_relative_humidity_era5_land: 51.4,
-      'cch relative humidity era5 land': 51.4,
-    },
-  ];
-
-  const hook = renderHook(
-    () => useTableColumns(duplicateColnames, [], duplicateData),
-    {
-      wrapper: createWrapper({ useTheme: true }),
-    },
-  );
-
-  expect(hook.result.current.map((column: JsonObject) => column.id)).toEqual([
-    'cch_relative_humidity_era5_land',
-    'cch_relative_humidity_era5_land_1',
-  ]);
-  expect(hook.result.current[0].accessor(duplicateData[0])).toBe(51.4);
-  expect(hook.result.current[1].accessor(duplicateData[0])).toBe(51.4);
 });

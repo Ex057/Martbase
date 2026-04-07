@@ -65,6 +65,7 @@ import { useDatasetDrillInfo } from 'src/hooks/apiResources/datasets';
 import { ResourceStatus } from 'src/hooks/apiResources/apiResources';
 import AIInsightPanel from 'src/features/ai/AIInsightPanel';
 import { buildChartInsightContext } from 'src/features/ai/context';
+import { useAIEnabled } from 'src/features/ai/useAIEnabled';
 import { useCrossFiltersScopingModal } from '../nativeFilters/FilterBar/CrossFilters/ScopingModal/useCrossFiltersScopingModal';
 import { ViewResultsModalTrigger } from './ViewResultsModalTrigger';
 import { isEmbedded } from 'src/dashboard/util/isEmbedded';
@@ -179,6 +180,7 @@ const SliceHeaderControls = (
     [],
   );
   const theme = useTheme();
+  const aiEnabled = useAIEnabled();
 
   useEffect(
     () => () => {
@@ -319,7 +321,10 @@ const SliceHeaderControls = (
         // eslint-disable-next-line no-unused-expressions
         props.exportXLSX?.(props.slice.slice_id);
         break;
-      case MenuKeys.DownloadAsImage: {
+      case MenuKeys.DownloadAsImage:
+      case MenuKeys.DownloadAsPng:
+      case MenuKeys.DownloadAsJpg:
+      case MenuKeys.DownloadAsSvg: {
         // menu closes with a delay, we need to hide it manually,
         // so that we don't capture it on the screenshot
         const menu = document.querySelector(
@@ -328,11 +333,19 @@ const SliceHeaderControls = (
         if (menu) {
           menu.style.visibility = 'hidden';
         }
+        const formatMap: Record<string, 'png' | 'jpg' | 'svg'> = {
+          [MenuKeys.DownloadAsPng]: 'png',
+          [MenuKeys.DownloadAsJpg]: 'jpg',
+          [MenuKeys.DownloadAsSvg]: 'svg',
+          [MenuKeys.DownloadAsImage]: 'png',
+        };
+        const imgFormat = formatMap[key] || 'png';
         downloadAsImage(
           getScreenshotNodeSelector(props.slice.slice_id),
           props.slice.slice_name,
           true,
           theme,
+          imgFormat,
         )(domEvent).then(() => {
           if (menu) {
             menu.style.visibility = 'visible';
@@ -526,7 +539,7 @@ const SliceHeaderControls = (
     });
   }
 
-  if (!isPublicView && isFeatureEnabled(FeatureFlag.AiInsights) && canExplore) {
+  if (!isPublicView && aiEnabled && canExplore) {
     const chartInsightContext = buildChartInsightContext({
       chartId: props.slice.slice_id,
       sliceName: props.slice.slice_name,
@@ -547,7 +560,8 @@ const SliceHeaderControls = (
               mode="chart"
               targetId={props.slice.slice_id}
               context={chartInsightContext}
-              defaultQuestion={t('Summarize this chart')}
+              defaultQuestion={t('Summary')}
+              chartNodeSelector={`.dashboard-chart-id-${props.slice.slice_id}`}
             />
           }
           responsive
@@ -641,8 +655,23 @@ const SliceHeaderControls = (
           : []),
         {
           key: MenuKeys.DownloadAsImage,
+          type: 'submenu',
           label: t('Download as image'),
           icon: <Icons.FileImageOutlined css={dropdownIconsStyles} />,
+          children: [
+            {
+              key: MenuKeys.DownloadAsPng,
+              label: t('PNG'),
+            },
+            {
+              key: MenuKeys.DownloadAsJpg,
+              label: t('JPG'),
+            },
+            {
+              key: MenuKeys.DownloadAsSvg,
+              label: t('SVG'),
+            },
+          ],
         },
       ],
     });

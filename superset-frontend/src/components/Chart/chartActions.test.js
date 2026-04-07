@@ -30,7 +30,6 @@ import { LOG_EVENT } from 'src/logger/actions';
 import * as exploreUtils from 'src/explore/exploreUtils';
 import * as actions from 'src/components/Chart/chartAction';
 import * as asyncEvent from 'src/middleware/asyncEvent';
-import * as dhis2Cache from 'src/dhis2/dataCache';
 import { handleChartDataResponse } from 'src/components/Chart/chartAction';
 import { dhis2DataPreloader } from 'src/utils/dhis2DataPreloader';
 
@@ -225,36 +224,6 @@ describe('chart actions', () => {
 
       preloadSpy.mockRestore();
       clearSpy.mockRestore();
-    });
-
-    test('should ignore empty DHIS2 cache hits and refetch chart data', async () => {
-      const getSpy = jest.fn().mockResolvedValue({
-        data: [],
-        colnames: [],
-        coltypes: [],
-        rowcount: 0,
-        isStale: false,
-      });
-      const cacheSpy = jest
-        .spyOn(dhis2Cache, 'getDHIS2DataCache')
-        .mockReturnValue({
-          generateCacheKey: jest.fn().mockReturnValue('dhis2-cache-key'),
-          get: getSpy,
-          set: jest.fn(),
-        });
-
-      await actions.getChartDataRequest({
-        formData: {
-          datasource: '19__table',
-          viz_type: 'my_viz',
-          database: { backend: 'dhis2' },
-        },
-      });
-
-      expect(getSpy).toHaveBeenCalledWith('dhis2-cache-key');
-      expect(fetchMock.calls(MOCK_URL)).toHaveLength(1);
-
-      cacheSpy.mockRestore();
     });
 
     test('handleChartDataResponse should return result if GlobalAsyncQueries flag is disabled', async () => {

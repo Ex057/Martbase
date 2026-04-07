@@ -273,12 +273,8 @@ function getState(
     customizeSections,
     'chart_background_color',
   );
-  const isDHIS2MapCustomizePanel =
-    vizType === 'dhis2_map' ||
-    (sectionsHaveNamedControl(customizeSections, 'stroke_color') &&
-      sectionsHaveNamedControl(customizeSections, 'show_all_boundaries'));
 
-  const canUseSharedColorControls = !isDHIS2MapCustomizePanel;
+  const canUseSharedColorControls = vizType !== 'dhis2_map';
   const colorRowsToMerge: ControlPanelSectionConfig['controlSetRows'] = [];
 
   if (canUseSharedColorControls && !colorModeAlreadyPresent) {
@@ -341,8 +337,6 @@ function getState(
           shouldMapStateToProps: () => true,
           mapStateToProps: (state: Record<string, any>) => ({
             databaseId: getDhis2LegendSetDatabaseId(state.datasource),
-            colorMode: state.controls?.color_mode?.value,
-            hasColorModeControl: Boolean(state.controls?.color_mode),
           }),
         },
       },
@@ -357,7 +351,7 @@ function getState(
           type: 'ColorPickerControl',
           label: t('Default color'),
           description: t(
-            'Used as the default chart text colour and as the fallback colour for value-range charts.',
+            'Colour used for values that fall outside every defined range.',
           ),
           renderTrigger: true,
           default: { r: 0, g: 0, b: 0, a: 0 },

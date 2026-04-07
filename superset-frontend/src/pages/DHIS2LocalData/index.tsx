@@ -5,7 +5,6 @@ import {
   Alert,
   Button,
   Card,
-  Dropdown,
   Empty,
   Input,
   Popconfirm,
@@ -15,9 +14,7 @@ import {
   Table,
   Tag,
 } from 'antd';
-import type { MenuProps } from 'antd';
 import { useHistory, useLocation } from 'react-router-dom';
-import { utils as XLSXUtils, write as writeXlsx } from 'xlsx';
 
 import { useToasts } from 'src/components/MessageToasts/withToasts';
 import DHIS2PageLayout from 'src/features/dhis2/DHIS2PageLayout';
@@ -96,35 +93,6 @@ const quoteIdentifier = (value: string): string =>
   `"${String(value).replace(/"/g, '""')}"`;
 
 const escapeLiteral = (value: string): string => value.replace(/'/g, "''");
-
-const sanitizeFilename = (value: string): string =>
-  (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_|_$/g, '') || 'dhis2_local_query'
-  );
-
-const escapeHtml = (value: string): string =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-
-const escapeDelimitedValue = (value: unknown, delimiter: string): string => {
-  const stringValue = value == null ? '' : String(value);
-  if (
-    stringValue.includes('"') ||
-    stringValue.includes('\n') ||
-    stringValue.includes('\r') ||
-    stringValue.includes(delimiter)
-  ) {
-    return `"${stringValue.replace(/"/g, '""')}"`;
-  }
-  return stringValue;
-};
 
 type ParsedServingColumn = {
   columnName: string;
@@ -914,239 +882,6 @@ export default function DHIS2LocalData() {
     }
   };
 
-  const exportableQueryRows = useMemo(
-    () => queryResult?.rows || [],
-    [queryResult],
-  );
-
-  const exportableQueryColumns = useMemo(
-    () => queryResult?.columns || [],
-    [queryResult],
-  );
-
-  const buildQueryResultsFilename = useCallback(
-    (extension: string) => {
-      const datasetName = activeDataset?.name || 'dhis2_local_query';
-      const pageSuffix = queryResult?.page ? `_page_${queryResult.page}` : '';
-      return `${sanitizeFilename(datasetName)}_query_results${pageSuffix}.${extension}`;
-    },
-    [activeDataset?.name, queryResult?.page],
-  );
-
-  const downloadQueryResultsBlob = useCallback(
-    (blob: Blob, filename: string) => {
-      const url = window.URL.createObjectURL(blob);
-      try {
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } finally {
-        window.URL.revokeObjectURL(url);
-      }
-    },
-    [],
-  );
-
-  const downloadQueryResultsDelimited = useCallback(
-    async (delimiter: string, extension: string, mimeType: string) => {
-      if (!exportableQueryColumns.length || !exportableQueryRows.length) {
-        addDangerToast(t('Run a query before downloading results.'));
-        return;
-      }
-      setDownloading(true);
-      try {
-        const header = exportableQueryColumns.join(delimiter);
-        const lines = exportableQueryRows.map(row =>
-          exportableQueryColumns
-            .map(column => escapeDelimitedValue(row[column], delimiter))
-            .join(delimiter),
-        );
-        downloadQueryResultsBlob(
-          new Blob([[header, ...lines].join('\n')], { type: mimeType }),
-          buildQueryResultsFilename(extension),
-        );
-      } finally {
-        setDownloading(false);
-      }
-    },
-    [
-      addDangerToast,
-      buildQueryResultsFilename,
-      downloadQueryResultsBlob,
-      exportableQueryColumns,
-      exportableQueryRows,
-    ],
-  );
-
-  const downloadQueryResultsJson = useCallback(async () => {
-    if (!exportableQueryRows.length) {
-      addDangerToast(t('Run a query before downloading results.'));
-      return;
-    }
-    setDownloading(true);
-    try {
-      downloadQueryResultsBlob(
-        new Blob([JSON.stringify(exportableQueryRows, null, 2)], {
-          type: 'application/json',
-        }),
-        buildQueryResultsFilename('json'),
-      );
-    } finally {
-      setDownloading(false);
-    }
-  }, [
-    addDangerToast,
-    buildQueryResultsFilename,
-    downloadQueryResultsBlob,
-    exportableQueryRows,
-  ]);
-
-  const downloadQueryResultsXlsx = useCallback(async () => {
-    if (!exportableQueryColumns.length || !exportableQueryRows.length) {
-      addDangerToast(t('Run a query before downloading results.'));
-      return;
-    }
-    setDownloading(true);
-    try {
-      const worksheetRows = exportableQueryRows.map(row =>
-        exportableQueryColumns.reduce<Record<string, unknown>>((result, column) => {
-          result[column] = row[column];
-          return result;
-        }, {}),
-      );
-      const worksheet = XLSXUtils.json_to_sheet(worksheetRows);
-      const workbook = XLSXUtils.book_new();
-      XLSXUtils.book_append_sheet(workbook, worksheet, 'Query Results');
-      const buffer = writeXlsx(workbook, {
-        bookType: 'xlsx',
-        type: 'array',
-      }) as ArrayBuffer;
-      downloadQueryResultsBlob(
-        new Blob([buffer], {
-          type:
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        }),
-        buildQueryResultsFilename('xlsx'),
-      );
-    } catch (error) {
-      addDangerToast(getErrorMessage(error, t('Failed to prepare Excel export')));
-    } finally {
-      setDownloading(false);
-    }
-  }, [
-    addDangerToast,
-    buildQueryResultsFilename,
-    downloadQueryResultsBlob,
-    exportableQueryColumns,
-    exportableQueryRows,
-  ]);
-
-  const printQueryResults = useCallback(async () => {
-    if (!exportableQueryColumns.length || !exportableQueryRows.length) {
-      addDangerToast(t('Run a query before printing results.'));
-      return;
-    }
-    setDownloading(true);
-    try {
-      const headerHtml = exportableQueryColumns
-        .map(column => `<th>${escapeHtml(column)}</th>`)
-        .join('');
-      const rowHtml = exportableQueryRows
-        .map(
-          row =>
-            `<tr>${exportableQueryColumns
-              .map(column => `<td>${escapeHtml(String(row[column] ?? ''))}</td>`)
-              .join('')}</tr>`,
-        )
-        .join('');
-      const win = window.open('', '_blank');
-      if (!win) {
-        addDangerToast(
-          t('Unable to open print window. Allow pop-ups for this site and try again.'),
-        );
-        return;
-      }
-      win.document.write(`<!DOCTYPE html>
-<html>
-  <head>
-    <title>${escapeHtml(activeDataset?.name || 'DHIS2 Query Results')}</title>
-    <style>
-      body { font-family: sans-serif; font-size: 11px; margin: 16px; }
-      h2 { font-size: 14px; margin-bottom: 8px; }
-      table { border-collapse: collapse; width: 100%; }
-      th, td { border: 1px solid #d9d9d9; padding: 4px 6px; text-align: left; white-space: nowrap; }
-      th { background: #f5f5f5; font-weight: 600; }
-      @media print { @page { size: landscape; margin: 10mm; } }
-    </style>
-  </head>
-  <body>
-    <h2>${escapeHtml(activeDataset?.name || 'DHIS2 Query Results')}</h2>
-    <table>
-      <thead><tr>${headerHtml}</tr></thead>
-      <tbody>${rowHtml}</tbody>
-    </table>
-  </body>
-</html>`);
-      win.document.close();
-      win.focus();
-      window.setTimeout(() => win.print(), 300);
-    } finally {
-      setDownloading(false);
-    }
-  }, [
-    activeDataset?.name,
-    addDangerToast,
-    exportableQueryColumns,
-    exportableQueryRows,
-  ]);
-
-  const queryDownloadMenu = useMemo<MenuProps>(
-    () => ({
-      items: [
-        {
-          key: 'csv',
-          label: t('Download CSV'),
-          onClick: () => void downloadQueryResultsDelimited(',', 'csv', 'text/csv'),
-        },
-        {
-          key: 'tsv',
-          label: t('Download TSV'),
-          onClick: () =>
-            void downloadQueryResultsDelimited(
-              '\t',
-              'tsv',
-              'text/tab-separated-values',
-            ),
-        },
-        {
-          key: 'json',
-          label: t('Download JSON'),
-          onClick: () => void downloadQueryResultsJson(),
-        },
-        {
-          key: 'xlsx',
-          label: t('Download Excel (XLSX)'),
-          onClick: () => void downloadQueryResultsXlsx(),
-        },
-        { type: 'divider' as const },
-        {
-          key: 'pdf',
-          label: t('Print / Save as PDF'),
-          onClick: () => void printQueryResults(),
-        },
-      ],
-    }),
-    [
-      downloadQueryResultsDelimited,
-      downloadQueryResultsJson,
-      downloadQueryResultsXlsx,
-      printQueryResults,
-    ],
-  );
-
   const handleOrgUnitSelectionChange = (
     columnName: string,
     nextValue?: string,
@@ -1356,11 +1091,11 @@ export default function DHIS2LocalData() {
                   {t('Load data')}
                 </Button>
                 <Button
-                  data-test="dhis2-local-data-download-full-csv"
+                  data-test="dhis2-local-data-download"
                   loading={downloading}
                   onClick={() => void downloadQuery()}
                 >
-                  {t('Download full CSV')}
+                  {t('Download CSV')}
                 </Button>
                 {renderRefreshButton(activeDataset)}
                 {renderCleanupButton(activeDataset)}
@@ -1751,15 +1486,6 @@ export default function DHIS2LocalData() {
                   >
                     {t('Run query')}
                   </Button>
-                  <Dropdown menu={queryDownloadMenu} trigger={['click']}>
-                    <Button
-                      data-test="dhis2-local-data-download"
-                      disabled={!queryResult?.rows?.length}
-                      loading={downloading}
-                    >
-                      {t('Download results')}
-                    </Button>
-                  </Dropdown>
                   <Text type="secondary">
                     {t(
                       'Executes the generated SQL against the local serving table and loads paginated results below.',

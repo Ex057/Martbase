@@ -261,9 +261,7 @@ const parsePeriodValue = (value: unknown): ParsedPeriod | null => {
     };
   }
 
-  const weeklyVariantMatch = trimmed.match(
-    /^(\d{4})(Wed|Thu|Sat|Sun)W(\d{1,2})$/,
-  );
+  const weeklyVariantMatch = trimmed.match(/^(\d{4})(Wed|Thu|Sat|Sun)W(\d{1,2})$/);
   if (weeklyVariantMatch) {
     const year = Number(weeklyVariantMatch[1]);
     const day = weeklyVariantMatch[2];
@@ -272,10 +270,10 @@ const parsePeriodValue = (value: unknown): ParsedPeriod | null => {
       day === 'Wed'
         ? 'weekWed'
         : day === 'Thu'
-          ? 'weekThu'
-          : day === 'Sat'
-            ? 'weekSat'
-            : 'weekSun';
+        ? 'weekThu'
+        : day === 'Sat'
+        ? 'weekSat'
+        : 'weekSun';
     return {
       raw: trimmed,
       granularity,
@@ -346,7 +344,8 @@ const parsePeriodValue = (value: unknown): ParsedPeriod | null => {
   if (sixMonthlyMatch) {
     const year = Number(sixMonthlyMatch[1]);
     const half = Number(sixMonthlyMatch[2]);
-    const label = half === 1 ? `Jan-Jun ${year}` : `Jul-Dec ${year}`;
+    const label =
+      half === 1 ? `Jan-Jun ${year}` : `Jul-Dec ${year}`;
     return {
       raw: trimmed,
       granularity: 'sixMonth',
@@ -361,7 +360,9 @@ const parsePeriodValue = (value: unknown): ParsedPeriod | null => {
     const year = Number(sixMonthlyAprilMatch[1]);
     const half = Number(sixMonthlyAprilMatch[2]);
     const label =
-      half === 1 ? `Apr-Sep ${year}` : `Oct ${year} - Mar ${year + 1}`;
+      half === 1
+        ? `Apr-Sep ${year}`
+        : `Oct ${year} - Mar ${year + 1}`;
     return {
       raw: trimmed,
       granularity: 'sixMonthApril',
@@ -466,10 +467,10 @@ const buildFixedPeriodsForYear = (
         granularity === 'weekWed'
           ? 'Wed'
           : granularity === 'weekThu'
-            ? 'Thu'
-            : granularity === 'weekSat'
-              ? 'Sat'
-              : 'Sun';
+          ? 'Thu'
+          : granularity === 'weekSat'
+          ? 'Sat'
+          : 'Sun';
       return Array.from({ length: 52 }, (_, index) => {
         const week = index + 1;
         return {
@@ -539,7 +540,8 @@ const buildFixedPeriodsForYear = (
       return [1, 2].map(half => ({
         raw: `${year}AprilS${half}`,
         granularity: 'sixMonthApril',
-        label: half === 1 ? `Apr-Sep ${year}` : `Oct ${year} - Mar ${year + 1}`,
+        label:
+          half === 1 ? `Apr-Sep ${year}` : `Oct ${year} - Mar ${year + 1}`,
         sortKey: year * 10 + half,
         year,
       }));
@@ -590,14 +592,15 @@ const buildFixedPeriodsForYear = (
 
 const buildRelativePeriodOptions = (
   categories: RelativePeriodCategory[],
-): RelativePeriodOption[] =>
-  categories.flatMap(category =>
+): RelativePeriodOption[] => {
+  return categories.flatMap(category =>
     RELATIVE_PERIOD_CATEGORIES[category].options.map(option => ({
       key: option.key,
       label: option.label,
       values: [option.key],
     })),
   );
+};
 
 type DataMaskAction =
   | { type: 'ownState'; ownState: JsonObject }
@@ -638,7 +641,10 @@ function reducer(draft: DataMask, action: DataMaskAction) {
   }
 }
 
-const StyledSpace = styled(Space)<{
+const StyledSpace = styled(Space, {
+  shouldForwardProp: prop =>
+    prop !== 'inverseSelection' && prop !== 'appSection',
+})<{
   inverseSelection: boolean;
   appSection: AppSection;
 }>`
@@ -659,35 +665,9 @@ const StyledSpace = styled(Space)<{
 `;
 
 const PeriodPickerTrigger = styled(Button)`
-  width: auto;
-  min-width: 140px;
-  justify-content: center;
-  flex-shrink: 0;
-`;
-
-const PeriodFilterRow = styled.div`
-  display: flex;
-  align-items: flex-start;
-  gap: ${({ theme }) => theme.sizeUnit * 2}px;
+  margin-top: ${({ theme }) => theme.sizeUnit * 2}px;
   width: 100%;
-
-  .period-filter-space {
-    width: 140px;
-    flex-shrink: 0;
-  }
-
-  @media (max-width: 720px) {
-    flex-direction: column;
-    align-items: stretch;
-
-    .period-picker-trigger {
-      width: 100%;
-    }
-
-    .period-filter-space {
-      width: 100%;
-    }
-  }
+  justify-content: flex-start;
 `;
 
 const PeriodPickerLayout = styled.div`
@@ -725,8 +705,7 @@ const PickerButtonRow = styled.div`
 `;
 
 const PeriodTypeSelect = styled(Select)`
-  width: 100%;
-  max-width: 240px;
+  width: 240px;
 `;
 
 const YearStepper = styled.div`
@@ -803,9 +782,7 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
   const [initialColtypeMap] = useState(coltypeMap);
   const [search, setSearch] = useState('');
   const isChangedByUser = useRef(false);
-  const skipAutoInitializationRef = useRef(false);
   const prevDataRef = useRef(data);
-  const handledClearAllTriggerRef = useRef<number | undefined>(undefined);
   const [dataMask, dispatchDataMask] = useImmerReducer(reducer, {
     extraFormData: {},
     filterState,
@@ -822,9 +799,6 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
     () => col?.toLowerCase() === 'period' || col?.toLowerCase() === 'pe',
     [col],
   );
-  const isHandlingClearAll =
-    clearAllTrigger !== undefined &&
-    clearAllTrigger !== handledClearAllTriggerRef.current;
   const effectiveData = useMemo(() => {
     if (data.length > 0) {
       return data;
@@ -849,10 +823,7 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
     [col, effectiveData, isPeriodColumn],
   );
   const relativePeriodOptions = useMemo(
-    () =>
-      buildRelativePeriodOptions(
-        Object.keys(RELATIVE_PERIOD_CATEGORIES) as RelativePeriodCategory[],
-      ),
+    () => buildRelativePeriodOptions(Object.keys(RELATIVE_PERIOD_CATEGORIES) as RelativePeriodCategory[]),
     [],
   );
   const relativePeriodMap = useMemo(
@@ -884,8 +855,9 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
     const currentYear = new Date().getFullYear();
     const startYear = currentYear - 20;
     const endYear = currentYear + 5;
-    const years = Array.from({ length: endYear - startYear + 1 }, (_, index) =>
-      String(startYear + index),
+    const years = Array.from(
+      { length: endYear - startYear + 1 },
+      (_, index) => String(startYear + index),
     );
     if (selectedPeriodYear && !years.includes(selectedPeriodYear)) {
       years.push(selectedPeriodYear);
@@ -911,9 +883,7 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
           isRelativePeriodToken(value) &&
           RELATIVE_PERIOD_LABELS[value.slice(RELATIVE_PERIOD_PREFIX.length)]
         ) {
-          return RELATIVE_PERIOD_LABELS[
-            value.slice(RELATIVE_PERIOD_PREFIX.length)
-          ];
+          return RELATIVE_PERIOD_LABELS[value.slice(RELATIVE_PERIOD_PREFIX.length)];
         }
         if (typeof value === 'string' && RELATIVE_PERIOD_LABELS[value]) {
           return RELATIVE_PERIOD_LABELS[value];
@@ -1049,7 +1019,6 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
 
   const handleChange = useCallback(
     (value?: SelectValue | number | string) => {
-      skipAutoInitializationRef.current = false;
       const rawValues = value === null ? [null] : ensureIsArray(value);
       const values = rawValues.reduce<(number | string | null)[]>(
         (acc, selectedValue) => {
@@ -1094,17 +1063,21 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
           effectiveData.length,
         );
 
-  const fixedPeriodsForPicker = useMemo(() => {
-    if (!selectedPeriodYear) {
-      return [];
-    }
-    return buildFixedPeriodsForYear(
-      periodPickerGranularity,
-      Number(selectedPeriodYear),
-    );
-  }, [periodPickerGranularity, selectedPeriodYear]);
+  const fixedPeriodsForPicker = useMemo(
+    () => {
+      if (!selectedPeriodYear) {
+        return [];
+      }
+      return buildFixedPeriodsForYear(
+        periodPickerGranularity,
+        Number(selectedPeriodYear),
+      );
+    },
+    [periodPickerGranularity, selectedPeriodYear],
+  );
   const relativePeriodsForPicker = useMemo(
-    () => buildRelativePeriodOptions([relativePeriodCategory]),
+    () =>
+      buildRelativePeriodOptions([relativePeriodCategory]),
     [relativePeriodCategory],
   );
   const periodTypeOptions = useMemo(
@@ -1241,7 +1214,6 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
   }, []);
 
   const handleApplyPeriodPicker = useCallback(() => {
-    skipAutoInitializationRef.current = false;
     const nextValues = [...draftPeriodValues].sort((a, b) => {
       const parsedA = parsePeriodValue(a);
       const parsedB = parsePeriodValue(b);
@@ -1355,10 +1327,6 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
       return;
     }
 
-    if (isHandlingClearAll) {
-      return;
-    }
-
     // Case 1: Handle disabled state first
     if (isDisabled) {
       updateDataMask(null);
@@ -1366,13 +1334,8 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
     }
 
     if (filterState.value !== undefined) {
-      skipAutoInitializationRef.current = false;
       // Set the filter state value if it is defined
       updateDataMask(filterState.value);
-      return;
-    }
-
-    if (skipAutoInitializationRef.current) {
       return;
     }
 
@@ -1397,7 +1360,6 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
     data,
     groupby,
     col,
-    isHandlingClearAll,
     inverseSelection,
   ]);
 
@@ -1423,10 +1385,6 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
   }, [data, col]);
 
   useEffect(() => {
-    if (isHandlingClearAll) {
-      return;
-    }
-
     if (
       isChangedByUser.current &&
       filterState.value &&
@@ -1457,7 +1415,6 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
     formData,
     data,
     JSON.stringify(filterState.value),
-    isHandlingClearAll,
     isChangedByUser.current,
   ]);
 
@@ -1466,10 +1423,7 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
   }, [JSON.stringify(dataMask)]);
 
   useEffect(() => {
-    if (isHandlingClearAll) {
-      handledClearAllTriggerRef.current = clearAllTrigger;
-      skipAutoInitializationRef.current = true;
-      isChangedByUser.current = true;
+    if (clearAllTrigger) {
       dispatchDataMask({
         type: 'filterState',
         extraFormData: {},
@@ -1480,12 +1434,10 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
       });
 
       updateDataMask(null);
-      setDraftPeriodValues([]);
-      setIsPeriodPickerOpen(false);
       setSearch('');
-      onClearAllComplete?.();
+      onClearAllComplete?.(formData.nativeFilterId);
     }
-  }, [clearAllTrigger, isHandlingClearAll, updateDataMask, onClearAllComplete]);
+  }, [clearAllTrigger, onClearAllComplete, updateDataMask]);
 
   useEffect(() => {
     if (prevExcludeFilterValues.current !== excludeFilterValues) {
@@ -1520,123 +1472,63 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
         validateStatus={filterState.validateStatus}
         extra={formItemExtra}
       >
-        {isPeriodColumn ? (
-          <PeriodFilterRow>
-            <StyledSpace
-              className="period-filter-space"
-              appSection={appSection}
-              inverseSelection={inverseSelection}
-            >
-              {appSection !== AppSection.FilterConfigModal &&
-                inverseSelection && (
-                  <Select
-                    className="exclude-select"
-                    value={`${excludeFilterValues}`}
-                    options={[
-                      { value: 'true', label: t('is not') },
-                      { value: 'false', label: t('is') },
-                    ]}
-                    onChange={handleExclusionToggle}
-                  />
-                )}
-              <Select
-                name={formData.nativeFilterId}
-                allowClear
-                allowNewOptions={!searchAllOptions && creatable !== false}
-                allowSelectAll={!searchAllOptions}
-                value={filterState.value || []}
-                disabled={isDisabled}
-                getPopupContainer={
-                  showOverflow
-                    ? () => (parentRef?.current as HTMLElement) || document.body
-                    : (trigger: HTMLElement) =>
-                        (trigger?.parentNode as HTMLElement) || document.body
-                }
-                showSearch={showSearch}
-                mode={multiSelect ? 'multiple' : 'single'}
-                placeholder={placeholderText}
-                onClear={() => onSearch('')}
-                onSearch={onSearch}
-                onBlur={handleBlur}
-                onFocus={setFocusedFilter}
-                onMouseEnter={setHoveredFilter}
-                onMouseLeave={unsetHoveredFilter}
-                // @ts-ignore
-                onChange={handleChange}
-                ref={inputRef}
-                loading={isRefreshing}
-                oneLine={
-                  filterBarOrientation === FilterBarOrientation.Horizontal
-                }
-                invertSelection={inverseSelection && excludeFilterValues}
-                options={options}
-                sortComparator={sortComparator}
-                onOpenChange={setFilterActive}
-                className="select-container"
-              />
-            </StyledSpace>
+        <StyledSpace
+          appSection={appSection}
+          inverseSelection={inverseSelection}
+        >
+          {appSection !== AppSection.FilterConfigModal && inverseSelection && (
+            <Select
+              className="exclude-select"
+              value={`${excludeFilterValues}`}
+              options={[
+                { value: 'true', label: t('is not') },
+                { value: 'false', label: t('is') },
+              ]}
+              onChange={handleExclusionToggle}
+            />
+          )}
+          <Select
+            name={formData.nativeFilterId}
+            allowClear
+            allowNewOptions={!searchAllOptions && creatable !== false}
+            allowSelectAll={!searchAllOptions}
+            value={filterState.value || []}
+            disabled={isDisabled}
+            getPopupContainer={
+              showOverflow
+                ? () => (parentRef?.current as HTMLElement) || document.body
+                : (trigger: HTMLElement) =>
+                    (trigger?.parentNode as HTMLElement) || document.body
+            }
+            showSearch={showSearch}
+            mode={multiSelect ? 'multiple' : 'single'}
+            placeholder={placeholderText}
+            onClear={() => onSearch('')}
+            onSearch={onSearch}
+            onBlur={handleBlur}
+            onFocus={setFocusedFilter}
+            onMouseEnter={setHoveredFilter}
+            onMouseLeave={unsetHoveredFilter}
+            // @ts-ignore
+            onChange={handleChange}
+            ref={inputRef}
+            loading={isRefreshing}
+            oneLine={filterBarOrientation === FilterBarOrientation.Horizontal}
+            invertSelection={inverseSelection && excludeFilterValues}
+            options={options}
+            sortComparator={sortComparator}
+            onOpenChange={setFilterActive}
+            className="select-container"
+          />
+        </StyledSpace>
+        {isPeriodColumn && (
+          <>
             <PeriodPickerTrigger
-              className="period-picker-trigger"
               buttonStyle="secondary"
               onClick={handleOpenPeriodPicker}
             >
               {t('Open period picker')}
             </PeriodPickerTrigger>
-          </PeriodFilterRow>
-        ) : (
-          <StyledSpace
-            appSection={appSection}
-            inverseSelection={inverseSelection}
-          >
-            {appSection !== AppSection.FilterConfigModal &&
-              inverseSelection && (
-                <Select
-                  className="exclude-select"
-                  value={`${excludeFilterValues}`}
-                  options={[
-                    { value: 'true', label: t('is not') },
-                    { value: 'false', label: t('is') },
-                  ]}
-                  onChange={handleExclusionToggle}
-                />
-              )}
-            <Select
-              name={formData.nativeFilterId}
-              allowClear
-              allowNewOptions={!searchAllOptions && creatable !== false}
-              allowSelectAll={!searchAllOptions}
-              value={filterState.value || []}
-              disabled={isDisabled}
-              getPopupContainer={
-                showOverflow
-                  ? () => (parentRef?.current as HTMLElement) || document.body
-                  : (trigger: HTMLElement) =>
-                      (trigger?.parentNode as HTMLElement) || document.body
-              }
-              showSearch={showSearch}
-              mode={multiSelect ? 'multiple' : 'single'}
-              placeholder={placeholderText}
-              onClear={() => onSearch('')}
-              onSearch={onSearch}
-              onBlur={handleBlur}
-              onFocus={setFocusedFilter}
-              onMouseEnter={setHoveredFilter}
-              onMouseLeave={unsetHoveredFilter}
-              // @ts-ignore
-              onChange={handleChange}
-              ref={inputRef}
-              loading={isRefreshing}
-              oneLine={filterBarOrientation === FilterBarOrientation.Horizontal}
-              invertSelection={inverseSelection && excludeFilterValues}
-              options={options}
-              sortComparator={sortComparator}
-              onOpenChange={setFilterActive}
-              className="select-container"
-            />
-          </StyledSpace>
-        )}
-        {isPeriodColumn && (
-          <>
             <Modal
               show={isPeriodPickerOpen}
               onHide={() => setIsPeriodPickerOpen(false)}

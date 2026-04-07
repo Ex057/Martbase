@@ -77,7 +77,6 @@ interface ExplorePageState {
 const Styles = styled.div<EchartsStylesProps>`
   height: ${({ height }) => height};
   width: ${({ width }) => width};
-  background-color: inherit;
 `;
 
 use([
@@ -157,61 +156,6 @@ function Echart(
   const locale = useSelector(
     (state: ExplorePageState) => state?.common?.locale ?? DEFAULT_LOCALE,
   ).toUpperCase();
-
-  const resolveChartStyleValue = useCallback(
-    (cssVariableName: string) => {
-      if (typeof window === 'undefined') {
-        return undefined;
-      }
-
-      let element = divRef.current?.parentElement;
-      while (element) {
-        const value = window
-          .getComputedStyle(element)
-          .getPropertyValue(cssVariableName)
-          .trim();
-        if (value && value !== 'inherit') {
-          return value;
-        }
-        element = element.parentElement;
-      }
-
-      return undefined;
-    },
-    [],
-  );
-
-  const resolveInheritedBackgroundColor = useCallback(() => {
-    if (typeof window === 'undefined') {
-      return undefined;
-    }
-
-    const explicitBackgroundColor = resolveChartStyleValue(
-      '--superset-chart-background-color',
-    );
-    if (
-      explicitBackgroundColor &&
-      explicitBackgroundColor !== 'transparent' &&
-      explicitBackgroundColor !== 'rgba(0, 0, 0, 0)'
-    ) {
-      return explicitBackgroundColor;
-    }
-
-    let element = divRef.current?.parentElement;
-    while (element) {
-      const computedColor = window.getComputedStyle(element).backgroundColor;
-      if (
-        computedColor &&
-        computedColor !== 'transparent' &&
-        computedColor !== 'rgba(0, 0, 0, 0)'
-      ) {
-        return computedColor;
-      }
-      element = element.parentElement;
-    }
-
-    return undefined;
-  }, [resolveChartStyleValue]);
 
   const handleSizeChange = useCallback(
     ({ width, height }: { width: number; height: number }) => {
@@ -316,51 +260,45 @@ function Echart(
         chartRef.current?.getZr().on(name, handler);
       });
 
-      const explicitTextColor =
-        resolveChartStyleValue('--superset-chart-text-color') ||
-        theme.colorText;
-
       const getEchartsTheme = (options: any) => {
         const antdTheme = theme;
         const echartsTheme = {
           textStyle: {
-            color: explicitTextColor,
+            color: antdTheme.colorText,
             fontFamily: antdTheme.fontFamily,
           },
           title: {
-            textStyle: { color: explicitTextColor },
+            textStyle: { color: antdTheme.colorText },
           },
           legend: {
-            textStyle: { color: explicitTextColor },
+            textStyle: { color: antdTheme.colorTextSecondary },
             pageTextStyle: {
-              color: explicitTextColor,
+              color: antdTheme.colorTextSecondary,
             },
-            pageIconColor: explicitTextColor,
+            pageIconColor: antdTheme.colorTextSecondary,
             pageIconInactiveColor: antdTheme.colorTextDisabled,
             inactiveColor: antdTheme.colorTextDisabled,
           },
           tooltip: {
             backgroundColor: antdTheme.colorBgContainer,
-            textStyle: { color: explicitTextColor },
+            textStyle: { color: antdTheme.colorText },
           },
           axisPointer: {
             lineStyle: { color: antdTheme.colorPrimary },
-            label: { color: explicitTextColor },
+            label: { color: antdTheme.colorText },
           },
         } as any;
         if (options?.xAxis) {
           echartsTheme.xAxis = {
             axisLine: { lineStyle: { color: antdTheme.colorSplit } },
-            axisLabel: { color: explicitTextColor },
-            nameTextStyle: { color: explicitTextColor },
+            axisLabel: { color: antdTheme.colorTextSecondary },
             splitLine: { lineStyle: { color: antdTheme.colorSplit } },
           };
         }
         if (options?.yAxis) {
           echartsTheme.yAxis = {
             axisLine: { lineStyle: { color: antdTheme.colorSplit } },
-            axisLabel: { color: explicitTextColor },
-            nameTextStyle: { color: explicitTextColor },
+            axisLabel: { color: antdTheme.colorTextSecondary },
             splitLine: { lineStyle: { color: antdTheme.colorSplit } },
           };
         }
@@ -372,39 +310,17 @@ function Echart(
       const chartOverrides = vizType
         ? theme.echartsOptionsOverridesByChartType?.[vizType] || {}
         : {};
-      const inheritedBackgroundColor = resolveInheritedBackgroundColor();
-      if (divRef.current && inheritedBackgroundColor) {
-        divRef.current.style.backgroundColor = inheritedBackgroundColor;
-      }
 
-      const mergedEchartOptions = mergeReplaceArrays(
+      const themedEchartOptions = mergeReplaceArrays(
         baseTheme,
         echartOptions,
         globalOverrides,
         chartOverrides,
       );
-      const themedEchartOptions =
-        inheritedBackgroundColor &&
-        (mergedEchartOptions?.backgroundColor == null ||
-          mergedEchartOptions?.backgroundColor === 'transparent' ||
-          mergedEchartOptions?.backgroundColor === 'rgba(0, 0, 0, 0)')
-          ? {
-              ...mergedEchartOptions,
-              backgroundColor: inheritedBackgroundColor,
-            }
-          : mergedEchartOptions;
 
       chartRef.current?.setOption(themedEchartOptions, true);
     }
-  }, [
-    didMount,
-    echartOptions,
-    eventHandlers,
-    resolveChartStyleValue,
-    resolveInheritedBackgroundColor,
-    zrEventHandlers,
-    theme,
-  ]);
+  }, [didMount, echartOptions, eventHandlers, zrEventHandlers, theme]);
 
   // highlighting
   useEffect(() => {

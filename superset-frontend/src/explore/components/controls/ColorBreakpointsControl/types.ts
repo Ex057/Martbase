@@ -55,8 +55,6 @@ export interface ErrorMapType {
 export interface ColorBreakpointsControlProps
   extends ControlComponentProps<OptionValueType[]> {
   breakpoints: ColorBreakpointType[];
-  colorMode?: string;
-  hasColorModeControl?: boolean;
   /**
    * DHIS2 legend definition from ``column.extra.dhis2_legend``.  When
    * provided, an "Import from DHIS2 legend" button is rendered alongside

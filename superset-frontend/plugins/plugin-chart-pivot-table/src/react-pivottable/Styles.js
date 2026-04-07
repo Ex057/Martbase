@@ -20,7 +20,7 @@
 import { css, styled } from '@superset-ui/core';
 
 export const Styles = styled.div`
-  ${({ theme, isDashboardEditMode, chartBackgroundColor }) => css`
+  ${({ theme, isDashboardEditMode }) => css`
     table.pvtTable {
       position: ${isDashboardEditMode ? 'inherit' : 'relative'};
       width: calc(100% - ${theme.sizeUnit}px);
@@ -30,12 +30,10 @@ export const Styles = styled.div`
       border-collapse: separate;
       font-family: ${theme.fontFamily};
       line-height: 1.4;
-      color: var(--superset-chart-text-color, ${theme.colorText});
-      background-color: ${chartBackgroundColor || theme.colorBgBase};
     }
 
     table thead {
-      background-color: ${chartBackgroundColor || theme.colorBgBase};
+      background-color: ${theme.colorBgBase};
       position: ${isDashboardEditMode ? 'inherit' : 'sticky'};
       top: 0;
     }
@@ -51,8 +49,6 @@ export const Styles = styled.div`
       font-size: ${theme.fontSizeSM}px;
       padding: ${theme.sizeUnit}px;
       font-weight: ${theme.fontWeightNormal};
-      color: var(--superset-chart-text-color, ${theme.colorText});
-      background-color: ${chartBackgroundColor || theme.colorBgBase};
     }
 
     table.pvtTable tbody tr.pvtRowTotals {
@@ -106,9 +102,9 @@ export const Styles = styled.div`
     }
 
     table.pvtTable tbody tr td {
-      color: var(--superset-chart-text-color, ${theme.colorPrimaryText});
+      color: ${theme.colorPrimaryText};
       padding: ${theme.sizeUnit}px;
-      background-color: ${chartBackgroundColor || theme.colorBgBase};
+      background-color: ${theme.colorBgBase};
       border-top: 1px solid ${theme.colorSplit};
       border-left: 1px solid ${theme.colorSplit};
       vertical-align: top;

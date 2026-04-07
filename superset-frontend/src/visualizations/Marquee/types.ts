@@ -17,17 +17,12 @@
  * under the License.
  */
 
-export type MarqueePlacement =
-  | 'top'
-  | 'bottom'
-  | 'left'
-  | 'right'
-  | 'custom_section';
+export type MarqueePlacement = 'top' | 'bottom' | 'left' | 'right' | 'custom_section';
 export type MarqueeOrientation = 'auto' | 'horizontal' | 'vertical';
 export type MarqueeDirection = 'forward' | 'reverse';
-export type MarqueeVariant = 'default' | 'dark' | 'glass';
+export type MarqueeVariant = 'default' | 'glass' | 'dark';
 
-export interface MarqueeColorThreshold {
+export interface ColorThreshold {
   value: number;
   color: string;
 }
@@ -74,34 +69,25 @@ export interface MarqueeFormData {
   // Typography - Title/Label
   label_font_size: number;
   label_font_weight: string;
-  label_color: unknown;
+  label_color: string;
   // Typography - Value
   value_font_size: number;
   value_font_weight: string;
-  value_color: unknown;
+  value_color: string;
   // Typography - Subtitle
   subtitle_font_size: number;
-  subtitle_color: unknown;
+  subtitle_color: string;
   // Colors
-  container_background: unknown;
-  item_background: unknown;
-  item_border_color: unknown;
+  container_background: string;
+  item_background: string;
+  item_border_color: string;
   item_border_width: number;
   item_border_radius: number;
   show_shadow: boolean;
-  hover_background: unknown;
-  delta_positive_color: unknown;
-  delta_negative_color: unknown;
-  divider_color: unknown;
-  variant?: MarqueeVariant;
-  color_thresholds?: Array<{
-    value: number;
-    color: unknown;
-  }>;
-  chart_background_color?: unknown;
-  chartBackgroundColor?: unknown;
-  default_breakpoint_color?: unknown;
-  color_picker?: unknown;
+  hover_background: string;
+  delta_positive_color: string;
+  delta_negative_color: string;
+  divider_color: string;
   // Formatting
   number_format: string;
   prefix: string;
@@ -113,6 +99,10 @@ export interface MarqueeFormData {
   show_delta: boolean;
   show_separators: boolean;
   responsive_wrap: boolean;
+  // Pro Theme
+  variant: MarqueeVariant;
+  // Conditional coloring — semicolon-separated threshold entries: "value:color;..."
+  color_thresholds: string;
 }
 
 export interface MarqueeChartProps {
@@ -126,8 +116,6 @@ export interface MarqueeChartProps {
   pauseOnHover: boolean;
   autoLoop: boolean;
   scrollDirection: MarqueeDirection;
-  variant: MarqueeVariant;
-  colorThresholds: MarqueeColorThreshold[];
   // Layout
   itemSpacing: number;
   itemPadding: number;
@@ -160,4 +148,8 @@ export interface MarqueeChartProps {
   showSubtitle: boolean;
   showDelta: boolean;
   showSeparators: boolean;
+  // Pro Theme
+  variant: MarqueeVariant;
+  // Conditional coloring thresholds
+  colorThresholds: ColorThreshold[];
 }

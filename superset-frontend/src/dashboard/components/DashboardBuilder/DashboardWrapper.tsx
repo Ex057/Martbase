@@ -26,15 +26,28 @@ import { useDragDropManager } from 'react-dnd';
 import classNames from 'classnames';
 import { debounce } from 'lodash';
 
-const StyledDiv = styled.div`
-  ${({ theme }) => css`
+const StyledDiv = styled.div<{ $isPublicView?: boolean }>`
+  ${({ theme, $isPublicView }) => css`
     background-color: ${theme.colorBgLayout};
     position: relative;
     display: grid;
     grid-template-columns: auto 1fr;
     grid-template-rows: auto 1fr;
     flex: 1;
-    gap: var(--pro-density-gutter, 8px);
+    gap: 0;
+    max-width: 100vw;
+    overflow-x: hidden;
+    /* In public view, let the page body scroll so footer flows naturally below content.
+       In normal view, this wrapper is the scroll container for sticky to work. */
+    overflow-y: ${$isPublicView ? 'visible' : 'auto'};
+    isolation: isolate;
+
+    @media (max-width: 767px) {
+      grid-template-columns: 1fr;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
     /* Special cases */
 
     &.dragdroppable--dragging {
@@ -47,6 +60,9 @@ const StyledDiv = styled.div`
         display: block;
         border-color: ${theme.colorPrimary};
         background-color: ${theme.colorPrimaryBg};
+        border-radius: ${theme.borderRadiusLG}px;
+        transition: background-color ${theme.motionDurationFast} ease,
+          border-color ${theme.motionDurationFast} ease;
       }
       & .grid-row:after {
         border-style: hidden;
@@ -56,6 +72,12 @@ const StyledDiv = styled.div`
       }
       & .droptarget-edge:last-child {
         inset-block-end: 0;
+      }
+
+      /* Highlight drop targets more visibly during drag */
+      & .empty-droptarget:hover:before {
+        background-color: ${theme.colorPrimaryBgHover};
+        border-color: ${theme.colorPrimaryActive};
       }
     }
 
@@ -114,7 +136,10 @@ const StyledDiv = styled.div`
   `}
 `;
 
-const DashboardWrapper: FC<PropsWithChildren<{}>> = ({ children }) => {
+const DashboardWrapper: FC<PropsWithChildren<{ isPublicView?: boolean }>> = ({
+  children,
+  isPublicView,
+}) => {
   const editMode = useSelector<RootState, boolean>(
     state => state.dashboardState.editMode,
   );
@@ -149,6 +174,7 @@ const DashboardWrapper: FC<PropsWithChildren<{}>> = ({ children }) => {
 
   return (
     <StyledDiv
+      $isPublicView={isPublicView}
       className={classNames({
         'dragdroppable--dragging': editMode && isDragged,
       })}

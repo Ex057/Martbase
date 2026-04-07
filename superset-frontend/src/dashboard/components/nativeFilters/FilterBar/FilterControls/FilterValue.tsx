@@ -114,7 +114,6 @@ const FilterValue: FC<FilterControlProps> = ({
   const dependencies = useFilterDependencies(id, dataMaskSelected);
   const shouldRefresh = useShouldFilterRefresh();
   const allFilters = useFilters();
-  const handledClearAllTriggerRef = useRef<number | undefined>(undefined);
   const [state, setState] = useState<ChartDataResponseResult[]>([]);
   const dashboardId = useSelector<RootState, number>(
     state => state.dashboardInfo.id,
@@ -127,6 +126,8 @@ const FilterValue: FC<FilterControlProps> = ({
   const [ownState, setOwnState] = useState<JsonObject>({});
   const [inViewFirstTime, setInViewFirstTime] = useState(inView);
   const inputRef = useRef<HTMLInputElement>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
   const [target] = targets;
   const {
     datasetId,
@@ -256,6 +257,7 @@ const FilterValue: FC<FilterControlProps> = ({
         ownState: filterOwnState,
       })
         .then(({ response, json }) => {
+          if (!mountedRef.current) return;
           if (isFeatureEnabled(FeatureFlag.GlobalAsyncQueries)) {
             // deal with getChartDataRequest transforming the response data
             const result = 'result' in json ? json.result[0] : json;
@@ -265,11 +267,14 @@ const FilterValue: FC<FilterControlProps> = ({
             } else if (response.status === 202) {
               waitForAsyncData(result)
                 .then((asyncResult: ChartDataResponseResult[]) => {
+                  if (!mountedRef.current) return;
                   setState(asyncResult);
                   handleFilterLoadFinish();
                 })
                 .catch((error: Response) => {
+                  if (!mountedRef.current) return;
                   getClientErrorObject(error).then(clientErrorObject => {
+                    if (!mountedRef.current) return;
                     setError(clientErrorObject);
                     handleFilterLoadFinish();
                   });
@@ -286,7 +291,9 @@ const FilterValue: FC<FilterControlProps> = ({
           }
         })
         .catch((error: Response) => {
+          if (!mountedRef.current) return;
           getClientErrorObject(error).then(clientErrorObject => {
+            if (!mountedRef.current) return;
             setError(clientErrorObject);
             handleFilterLoadFinish();
           });
@@ -369,39 +376,13 @@ const FilterValue: FC<FilterControlProps> = ({
     ],
   );
 
-  const filterState = useMemo(() => {
-    const isHandlingClearAll =
-      clearAllTrigger !== undefined &&
-      clearAllTrigger !== handledClearAllTriggerRef.current;
-    const nextFilterState: Record<string, unknown> & {
-      value?: unknown;
-      label?: string;
-      validateStatus?: string;
-    } = {
+  const filterState = useMemo(
+    () => ({
       ...filter.dataMask?.filterState,
-      ...dataMaskSelected?.[filter.id]?.filterState,
       validateStatus,
-    };
-
-    if (isHandlingClearAll) {
-      nextFilterState.value = undefined;
-      nextFilterState.label = undefined;
-    }
-
-    return nextFilterState;
-  }, [
-    clearAllTrigger,
-    dataMaskSelected,
-    filter.dataMask?.filterState,
-    filter.id,
-    validateStatus,
-  ]);
-
-  useEffect(() => {
-    if (clearAllTrigger !== undefined) {
-      handledClearAllTriggerRef.current = clearAllTrigger;
-    }
-  }, [clearAllTrigger]);
+    }),
+    [filter.dataMask?.filterState, validateStatus],
+  );
 
   const displaySettings = useMemo(
     () => ({
@@ -434,7 +415,6 @@ const FilterValue: FC<FilterControlProps> = ({
         <Loading position="inline-centered" size="s" muted />
       ) : (
         <SuperChart
-          key={`${filter.id}-${clearAllTrigger ?? 'ready'}`}
           height={HEIGHT}
           width={RESPONSIVE_WIDTH}
           showOverflow={showOverflow}

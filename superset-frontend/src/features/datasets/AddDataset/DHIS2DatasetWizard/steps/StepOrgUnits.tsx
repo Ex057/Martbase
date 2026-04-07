@@ -1188,13 +1188,8 @@ function buildRepositoryLevelDimensions(
         name: current?.name,
         aliases: Array.from(
           new Set(
-            [
-              resolvedLabel,
-              current?.displayName,
-              ...(current?.aliases || []),
-            ].filter(
-              (alias): alias is string =>
-                typeof alias === 'string' && alias.length > 0,
+            [resolvedLabel, current?.displayName, ...(current?.aliases || [])].filter(
+              Boolean,
             ),
           ),
         ),

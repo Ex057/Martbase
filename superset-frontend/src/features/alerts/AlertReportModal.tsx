@@ -482,8 +482,7 @@ const AlertReportModal: FunctionComponent<AlertReportModalProps> = ({
   // Check config for alternate notification methods setting
   const conf = useCommonConf();
   const allowedNotificationMethods: NotificationMethodOption[] =
-    (conf?.ALERT_REPORTS_NOTIFICATION_METHODS as NotificationMethodOption[]) ||
-    DEFAULT_NOTIFICATION_METHODS;
+    conf?.ALERT_REPORTS_NOTIFICATION_METHODS || DEFAULT_NOTIFICATION_METHODS;
 
   const [disableSave, setDisableSave] = useState<boolean>(true);
 
