@@ -31,7 +31,11 @@ header()  {
 # ----------------------------------------------------------------------------
 # Config
 # ----------------------------------------------------------------------------
-PROJECT_DIR="${PROJECT_DIR:-/Users/stephocay/projects/hispuganda/ss_latest/superset}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+PROJECT_DIR="${PROJECT_DIR:-$SCRIPT_DIR}"
+if [[ -d "$PROJECT_DIR" ]]; then
+  PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd -P)"
+fi
 BACKEND_DIR="$PROJECT_DIR"
 FRONTEND_DIR="$PROJECT_DIR/superset-frontend"
 VENV_DIR="$PROJECT_DIR/venv"
@@ -47,7 +51,7 @@ FRONTEND_PID_FILE="$PROJECT_DIR/superset_frontend.pid"
 REDIS_PID_FILE="$PROJECT_DIR/redis.pid"
 
 BACKEND_HOST="${BACKEND_HOST:-127.0.0.1}"
-BACKEND_PORT="${BACKEND_PORT:-8088}"
+BACKEND_PORT="${BACKEND_PORT:-8089}"
 FRONTEND_HOST="${FRONTEND_HOST:-127.0.0.1}"
 FRONTEND_PORT="${FRONTEND_PORT:-9001}"
 FRONTEND_DISABLE_TYPE_CHECK="${FRONTEND_DISABLE_TYPE_CHECK:-1}"
@@ -75,14 +79,14 @@ if [[ -z "$CLICKHOUSE_ENABLED" ]]; then
 fi
 
 CLICKHOUSE_HOST="${CLICKHOUSE_HOST:-127.0.0.1}"
-CLICKHOUSE_HTTP_PORT="${CLICKHOUSE_HTTP_PORT:-8123}"
-CLICKHOUSE_NATIVE_PORT="${CLICKHOUSE_NATIVE_PORT:-9000}"
+CLICKHOUSE_HTTP_PORT="${CLICKHOUSE_HTTP_PORT:-8124}"
+CLICKHOUSE_NATIVE_PORT="${CLICKHOUSE_NATIVE_PORT:-19001}"
 CLICKHOUSE_STAGING_DATABASE="${CLICKHOUSE_STAGING_DATABASE:-dhis2_staging}"
 CLICKHOUSE_SERVING_DATABASE="${CLICKHOUSE_SERVING_DATABASE:-dhis2_serving}"
 CLICKHOUSE_CONTROL_DATABASE="${CLICKHOUSE_CONTROL_DATABASE:-dhis2_control}"
 CLICKHOUSE_USER="${CLICKHOUSE_USER:-dhis2_user}"
 CLICKHOUSE_PASSWORD="${CLICKHOUSE_PASSWORD:-change_me_securely}"
-CLICKHOUSE_SUPERSET_DB_NAME="${CLICKHOUSE_SUPERSET_DB_NAME:-DHIS2 Serving (ClickHouse)}"
+CLICKHOUSE_SUPERSET_DB_NAME="${CLICKHOUSE_SUPERSET_DB_NAME:-DHIS2 Serving (ClickHouse) - Martbase}"
 
 # Reliable direct-managed ClickHouse paths
 CLICKHOUSE_MANAGED_MODE="${CLICKHOUSE_MANAGED_MODE:-direct}"
@@ -254,6 +258,14 @@ set_backend_env() {
   export PYTHONUNBUFFERED=1
   export FLASK_ENV="${FLASK_ENV:-production}"
   export FLASK_DEBUG="$BACKEND_ENABLE_DEBUGGER"
+  export CLICKHOUSE_HOST="$CLICKHOUSE_HOST"
+  export CLICKHOUSE_HTTP_PORT="$CLICKHOUSE_HTTP_PORT"
+  export CLICKHOUSE_NATIVE_PORT="$CLICKHOUSE_NATIVE_PORT"
+  export CLICKHOUSE_STAGING_DATABASE="$CLICKHOUSE_STAGING_DATABASE"
+  export CLICKHOUSE_SERVING_DATABASE="$CLICKHOUSE_SERVING_DATABASE"
+  export CLICKHOUSE_USER="$CLICKHOUSE_USER"
+  export CLICKHOUSE_PASSWORD="$CLICKHOUSE_PASSWORD"
+  export CLICKHOUSE_SUPERSET_DB_NAME="$CLICKHOUSE_SUPERSET_DB_NAME"
 }
 
 frontend_dev_command() {
@@ -325,6 +337,87 @@ validate_frontend() {
   validate_project
   require_cmd npm
   require_file "$FRONTEND_DIR/package.json"
+}
+
+select_python_bin() {
+  local candidate
+  for candidate in python3.11 python3.12 python3.10 python3; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+ensure_venv() {
+  validate_project
+  local python_bin target_version current_version
+
+  python_bin="$(select_python_bin)" || {
+    error "Missing compatible Python interpreter"
+    exit 1
+  }
+  target_version="$("$python_bin" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+
+  if [[ -x "$VENV_DIR/bin/python" && -f "$VENV_DIR/bin/activate" ]]; then
+    current_version="$("$VENV_DIR/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || true)"
+    if [[ "$current_version" == "$target_version" ]]; then
+      info "Using existing virtual environment at $VENV_DIR"
+      return 0
+    fi
+
+    warn "Recreating virtual environment at $VENV_DIR (found Python $current_version, need $target_version)"
+    rm -rf "$VENV_DIR"
+  fi
+
+  header "Creating Python Virtual Environment"
+  info "Creating venv at $VENV_DIR with $python_bin"
+  "$python_bin" -m venv "$VENV_DIR"
+  ok "Virtual environment created"
+}
+
+ensure_backend_ready() {
+  ensure_venv
+
+  if [[ -x "$VENV_DIR/bin/superset" && -x "$VENV_DIR/bin/gunicorn" ]]; then
+    return 0
+  fi
+
+  install_deps
+}
+
+install_frontend_deps() {
+  header "Installing Frontend Dependencies"
+
+  validate_frontend
+  cd "$FRONTEND_DIR"
+
+  info "Running npm install --legacy-peer-deps"
+  npm install --legacy-peer-deps
+  touch "$FRONTEND_DIR/.deps_stamp"
+  ok "Frontend dependencies installed"
+}
+
+frontend_deps_are_stale() {
+  [[ ! -d "$FRONTEND_DIR/node_modules" ]] && return 0
+  [[ ! -f "$FRONTEND_DIR/.deps_stamp" ]] && return 0
+  [[ "$FRONTEND_DIR/package.json" -nt "$FRONTEND_DIR/.deps_stamp" ]] && return 0
+  [[ -f "$FRONTEND_DIR/package-lock.json" && "$FRONTEND_DIR/package-lock.json" -nt "$FRONTEND_DIR/.deps_stamp" ]] && return 0
+  return 1
+}
+
+ensure_frontend_deps() {
+  validate_frontend
+  cd "$FRONTEND_DIR"
+
+  if frontend_deps_are_stale; then
+    info "Installing frontend dependencies"
+    npm install --legacy-peer-deps
+    touch "$FRONTEND_DIR/.deps_stamp"
+  else
+    info "Using existing frontend dependencies"
+  fi
 }
 
 # ----------------------------------------------------------------------------
@@ -738,6 +831,7 @@ try:
             "serving_database": "${CLICKHOUSE_SERVING_DATABASE}",
             "user":             "${CLICKHOUSE_USER}",
             "password":         "${CLICKHOUSE_PASSWORD}",
+            "superset_db_name": "${CLICKHOUSE_SUPERSET_DB_NAME}",
             "secure":           False,
             "verify":           True,
             "connect_timeout":  10,
@@ -1043,14 +1137,7 @@ start_frontend() {
     exit 1
   fi
 
-  cd "$FRONTEND_DIR"
-
-  if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
-    info "Installing frontend dependencies"
-    npm install
-  else
-    info "Using existing frontend dependencies"
-  fi
+  ensure_frontend_deps
 
   info "Starting frontend with command:"
   echo "  $cmd"
@@ -1119,10 +1206,7 @@ frontend_status() {
 build_frontend() {
   header "Building Superset Frontend"
 
-  validate_frontend
-  cd "$FRONTEND_DIR"
-
-  npm install
+  ensure_frontend_deps
   npm run build
 
   ok "Frontend build completed"
@@ -1182,13 +1266,15 @@ clear_logs() {
 }
 
 install_deps() {
-  header "Installing Python Dependencies"
+  header "Installing Project Dependencies"
 
-  validate_project
-  require_dir "$VENV_DIR"
+  ensure_venv
 
   cd "$BACKEND_DIR"
   venv_activate
+
+  info "Upgrading pip tooling"
+  "$VENV_DIR/bin/pip" install --quiet --upgrade pip setuptools wheel
 
   if [[ -f "$BACKEND_DIR/requirements/base.txt" ]]; then
     info "Installing base requirements..."
@@ -1203,11 +1289,14 @@ install_deps() {
     "$VENV_DIR/bin/pip" install --quiet -e "$BACKEND_DIR" --no-deps
     ok "Superset package installed"
   fi
+
+  install_frontend_deps
 }
 
 db_upgrade() {
   header "Running Superset DB Upgrade"
 
+  ensure_backend_ready
   validate_backend
   cd "$BACKEND_DIR"
   venv_activate
@@ -1232,6 +1321,7 @@ setup() {
 create_admin() {
   header "Creating/Updating Admin User"
 
+  ensure_backend_ready
   validate_backend
   cd "$BACKEND_DIR"
   venv_activate
