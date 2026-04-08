@@ -23,6 +23,7 @@ import {
   DHIS2LoaderColumnDefinition,
 } from './types';
 import { resolveColumnName } from './columnCompatibility';
+import { inferBoundaryLevelFromOrgUnitColumn } from './boundaryLevels';
 
 function parseColumnExtra(extra: unknown): Record<string, any> | undefined {
   if (!extra) {
@@ -121,6 +122,53 @@ function findDatasourceColumn(
   });
 }
 
+function findDatasourceColumnByHierarchyLevel(
+  datasourceColumns: DHIS2DatasourceColumn[],
+  requestedColumn: string,
+): DHIS2DatasourceColumn | undefined {
+  const levelMatch = String(requestedColumn || '')
+    .trim()
+    .match(/^ou_level_(\d+)$/i);
+  if (!levelMatch) {
+    return undefined;
+  }
+
+  const requestedLevel = Number(levelMatch[1]);
+  if (!Number.isFinite(requestedLevel) || requestedLevel <= 0) {
+    return undefined;
+  }
+
+  return datasourceColumns.find(column => {
+    const extra = parseColumnExtra(column.extra);
+    const hierarchyLevel = Number(
+      extra?.dhis2_ou_level ?? extra?.dhis2OuLevel ?? NaN,
+    );
+    return Number.isFinite(hierarchyLevel) && hierarchyLevel === requestedLevel;
+  });
+}
+
+function findAvailableColumnByHierarchyLevel(
+  availableColumns: string[],
+  requestedColumn: string,
+): string | undefined {
+  const levelMatch = String(requestedColumn || '')
+    .trim()
+    .match(/^ou_level_(\d+)$/i);
+  if (!levelMatch) {
+    return undefined;
+  }
+
+  const requestedLevel = Number(levelMatch[1]);
+  if (!Number.isFinite(requestedLevel) || requestedLevel <= 0) {
+    return undefined;
+  }
+
+  return availableColumns.find(columnName => {
+    const resolvedLevel = inferBoundaryLevelFromOrgUnitColumn(columnName);
+    return resolvedLevel === requestedLevel;
+  });
+}
+
 function findLoaderColumnByTitle(
   loaderColumns: DHIS2LoaderColumnDefinition[],
   titleCandidates: string[],
@@ -173,12 +221,16 @@ export function resolveQueryDimensionColumnName(options: {
     datasourceColumns,
     requestedColumn,
   );
+  const hierarchyLevelColumn =
+    datasourceColumn ||
+    findDatasourceColumnByHierarchyLevel(datasourceColumns, requestedColumn);
 
   return (
     findAvailableColumnMatch(availableColumns, [
       requestedColumn,
-      datasourceColumn?.column_name,
-      datasourceColumn?.verbose_name,
+      hierarchyLevelColumn?.column_name,
+      hierarchyLevelColumn?.verbose_name,
+      findAvailableColumnByHierarchyLevel(availableColumns, requestedColumn),
     ]) || resolveColumnName(requestedColumn, availableColumns)
   );
 }

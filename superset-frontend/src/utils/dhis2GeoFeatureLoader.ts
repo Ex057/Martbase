@@ -237,17 +237,71 @@ async function fetchDHIS2MetadataWithPublicFallback(
       ignoreUnauthorized: true,
     });
   } catch (error) {
+    const status = Number((error as any)?.status);
+    // eslint-disable-next-line no-console
+    console.warn('[DHIS2Map] Protected metadata request failed, evaluating public fallback', {
+      databaseId: options.databaseId,
+      chartId: options.chartId,
+      dashboardId: options.dashboardId,
+      status,
+      params: searchParams,
+    });
+
     if (!shouldTryPublicChartFallback(error, options.chartId)) {
+      // eslint-disable-next-line no-console
+      console.warn('[DHIS2Map] Public metadata fallback not attempted', {
+        databaseId: options.databaseId,
+        chartId: options.chartId,
+        dashboardId: options.dashboardId,
+        status,
+        reason: 'Request is not eligible for public chart fallback',
+      });
       throw error;
     }
 
-    return SupersetClient.get({
-      endpoint: `/api/v1/database/${options.databaseId}/dhis2_metadata_public/`,
-      searchParams: buildMetadataSearchParams({
-        ...params,
-        ...chartContextParams,
-      }),
+    const publicSearchParams = buildMetadataSearchParams({
+      ...params,
+      ...chartContextParams,
     });
+
+    // eslint-disable-next-line no-console
+    console.info('[DHIS2Map] Attempting public metadata fallback', {
+      databaseId: options.databaseId,
+      chartId: options.chartId,
+      dashboardId: options.dashboardId,
+      params: publicSearchParams,
+    });
+
+    try {
+      const response = await SupersetClient.get({
+        endpoint: `/api/v1/database/${options.databaseId}/dhis2_metadata_public/`,
+        searchParams: publicSearchParams,
+      });
+
+      // eslint-disable-next-line no-console
+      console.info('[DHIS2Map] Public metadata fallback succeeded', {
+        databaseId: options.databaseId,
+        chartId: options.chartId,
+        dashboardId: options.dashboardId,
+        status: response.json?.status || 'success',
+        resultCount: Array.isArray(response.json?.result)
+          ? response.json.result.length
+          : response.json?.result?.features?.length,
+      });
+
+      return response;
+    } catch (publicError) {
+      // eslint-disable-next-line no-console
+      console.error('[DHIS2Map] Public metadata fallback failed', {
+        databaseId: options.databaseId,
+        chartId: options.chartId,
+        dashboardId: options.dashboardId,
+        status: Number((publicError as any)?.status),
+        params: publicSearchParams,
+        error: publicError,
+      });
+      throw publicError;
+    }
   }
 }
 

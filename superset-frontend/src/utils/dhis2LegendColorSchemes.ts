@@ -189,16 +189,66 @@ export async function syncDHIS2LegendSchemesForDatabase(
       });
     } catch (error) {
       const status = Number((error as any)?.status);
+      // eslint-disable-next-line no-console
+      console.warn('[DHIS2Map] Protected legendSets request failed, evaluating public fallback', {
+        databaseId: dbId,
+        chartId,
+        dashboardId,
+        isPublicView,
+        status,
+      });
+
       if (
         !isPublicView ||
         !publicEndpoint ||
         ![400, 401, 403, 404].includes(status)
       ) {
+        // eslint-disable-next-line no-console
+        console.warn('[DHIS2Map] Public legendSets fallback not attempted', {
+          databaseId: dbId,
+          chartId,
+          dashboardId,
+          isPublicView,
+          status,
+          reason: 'Request is not eligible for public legendSets fallback',
+        });
         throw error;
       }
-      response = await SupersetClient.get({
+
+      // eslint-disable-next-line no-console
+      console.info('[DHIS2Map] Attempting public legendSets fallback', {
+        databaseId: dbId,
+        chartId,
+        dashboardId,
         endpoint: publicEndpoint,
       });
+
+      try {
+        response = await SupersetClient.get({
+          endpoint: publicEndpoint,
+        });
+        // eslint-disable-next-line no-console
+        console.info('[DHIS2Map] Public legendSets fallback succeeded', {
+          databaseId: dbId,
+          chartId,
+          dashboardId,
+          status: response.json?.status || 'success',
+          resultCount: Array.isArray(response.json?.result)
+            ? response.json.result.length
+            : undefined,
+        });
+      } catch (publicError) {
+        // eslint-disable-next-line no-console
+        console.error('[DHIS2Map] Public legendSets fallback failed', {
+          databaseId: dbId,
+          chartId,
+          dashboardId,
+          status: Number((publicError as any)?.status),
+          endpoint: publicEndpoint,
+          error: publicError,
+        });
+        throw publicError;
+      }
     }
 
     const legendSets = response.json?.result;

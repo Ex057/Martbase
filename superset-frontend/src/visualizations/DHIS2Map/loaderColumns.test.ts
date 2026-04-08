@@ -100,6 +100,32 @@ describe('DHIS2Map loaderColumns', () => {
     ).toBe('District/City');
   });
 
+  test('maps ou_level query aliases back to datasource hierarchy columns', () => {
+    expect(
+      resolveQueryDimensionColumnName({
+        requestedColumn: 'ou_level_3',
+        datasourceColumns: [
+          {
+            column_name: 'district_city',
+            verbose_name: 'District/City',
+            extra: JSON.stringify({ dhis2_ou_level: 3 }),
+          },
+        ],
+        availableColumns: ['national', 'region', 'district_city'],
+      }),
+    ).toBe('district_city');
+  });
+
+  test('maps ou_level query aliases back to legacy available columns without datasource metadata', () => {
+    expect(
+      resolveQueryDimensionColumnName({
+        requestedColumn: 'ou_level_3',
+        datasourceColumns: [],
+        availableColumns: ['national', 'region', 'district_city'],
+      }),
+    ).toBe('district_city');
+  });
+
   test('maps staged metric columns to verbose query result labels', () => {
     expect(
       resolveQueryMetricColumnName({

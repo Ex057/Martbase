@@ -133,6 +133,89 @@ function resolveHierarchyLevelFromDatasourceColumn(
   );
 }
 
+function resolveBestFallbackHierarchyColumn(params: {
+  allColumns: string[];
+  data: Record<string, any>[];
+  datasourceColumns: DatasourceColumn[];
+  stagedOrgUnitLevels?: StagedOrgUnitLevel[];
+  requestedPrimaryLevel?: number;
+}): string {
+  const {
+    allColumns,
+    data,
+    datasourceColumns,
+    stagedOrgUnitLevels = [],
+    requestedPrimaryLevel,
+  } = params;
+
+  if (!data.length || !allColumns.length) {
+    return '';
+  }
+
+  const firstRow = data[0] || {};
+  const hierarchyCandidates = allColumns.reduce<
+    Array<{ column: string; level: number }>
+  >((result, column) => {
+    const columnName = String(column || '').trim();
+    if (!columnName) {
+      return result;
+    }
+
+    const columnLower = columnName.toLowerCase();
+    if (
+      columnLower.includes('period') ||
+      columnLower.includes('year') ||
+      columnLower.includes('month') ||
+      columnLower.includes('quarter') ||
+      typeof firstRow[columnName] === 'number'
+    ) {
+      return result;
+    }
+
+    const resolvedLevel = resolveHierarchyLevelFromDatasourceColumn(
+      datasourceColumns,
+      columnName,
+      stagedOrgUnitLevels,
+    );
+    if (resolvedLevel) {
+      result.push({ column: columnName, level: resolvedLevel });
+    }
+    return result;
+  }, []);
+
+  if (hierarchyCandidates.length > 0) {
+    const exactLevelMatch = requestedPrimaryLevel
+      ? hierarchyCandidates.find(
+          candidate => candidate.level === requestedPrimaryLevel,
+        )
+      : undefined;
+    if (exactLevelMatch) {
+      return exactLevelMatch.column;
+    }
+
+    return hierarchyCandidates.sort((left, right) => right.level - left.level)[0]
+      .column;
+  }
+
+  for (const column of allColumns) {
+    const columnLower = column.toLowerCase();
+    if (
+      columnLower.includes('period') ||
+      columnLower.includes('year') ||
+      columnLower.includes('month') ||
+      columnLower.includes('quarter') ||
+      typeof firstRow[column] === 'number'
+    ) {
+      continue;
+    }
+    if (typeof firstRow[column] === 'string') {
+      return column;
+    }
+  }
+
+  return '';
+}
+
 function parseLegendDefinition(
   value: unknown,
 ): DHIS2LegendDefinition | undefined {
@@ -399,45 +482,6 @@ function isPeriodColumn(col: DatasourceColumn): boolean {
   );
 }
 
-function resolveSelectedGranularityColumnName(
-  granularityValue: unknown,
-): string | undefined {
-  if (typeof granularityValue === 'string' && granularityValue.trim()) {
-    return granularityValue.trim();
-  }
-
-  if (
-    granularityValue &&
-    typeof granularityValue === 'object' &&
-    'column_name' in (granularityValue as Record<string, unknown>)
-  ) {
-    const columnName = (granularityValue as Record<string, unknown>).column_name;
-    if (typeof columnName === 'string' && columnName.trim()) {
-      return columnName.trim();
-    }
-  }
-
-  return undefined;
-}
-
-function resolveMatchingDataColumn(
-  requestedColumn: string | undefined,
-  allColumns: string[],
-): string | undefined {
-  if (!requestedColumn) {
-    return undefined;
-  }
-
-  if (allColumns.includes(requestedColumn)) {
-    return requestedColumn;
-  }
-
-  const sanitizedRequested = sanitizeDHIS2ColumnName(requestedColumn);
-  return allColumns.find(
-    columnName => sanitizeDHIS2ColumnName(columnName) === sanitizedRequested,
-  );
-}
-
 function mergeBoundaryLevels(
   primaryBoundaryLevel: number | undefined,
   configuredLevels: number[],
@@ -480,7 +524,6 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     boundary_level,
     enable_drill,
     tooltip_columns,
-    granularity_sqla,
   } = formData as QueryFormData;
 
   // Extract style props with camelCase fallback (formData is camelCase, controls are snake_case)
@@ -491,9 +534,6 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     formDataAny?.useLinearColorScheme ?? formDataAny?.use_linear_color_scheme;
   const chart_background_color = colorValueToCss(
     formDataAny?.chartBackgroundColor || formDataAny?.chart_background_color,
-  );
-  const label_text_color = colorValueToCss(
-    formDataAny?.labelTextColor || formDataAny?.label_text_color,
   );
   const opacity = formDataAny?.opacity;
   const stroke_color = formDataAny?.strokeColor || formDataAny?.stroke_color;
@@ -573,21 +613,9 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
         typeof columnName === 'string' && allColumns.includes(columnName),
     );
 
-  const periodColumns = Array.from(
-    new Set(
-      [
-        ...datasourceColumns
-          .filter(column => isPeriodColumn(column) && column.column_name)
-          .map(column => resolveMatchingDataColumn(column.column_name, allColumns)),
-        resolveMatchingDataColumn(
-          resolveSelectedGranularityColumnName(granularity_sqla),
-          allColumns,
-        ),
-        resolveMatchingDataColumn('period', allColumns),
-        resolveMatchingDataColumn('pe', allColumns),
-      ].filter((columnName): columnName is string => Boolean(columnName)),
-    ),
-  );
+  const periodColumns = datasourceColumns
+    .filter(c => isPeriodColumn(c) && c.column_name && allColumns.includes(c.column_name))
+    .map(c => c.column_name as string);
 
   const extraRaw = datasourceAny?.extra;
   let extraParsed: any;
@@ -777,38 +805,26 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
   }
 
   // Priority 3: If still no match, try to find any non-metric column
-  // (columns that are strings, not numbers)
+  // Prefer the deepest recognizable hierarchy column present in the result rows.
   if (!hierarchyLevelColumn && data.length > 0) {
-    const firstRow = data[0];
-    for (const col of allColumns) {
-      const colLower = col.toLowerCase();
-      // Skip metric-like columns
-      if (
-        colLower.includes('period') ||
-        colLower.includes('year') ||
-        colLower.includes('month') ||
-        colLower.includes('quarter') ||
-        typeof firstRow[col] === 'number'
-      ) {
-        continue;
-      }
-      // Use first string column as hierarchy column
-      if (typeof firstRow[col] === 'string') {
-        hierarchyLevelColumn = col;
-        break;
-      }
-    }
+    hierarchyLevelColumn = resolveBestFallbackHierarchyColumn({
+      allColumns,
+      data,
+      datasourceColumns,
+      stagedOrgUnitLevels: cachedOrgUnitLevels,
+      requestedPrimaryLevel,
+    });
   }
 
   // Priority 4: If we STILL have no hierarchy column and this is DHIS2, use first column as fallback
   if (!hierarchyLevelColumn && isDHIS2Dataset && allColumns.length > 0) {
-    const firstRow = data[0];
-    for (const col of allColumns) {
-      if (typeof firstRow[col] === 'string') {
-        hierarchyLevelColumn = col;
-        break;
-      }
-    }
+    hierarchyLevelColumn = resolveBestFallbackHierarchyColumn({
+      allColumns,
+      data,
+      datasourceColumns,
+      stagedOrgUnitLevels: cachedOrgUnitLevels,
+      requestedPrimaryLevel,
+    });
   }
 
   // Find the metric column dynamically using improved matching logic
@@ -983,15 +999,7 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
       : undefined);
   const dashboardId =
     coercePositiveInteger(formDataAny?.dashboard_id) ||
-    coercePositiveInteger(formDataAny?.dashboardId) ||
-    (typeof window !== 'undefined'
-      ? coercePositiveInteger(
-          new URLSearchParams(window.location.search).get('dashboard_id'),
-        ) ||
-        coercePositiveInteger(
-          new URLSearchParams(window.location.search).get('dashboard'),
-        )
-      : undefined);
+    coercePositiveInteger(formDataAny?.dashboardId);
 
   const effectiveAggregationMethod = (() => {
     if (aggregation_method) {
@@ -1033,7 +1041,6 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     linearColorScheme: linear_color_scheme || 'superset_seq_1',
     useLinearColorScheme: effectiveUseLinearColorScheme,
     chartBackgroundColor: chart_background_color,
-    labelTextColor: label_text_color,
     opacity: opacity ?? 0.7,
     strokeColor: stroke_color || { r: 255, g: 255, b: 255, a: 1 },
     strokeWidth: stroke_width ?? 1,

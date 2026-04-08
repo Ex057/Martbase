@@ -246,6 +246,11 @@ export function inferBoundaryLevelFromOrgUnitColumn(
     return Number(explicitLevelMatch[1]);
   }
 
+  const legacyLevelMatch = getLegacyBoundaryLevel(orgUnitColumn, orgUnitColumn);
+  if (legacyLevelMatch !== undefined) {
+    return legacyLevelMatch;
+  }
+
   const levelDefinitions = getDatasourceBoundaryLevels(
     datasourceColumns,
     stagedOrgUnitLevels,

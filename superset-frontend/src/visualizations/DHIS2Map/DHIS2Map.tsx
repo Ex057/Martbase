@@ -197,27 +197,6 @@ const MapCanvas = styled.div<{ $backgroundColor?: string }>`
     z-index: 999;
   }
 
-  .auto-focus-button {
-    position: absolute;
-    bottom: 18px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1002;
-    min-height: 36px;
-    padding: 0 14px;
-    background: rgba(255, 255, 255, 0.96);
-    border: 2px solid rgba(0, 0, 0, 0.2);
-    border-radius: 999px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 600;
-    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.18);
-
-    &:hover {
-      background: #f4f4f4;
-    }
-  }
-
   .map-zoom-controls {
     position: absolute;
     top: 14px;
@@ -226,6 +205,19 @@ const MapCanvas = styled.div<{ $backgroundColor?: string }>`
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    border: 1px solid rgba(15, 23, 42, 0.16);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.18);
+  }
+
+  .map-aim-button {
+    position: absolute;
+    top: 102px;
+    left: 14px;
+    z-index: 1002;
+    width: 38px;
+    height: 38px;
     border: 1px solid rgba(15, 23, 42, 0.16);
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.96);
@@ -245,6 +237,7 @@ const MapCanvas = styled.div<{ $backgroundColor?: string }>`
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    padding: 0;
 
     &:last-child {
       border-bottom: 0;
@@ -253,6 +246,16 @@ const MapCanvas = styled.div<{ $backgroundColor?: string }>`
     &:hover {
       background: rgba(241, 245, 249, 0.95);
     }
+  }
+
+  .map-aim-button.map-zoom-button {
+    border-bottom: 0;
+  }
+
+  .map-aim-icon {
+    width: 18px;
+    height: 18px;
+    color: #0f172a;
   }
 
   .map-interaction-overlay {
@@ -576,11 +579,11 @@ function BoundaryMask({
 }
 
 // Component for manual focus button
-interface FocusButtonProps {
+function FocusButton({
+  boundaries,
+}: {
   boundaries: BoundaryFeature[];
-}
-
-function FocusButton({ boundaries }: FocusButtonProps): ReactElement | null {
+}): ReactElement | null {
   const map = useMap();
 
   const handleFocus = () => {
@@ -602,12 +605,27 @@ function FocusButton({ boundaries }: FocusButtonProps): ReactElement | null {
 
   return (
     <button
-      className="auto-focus-button"
+      className="map-aim-button map-zoom-button"
       onClick={handleFocus}
-      title="Aim map at visible boundaries"
+      aria-label={t('Aim map at visible boundaries')}
+      title={t('Aim map at visible boundaries')}
       type="button"
     >
-      {t('Aim')}
+      <svg
+        className="map-aim-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+      >
+        <circle cx="12" cy="12" r="5" stroke="currentColor" strokeWidth="1.8" />
+        <circle cx="12" cy="12" r="1.8" fill="currentColor" />
+        <path
+          d="M12 2.5V6.25M12 17.75V21.5M2.5 12H6.25M17.75 12H21.5"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+        />
+      </svg>
     </button>
   );
 }
@@ -749,19 +767,33 @@ function buildAggregatedValueMaps(options: {
 
   const availableColumns = Object.keys(rows[0]);
   const actualOrgUnitCol =
-    actualOrgUnitColumn ||
+    (actualOrgUnitColumn && availableColumns.includes(actualOrgUnitColumn)
+      ? actualOrgUnitColumn
+      : undefined) ||
     resolveQueryDimensionColumnName({
+      requestedColumn: requestedOrgUnitColumn,
+      datasourceColumns,
+      availableColumns,
+    }) ||
+    resolveLoaderDimensionColumnName({
       requestedColumn: requestedOrgUnitColumn,
       datasourceColumns,
       availableColumns,
     });
   const actualMetricCol =
-    actualMetricColumn ||
+    (actualMetricColumn && availableColumns.includes(actualMetricColumn)
+      ? actualMetricColumn
+      : undefined) ||
     resolveQueryMetricColumnName({
       metric,
       datasourceColumns,
       availableColumns,
       rows,
+    }) ||
+    resolveLoaderMetricColumnName({
+      metric,
+      datasourceColumns,
+      availableColumns,
     });
 
   if (!actualOrgUnitCol || !actualMetricCol) {
@@ -1000,8 +1032,6 @@ function DHIS2Map({
   compassPosition = 'topright',
   compassStyle = 'north_badge',
   tooltipColumns,
-  onDrillDown,
-  setDataMask,
   activeFilters = [],
   datasetSql = '',
   isDHIS2Dataset = false,
@@ -2708,63 +2738,6 @@ function DHIS2Map({
     };
   }, [boundaryLevelsKey, sourceInstanceIdsKey, databaseId, fetchBoundaries]);
 
-  const handleDrillDown = useCallback(
-    (feature: BoundaryFeature) => {
-      if (!enableDrill || !feature.properties.hasChildrenWithCoordinates) {
-        return;
-      }
-
-      const newLevel = drillState.currentLevel + 1;
-      const newBreadcrumbs = [
-        ...drillState.breadcrumbs,
-        {
-          id: feature.id,
-          name: feature.properties.name,
-          level: drillState.currentLevel,
-        },
-      ];
-
-      setDrillState({
-        currentLevel: newLevel,
-        parentId: feature.id,
-        parentName: feature.properties.name,
-        breadcrumbs: newBreadcrumbs,
-      });
-
-      if (onDrillDown) {
-        onDrillDown(feature.id, feature.properties.name);
-      }
-
-      if (setDataMask) {
-        const filterValues = Array.from(
-          new Set([feature.properties.name, feature.id].filter(Boolean)),
-        );
-        setDataMask({
-          extraFormData: {
-            filters: [
-              {
-                col: effectiveOrgUnitDataColumn,
-                op: 'IN',
-                val: filterValues,
-              },
-            ],
-          },
-          filterState: {
-            value: filterValues,
-            label: feature.properties.name,
-          },
-        });
-      }
-    },
-    [
-      effectiveOrgUnitDataColumn,
-      enableDrill,
-      drillState,
-      onDrillDown,
-      setDataMask,
-    ],
-  );
-
   const handleDrillUp = useCallback(
     (toIndex?: number) => {
       if (drillState.breadcrumbs.length === 0) {
@@ -2799,14 +2772,8 @@ function DHIS2Map({
         breadcrumbs: newBreadcrumbs,
       });
 
-      if (setDataMask) {
-        setDataMask({
-          extraFormData: {},
-          filterState: {},
-        });
-      }
     },
-    [drillState, resolvedPrimaryBoundaryLevel, setDataMask],
+    [drillState, resolvedPrimaryBoundaryLevel],
   );
 
   const selectedBoundaryIds = useMemo(() => {
@@ -2835,6 +2802,53 @@ function DHIS2Map({
     boundaries,
     selectedBoundaryIds,
     showAllBoundaries,
+  ]);
+
+  useEffect(() => {
+    const firstFiveBoundaries = displayBoundaries.slice(0, 5).map(boundary => ({
+      id: boundary.id,
+      name: boundary.properties?.name ?? null,
+      level: boundary.properties?.level ?? null,
+    }));
+
+    const firstFiveDistrictCityValues = filteredData.slice(0, 5).map(row => ({
+      district_city:
+        row?.district_city ??
+        row?.districtCity ??
+        row?.[effectiveOrgUnitDataColumn || ''] ??
+        null,
+      region: row?.region ?? null,
+      national: row?.national ?? null,
+      metric:
+        row?.[metric as string] ??
+        row?.[resolvedMetricColumn || ''] ??
+        row?.value ??
+        null,
+    }));
+
+    // eslint-disable-next-line no-console
+    console.info('[DHIS2Map] Boundary/data diagnostics', {
+      displayBoundariesLength: displayBoundaries.length,
+      firstFiveBoundaries,
+      effectiveDataLength: filteredData.length,
+      firstFiveDistrictCityValues,
+      effectiveOrgUnitDataColumn,
+      resolvedEffectiveOrgUnitColumn,
+      resolvedMetricColumn,
+      dataMapSize: dataMap.size,
+      dataMapSample: Array.from(dataMap.entries()).slice(0, 5),
+      dataMapByNameSize: dataMapByName.size,
+      dataMapByNameSample: Array.from(dataMapByName.entries()).slice(0, 5),
+    });
+  }, [
+    dataMap,
+    dataMapByName,
+    displayBoundaries,
+    effectiveOrgUnitDataColumn,
+    filteredData,
+    metric,
+    resolvedEffectiveOrgUnitColumn,
+    resolvedMetricColumn,
   ]);
 
   const shouldStyleUnselectedAreas = useMemo(
@@ -3005,12 +3019,9 @@ function DHIS2Map({
       };
 
       handlers.click = () => {
-        setSelectedFeatureId(feature.id);
+        setSelectedFeatureId(null);
         if (document.activeElement instanceof HTMLElement) {
           document.activeElement.blur();
-        }
-        if (enableDrill) {
-          handleDrillDown(feature);
         }
       };
 
@@ -3082,7 +3093,6 @@ function DHIS2Map({
       labelType,
       labelFontSize,
       enableDrill,
-      handleDrillDown,
       mapInstance,
     ],
   );
@@ -3133,14 +3143,12 @@ function DHIS2Map({
         enabled={displayBoundaries.length > 0 && baseMapType !== 'none'}
       />
 
-        {/* Manual focus button */}
-        {displayBoundaries.length > 0 && (
-          <FocusButton boundaries={displayBoundaries} />
-        )}
-
         {/* Explicit in-map zoom controls */}
         {/* @ts-ignore - React 19 compatibility */}
         <MapZoomButtons />
+        {displayBoundaries.length > 0 && (
+          <FocusButton boundaries={displayBoundaries} />
+        )}
 
         {displayBoundaries.length > 0 && (
           /* @ts-ignore - React 19 compatibility */
@@ -3310,7 +3318,7 @@ function DHIS2Map({
               {loadTime}ms
             </FooterStatusPill>
           )}
-          {effectiveIsStagedLocalDataset && !loading && (
+          {quickFilterColumns.length > 0 && !loading && (
             <FooterActionButton
               type="button"
               $active={showFilters}

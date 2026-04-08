@@ -137,7 +137,7 @@ export default function buildQuery(formData: QueryFormData) {
         selectedLevel = Array.isArray(boundary_level) ? boundary_level[0] : boundary_level;
       }
       
-      const minimalGroupby: string[] = org_unit_column
+      const minimalColumns: string[] = org_unit_column
         ? [sanitizeDHIS2ColumnName(org_unit_column)]
         : [];
 
@@ -154,7 +154,7 @@ export default function buildQuery(formData: QueryFormData) {
         {
           ...baseQueryObject,
           // Minimal query to avoid "Empty query" backend error
-          groupby: minimalGroupby,
+          columns: minimalColumns,
           metrics: [minimalMetric],
           row_limit: 1,
           // Mark this as a DHIS2 query so we know to skip chart API execution
@@ -421,7 +421,7 @@ export default function buildQuery(formData: QueryFormData) {
       {
         ...baseQueryObject,
         extras: dhis2QueryExtras,
-        groupby: columns,
+        columns,
         metrics: safeMetrics,
         filters: combinedFilters,
         // Use a reasonable row limit (0 means unlimited which can cause issues)

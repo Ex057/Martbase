@@ -206,6 +206,47 @@ describe('DHIS2Map transformProps', () => {
     expect(result.orgUnitColumn).toBe('district_city');
   });
 
+  test('prefers the deepest legacy hierarchy column from chart rows when public form data omits org unit settings', () => {
+    const chartProps = {
+      width: 800,
+      height: 600,
+      formData: {
+        metric: 'cch heat stress era5 heat',
+        tooltip_columns: [],
+      },
+      queriesData: [
+        {
+          data: [
+            {
+              national: 'MOH - Uganda',
+              region: 'Bunyoro',
+              district_city: 'Masindi District',
+              'cch heat stress era5 heat': 50,
+            },
+          ],
+        },
+      ],
+      datasource: {
+        id: 4,
+        database: { id: 3 },
+        extra: JSON.stringify({
+          dhis2_staged_local: true,
+          dhis2_source_database_id: 2,
+          dhis2_source_instance_ids: [101],
+          dhis2_serving_database_id: 3,
+        }),
+      },
+      hooks: {},
+      filterState: {},
+    } as any;
+
+    const result = transformProps(chartProps);
+
+    expect(result.orgUnitColumn).toBe('district_city');
+    expect(result.primaryBoundaryLevel).toBe(3);
+    expect(result.boundaryLevels).toEqual([3]);
+  });
+
   test('ignores mis-tagged legacy helper columns when resolving the primary boundary level', () => {
     const chartProps = {
       width: 800,
