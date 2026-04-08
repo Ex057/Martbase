@@ -66,7 +66,7 @@ export const hydrateDashboard =
 
     charts.forEach(chart => {
       // eslint-disable-next-line no-param-reassign
-      chart.slice_id = chart.form_data.slice_id;
+      chart.slice_id = chart.form_data?.slice_id ?? chart.id;
     });
 
     // new dash: position_json could be {} or null
@@ -94,29 +94,46 @@ export const hydrateDashboard =
     const slices = {};
     const sliceIds = new Set();
     const slicesFromExploreCount = new Map();
+    const datasourcesFromCharts = {};
 
     charts.forEach(slice => {
       const key = slice.slice_id;
+      const sliceFormData = slice.form_data || {};
+      const hasFormData = sliceFormData.datasource && sliceFormData.viz_type;
       const formData = {
-        ...slice.form_data,
+        ...sliceFormData,
         url_params: {
-          ...slice.form_data.url_params,
+          ...sliceFormData.url_params,
           ...regularUrlParams,
         },
       };
       chartQueries[key] = {
         ...chart,
         id: key,
-        form_data: applyDefaultFormData(formData),
+        form_data: hasFormData ? applyDefaultFormData(formData) : formData,
       };
+
+      // For public dashboards, the API includes datasource_info with full
+      // datasource details (columns, database, extra, etc.) since the
+      // useDashboardDatasets hook is disabled for public views.
+      if (slice.datasource_info) {
+        const dsInfo = slice.datasource_info;
+        const dsUid =
+          sliceFormData.datasource ||
+          `${dsInfo.id}__${dsInfo.type || 'table'}`;
+        datasourcesFromCharts[dsUid] = {
+          ...dsInfo,
+          uid: dsUid,
+        };
+      }
 
       slices[key] = {
         slice_id: key,
-        slice_url: slice.slice_url,
-        slice_name: slice.slice_name,
-        form_data: slice.form_data,
-        viz_type: slice.form_data.viz_type,
-        datasource: slice.form_data.datasource,
+        slice_url: slice.slice_url || slice.url || '',
+        slice_name: slice.slice_name || slice.viz_type || `Chart ${key}`,
+        form_data: sliceFormData,
+        viz_type: sliceFormData.viz_type || slice.viz_type || 'table',
+        datasource: sliceFormData.datasource || slice.datasource || '',
         description: slice.description,
         description_markeddown: slice.description_markeddown,
         owners: slice.owners,
@@ -251,6 +268,7 @@ export const hydrateDashboard =
       data: {
         sliceEntities: { ...initSliceEntities, slices, isLoading: false },
         charts: chartQueries,
+        datasources: datasourcesFromCharts,
         // read-only data
         dashboardInfo: {
           ...dashboard,

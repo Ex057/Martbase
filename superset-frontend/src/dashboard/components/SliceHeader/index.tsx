@@ -21,6 +21,7 @@ import {
   ReactNode,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -44,6 +45,7 @@ import { RootState } from 'src/dashboard/types';
 import RowCountLabel from 'src/components/RowCountLabel';
 import { URL_PARAMS } from 'src/constants';
 import { DashboardPageIdContext } from 'src/dashboard/containers/DashboardPage';
+import { ensureIsArray } from '@superset-ui/core';
 
 const extensionsRegistry = getExtensionsRegistry();
 
@@ -73,22 +75,31 @@ const CrossFilterIcon = styled(Icons.ApartmentOutlined)`
 
 const ChartHeaderStyles = styled.div`
   ${({ theme }) => css`
-    font-size: ${theme.fontSizeLG}px;
-    font-weight: ${theme.fontWeightStrong};
-    margin-bottom: ${theme.sizeUnit}px;
+    font-size: var(--pro-density-chart-title, ${(theme as any).fontSizeBase || theme.fontSize}px);
+    font-weight: 600;
+    margin-bottom: 0;
     display: flex;
     max-width: 100%;
-    align-items: flex-start;
-    min-height: 0;
+    align-items: center;
+    min-height: 32px;
+    padding: 6px var(--pro-density-header-h, 10px);
+    border-bottom: 2px solid var(--pro-blue, ${theme.colorPrimary});
+    background: linear-gradient(
+      180deg,
+      ${theme.colorBgContainer} 0%,
+      ${theme.colorFillAlter || theme.colorBgLayout} 100%
+    );
 
     & > .header-title {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: calc(100% - ${theme.sizeUnit * 4}px);
-      flex-grow: 1;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
+      overflow: visible;
+      white-space: normal;
+      word-break: break-word;
+      max-width: calc(100% - ${theme.sizeUnit * 6}px);
+      flex: 1 1 0%;
+      display: flex;
+      flex-direction: column;
+      color: var(--pro-navy, ${theme.colorText});
+      letter-spacing: -0.01em;
 
       & > span.ant-tooltip-open {
         display: inline;
@@ -99,6 +110,26 @@ const ChartHeaderStyles = styled.div`
       display: flex;
       align-items: center;
       height: 24px;
+      flex-shrink: 0;
+      gap: 2px;
+    }
+
+    .chart-filter-context {
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--pro-text-secondary, ${theme.colorTextDescription});
+      margin-top: 1px;
+      line-height: 1.3;
+      opacity: 0.85;
+    }
+
+    @media (max-width: 767px) {
+      padding: 2px 8px;
+      font-size: 13px;
+
+      & > .header-title {
+        max-width: calc(100% - ${theme.sizeUnit * 4}px);
+      }
     }
 
     .dropdown.btn-group {
@@ -194,6 +225,68 @@ const SliceHeader = forwardRef<HTMLDivElement, SliceHeaderProps>(
     const theme = useTheme();
     const dashboardPageId = useContext(DashboardPageIdContext);
 
+    // Extract applied OU / Period filter context for display under the title
+    const nativeFilters = useSelector<RootState, any>(
+      state => state.nativeFilters?.filters,
+    );
+    const dataMask = useSelector<RootState, any>(state => state.dataMask);
+
+    const filterContextLine = useMemo(() => {
+      if (!nativeFilters || !dataMask) return null;
+
+      const ouKeywords = [
+        'national', 'region', 'district', 'county', 'province',
+        'org_unit', 'orgunit', 'ou_', 'facility',
+      ];
+      const periodKeywords = [
+        'period', 'quarter', 'month', 'year',
+      ];
+
+      let ouLabel: string | null = null;
+      let periodLabel: string | null = null;
+
+      const chartId = slice?.slice_id;
+      const allFilters = Object.values(nativeFilters) as any[];
+
+      for (const filter of allFilters) {
+        if (filter.type !== 'NATIVE_FILTER') continue;
+        // Only include filters that scope to this chart
+        if (
+          chartId &&
+          Array.isArray(filter.chartsInScope) &&
+          !filter.chartsInScope.includes(chartId)
+        ) {
+          continue;
+        }
+
+        const filterState = dataMask[filter.id]?.filterState;
+        if (!filterState) continue;
+
+        const label =
+          filterState.label && !String(filterState.label).includes('undefined')
+            ? String(filterState.label)
+            : filterState.value
+              ? ensureIsArray(filterState.value).join(', ')
+              : null;
+        if (!label) continue;
+
+        const colName = (
+          filter.targets?.[0]?.column?.name || filter.name || ''
+        ).toLowerCase();
+
+        if (!ouLabel && ouKeywords.some(k => colName.includes(k))) {
+          ouLabel = label;
+        }
+        if (!periodLabel && periodKeywords.some(k => colName.includes(k))) {
+          periodLabel = label;
+        }
+        if (ouLabel && periodLabel) break;
+      }
+
+      if (!ouLabel && !periodLabel) return null;
+      return { ou: ouLabel, period: periodLabel };
+    }, [nativeFilters, dataMask, slice?.slice_id]);
+
     const rowLimit = Number(formData.row_limit || -1);
     const sqlRowCount = Number(firstQueryResponse?.sql_rowcount || 0);
 
@@ -237,6 +330,19 @@ const SliceHeader = forwardRef<HTMLDivElement, SliceHeaderProps>(
               />
             </div>
           </Tooltip>
+          {filterContextLine && !editMode && (
+            <div className="chart-filter-context">
+              {filterContextLine.ou && (
+                <span>{filterContextLine.ou}</span>
+              )}
+              {filterContextLine.ou && filterContextLine.period && (
+                <span className="context-separator">·</span>
+              )}
+              {filterContextLine.period && (
+                <span>{filterContextLine.period}</span>
+              )}
+            </div>
+          )}
           {!!Object.values(annotationQuery).length && (
             <Tooltip
               id="annotations-loading-tooltip"

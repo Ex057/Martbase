@@ -124,7 +124,9 @@ const HorizontalOverflowFilterControlContainer = styled(
   }
 `;
 
-const VerticalFormItem = styled(StyledFormItem)<{
+const VerticalFormItem = styled(StyledFormItem, {
+  shouldForwardProp: prop => prop !== 'inverseSelection',
+})<{
   inverseSelection: boolean;
 }>`
   .ant-form-item-label {
@@ -153,7 +155,9 @@ const VerticalFormItem = styled(StyledFormItem)<{
   }
 `;
 
-const HorizontalFormItem = styled(StyledFormItem)<{
+const HorizontalFormItem = styled(StyledFormItem, {
+  shouldForwardProp: prop => prop !== 'inverseSelection',
+})<{
   inverseSelection: boolean;
 }>`
   && {
@@ -258,13 +262,15 @@ const DescriptionToolTip = ({ description }: { description: string }) => (
     <Tooltip
       title={description}
       placement="right"
-      overlayInnerStyle={{
-        display: '-webkit-box',
-        WebkitLineClamp: 10,
-        WebkitBoxOrient: 'vertical',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'normal',
+      styles={{
+        body: {
+          display: '-webkit-box',
+          WebkitLineClamp: 10,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'normal',
+        },
       }}
     >
       <Icons.InfoCircleOutlined

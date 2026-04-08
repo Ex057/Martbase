@@ -126,6 +126,8 @@ const FilterValue: FC<FilterControlProps> = ({
   const [ownState, setOwnState] = useState<JsonObject>({});
   const [inViewFirstTime, setInViewFirstTime] = useState(inView);
   const inputRef = useRef<HTMLInputElement>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
   const [target] = targets;
   const {
     datasetId,
@@ -216,12 +218,6 @@ const FilterValue: FC<FilterControlProps> = ({
         dataMaskSelected?.[resolvedCascadeParentId]?.filterState?.value;
 
       if (!hasSelectedValue(parentValue)) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          '[NativeFilter] skip fetch: cascade parent not selected',
-          filter.id,
-          { resolvedCascadeParentId },
-        );
         return;
       }
     } else if (filter?.cascadeParentIds?.length) {
@@ -232,12 +228,6 @@ const FilterValue: FC<FilterControlProps> = ({
       const depsCount = filter.cascadeParentIds.length;
 
       if (selectedParentFiltersWithValue !== depsCount) {
-        // eslint-disable-next-line no-console
-        console.warn('[NativeFilter] skip fetch: deps not met', filter.id, {
-          selectedParentFiltersWithValue,
-          depsCount,
-          dependencies,
-        });
         return;
       }
     }
@@ -260,13 +250,6 @@ const FilterValue: FC<FilterControlProps> = ({
       if (!hasDataSource) {
         return;
       }
-      // eslint-disable-next-line no-console
-      console.warn('[NativeFilter] fetching options', filter.id, {
-        groupby,
-        datasetId,
-        cascadeParentInfo,
-        formData: newFormData,
-      });
       setIsRefreshing(true);
       getChartDataRequest({
         formData: newFormData,
@@ -274,6 +257,7 @@ const FilterValue: FC<FilterControlProps> = ({
         ownState: filterOwnState,
       })
         .then(({ response, json }) => {
+          if (!mountedRef.current) return;
           if (isFeatureEnabled(FeatureFlag.GlobalAsyncQueries)) {
             // deal with getChartDataRequest transforming the response data
             const result = 'result' in json ? json.result[0] : json;
@@ -283,11 +267,14 @@ const FilterValue: FC<FilterControlProps> = ({
             } else if (response.status === 202) {
               waitForAsyncData(result)
                 .then((asyncResult: ChartDataResponseResult[]) => {
+                  if (!mountedRef.current) return;
                   setState(asyncResult);
                   handleFilterLoadFinish();
                 })
                 .catch((error: Response) => {
+                  if (!mountedRef.current) return;
                   getClientErrorObject(error).then(clientErrorObject => {
+                    if (!mountedRef.current) return;
                     setError(clientErrorObject);
                     handleFilterLoadFinish();
                   });
@@ -304,7 +291,9 @@ const FilterValue: FC<FilterControlProps> = ({
           }
         })
         .catch((error: Response) => {
+          if (!mountedRef.current) return;
           getClientErrorObject(error).then(clientErrorObject => {
+            if (!mountedRef.current) return;
             setError(clientErrorObject);
             handleFilterLoadFinish();
           });

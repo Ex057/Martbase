@@ -28,6 +28,8 @@ import {
   useDashboard,
   useDashboardCharts,
   useDashboardDatasets,
+  usePublicDashboard,
+  usePublicDashboardCharts,
 } from 'src/hooks/apiResources';
 import { hydrateDashboard } from 'src/dashboard/actions/hydrate';
 import { setDatasources } from 'src/dashboard/actions/datasources';
@@ -124,10 +126,6 @@ export const DashboardPage: FC<PageProps> = ({
   const dispatch = useDispatch();
   const history = useHistory();
   const dashboardPageId = useMemo(() => nanoid(), []);
-  const numericDashboardId = useMemo(() => {
-    const parsedId = Number(idOrSlug);
-    return Number.isFinite(parsedId) && parsedId > 0 ? parsedId : undefined;
-  }, [idOrSlug]);
   const hasDashboardInfoInitiated = useSelector<RootState, Boolean>(
     ({ dashboardInfo }) =>
       dashboardInfo && Object.keys(dashboardInfo).length > 0,
@@ -136,19 +134,24 @@ export const DashboardPage: FC<PageProps> = ({
     (state: RootState) => state.dashboardInfo.theme,
   );
   const { addDangerToast } = useToasts();
-  const { result: dashboard, error: dashboardApiError } =
-    useDashboard(idOrSlug, Boolean(isPublicView));
-  const publicDashboardId = dashboard?.id || numericDashboardId;
-  const { result: charts, error: chartsApiError } =
-    useDashboardCharts(
-      isPublicView ? publicDashboardId : idOrSlug,
-      Boolean(isPublicView),
-    );
+  const publicDashboardResource = usePublicDashboard(idOrSlug, !!isPublicView);
+  const privateDashboardResource = useDashboard(idOrSlug, !isPublicView);
+  const publicChartsResource = usePublicDashboardCharts(
+    idOrSlug,
+    !!isPublicView,
+  );
+  const privateChartsResource = useDashboardCharts(idOrSlug, !isPublicView);
+  const { result: dashboard, error: dashboardApiError } = isPublicView
+    ? publicDashboardResource
+    : privateDashboardResource;
+  const { result: charts, error: chartsApiError } = isPublicView
+    ? publicChartsResource
+    : privateChartsResource;
   const {
     result: datasets,
     error: datasetsApiError,
     status,
-  } = useDashboardDatasets(isPublicView ? null : idOrSlug);
+  } = useDashboardDatasets(idOrSlug, !isPublicView);
   const isDashboardHydrated = useRef(false);
 
   const error = dashboardApiError || chartsApiError;

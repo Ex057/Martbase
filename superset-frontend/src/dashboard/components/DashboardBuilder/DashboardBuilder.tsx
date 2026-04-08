@@ -98,24 +98,60 @@ const FiltersPanel = styled.div<{ width: number; hidden: boolean }>`
   z-index: 11;
   width: ${({ width }) => width}px;
   ${({ hidden }) => hidden && `display: none;`}
+
+  @media (max-width: 767px) {
+    display: none;
+  }
 `;
 
 const StickyPanel = styled.div<{ width: number }>`
   position: sticky;
-  top: -1px;
+  top: 0;
   width: ${({ width }) => width}px;
   flex: 0 0 ${({ width }) => width}px;
+  z-index: 10;
 `;
 
 // @z-index-above-dashboard-popovers (99) + 1 = 100
-const StyledHeader = styled.div`
-  ${({ theme }) => css`
+const StyledHeader = styled('div', {
+  shouldForwardProp: prop => prop !== 'isPublicView',
+})<{ isPublicView?: boolean }>`
+  ${({ theme, isPublicView }) => css`
     grid-column: 2;
     grid-row: 1;
-    position: sticky;
-    top: 0;
     z-index: 99;
     max-width: 100vw;
+    background: ${theme.colorBgBase};
+    margin-top: 0;
+    padding: 0;
+
+    ${isPublicView
+      ? css`
+          /* Public view: no sticky — page body scrolls and the portal nav is
+             already position: fixed.  Using sticky here with
+             top: var(--portal-header-height) causes a visual offset equal to
+             the portal header height because the DashboardWrapper's
+             overflow-y: visible means there is no scroll container for the
+             sticky algorithm, so the browser falls back to relative
+             positioning and pushes the header down by the top value. */
+          position: static;
+          & > .dashboard-header-container {
+            margin: 0;
+            padding: 0;
+          }
+          & .dragdroppable {
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+        `
+      : css`
+          position: sticky;
+          top: 0;
+        `}
+
+    @media (max-width: 767px) {
+      grid-column: 1;
+    }
 
     .empty-droptarget:before {
       position: absolute;
@@ -137,8 +173,13 @@ const StyledContent = styled.div<{
 }>`
   grid-column: 2;
   grid-row: 2;
-  // @z-index-above-dashboard-header (100) + 1 = 101
-  ${({ fullSizeChartId }) => fullSizeChartId && `z-index: 101;`}
+  position: relative;
+  z-index: ${({ fullSizeChartId }) => (fullSizeChartId ? 101 : 1)};
+  isolation: isolate;
+
+  @media (max-width: 767px) {
+    grid-column: 1;
+  }
 `;
 
 const DashboardContentWrapper = styled.div`
@@ -150,10 +191,10 @@ const DashboardContentWrapper = styled.div`
       flex-direction: column;
       height: 100%;
 
-      /* drop shadow for top-level tabs only */
+      /* flat border for top-level tabs */
       & .dashboard-component-tabs {
-        box-shadow: 0 ${theme.sizeUnit}px ${theme.sizeUnit}px 0
-          ${addAlpha(theme.colorBorderSecondary, 0.1)};
+        box-shadow: none;
+        border-bottom: 1px solid ${addAlpha(theme.colorBorderSecondary, 0.22)};
         padding-left: ${theme.sizeUnit *
         2}px; /* note this is added to tab-level padding, to match header */
       }
@@ -182,6 +223,8 @@ const DashboardContentWrapper = styled.div`
         left: 0;
         z-index: 1;
         pointer-events: none;
+        border-radius: ${theme.borderRadiusLG}px;
+        transition: border-color ${theme.motionDurationFast} ease;
       }
 
       .grid-row.grid-row--hovered:after,
@@ -194,7 +237,8 @@ const DashboardContentWrapper = styled.div`
           .dashboard-chart {
             .chart-container {
               cursor: move;
-              opacity: 0.2;
+              opacity: 0.3;
+              transition: opacity ${theme.motionDurationMid} ease;
             }
 
             .slice_container {
@@ -204,7 +248,7 @@ const DashboardContentWrapper = styled.div`
           }
 
           &:hover .dashboard-chart .chart-container {
-            opacity: 0.7;
+            opacity: 0.8;
           }
         }
 
@@ -212,6 +256,7 @@ const DashboardContentWrapper = styled.div`
         &.resizable-container--resizing:hover {
           & > .dashboard-component-chart-holder:after {
             border: 1px dashed ${theme.colorPrimary};
+            border-radius: ${theme.borderRadiusLG}px;
           }
         }
       }
@@ -246,16 +291,29 @@ const DashboardContentWrapper = styled.div`
           z-index: 1;
           pointer-events: none;
           border: 1px solid transparent;
+          border-radius: ${theme.borderRadiusLG}px;
+          transition: border-color ${theme.motionDurationFast} ease,
+            box-shadow ${theme.motionDurationFast} ease;
         }
 
         &:hover:after {
           border: 1px dashed ${theme.colorPrimary};
+          box-shadow: 0 0 0 3px ${addAlpha(theme.colorPrimary, 0.08)};
           z-index: 2;
         }
       }
 
       .contract-trigger:before {
         display: none;
+      }
+
+      /* Smooth layout reflow transitions in edit mode */
+      .dragdroppable-row {
+        transition: margin 0.15s ease, padding 0.15s ease;
+      }
+
+      .resizable-container {
+        transition: width 0.15s ease;
       }
     }
 
@@ -307,6 +365,7 @@ const StyledDashboardContent = styled.div<{
       position: relative;
       margin: ${theme.sizeUnit * 4}px;
       margin-left: ${marginLeft}px;
+      transition: margin ${theme.motionDurationMid} ease;
 
       ${editMode &&
       `
@@ -328,31 +387,82 @@ const StyledDashboardContent = styled.div<{
 
     .resizable-container {
       max-width: 100% !important;
+      transition: width ${theme.motionDurationMid} ease,
+        height ${theme.motionDurationMid} ease;
+    }
+
+    /* Smooth layout transitions for rows and columns */
+    .dragdroppable-row {
+      transition: margin ${theme.motionDurationFast} ease;
+    }
+
+    .grid-row {
+      position: relative;
+      border-radius: ${theme.borderRadiusLG}px;
+    }
+
+    /* ── Responsive grid ── */
+    @media (max-width: 1024px) {
+      .grid-container {
+        margin: ${theme.sizeUnit * 2}px;
+        margin-left: ${theme.sizeUnit * 2}px;
+      }
+    }
+
+    @media (max-width: 767px) {
+      flex-direction: column;
+
+      .grid-container {
+        margin: ${theme.sizeUnit}px;
+        margin-left: ${theme.sizeUnit}px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        ${editMode ? `max-width: 100%;` : ''}
+      }
+
+      .dashboard-builder-sidepane {
+        width: 100%;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        z-index: 100;
+        max-height: 50vh;
+        overflow-y: auto;
+      }
     }
 
     .dashboard-component-chart-holder {
       width: 100%;
       height: 100%;
       background-color: ${theme.colorBgContainer};
+      border-radius: ${theme.borderRadiusLG}px;
+      border: 1px solid ${addAlpha(theme.colorBorderSecondary, 0.22)};
       position: relative;
       padding: ${theme.sizeUnit * 4}px;
-      overflow-y: visible;
+      overflow: hidden;
+      box-shadow: none;
 
       // transitionable traits to show filter relevance
       transition:
         opacity ${theme.motionDurationMid} ease-in-out,
         border-color ${theme.motionDurationMid} ease-in-out,
-        box-shadow ${theme.motionDurationMid} ease-in-out;
+        box-shadow ${theme.motionDurationMid} ease-in-out,
+        transform ${theme.motionDurationFast} ease-out;
+
+      &:hover {
+        border-color: ${addAlpha(theme.colorBorderSecondary, 0.4)};
+        box-shadow: none;
+      }
 
       &.fade-in {
-        border-radius: ${theme.borderRadius}px;
-        box-shadow:
-          inset 0 0 0 2px ${theme.colorPrimary},
-          0 0 0 3px ${addAlpha(theme.colorPrimary, 0.1)};
+        border-radius: ${theme.borderRadiusLG}px;
+        border-color: ${theme.colorPrimary};
+        box-shadow: 0 0 0 2px ${addAlpha(theme.colorPrimary, 0.1)};
       }
 
       &.fade-out {
-        border-radius: ${theme.borderRadius}px;
+        border-radius: ${theme.borderRadiusLG}px;
+        border-color: ${addAlpha(theme.colorBorderSecondary, 0.22)};
         box-shadow: none;
       }
 
@@ -488,7 +598,9 @@ const DashboardBuilder: React.FC<DashboardBuilderProps> = ({
     ELEMENT_ON_SCREEN_OPTIONS,
   );
 
-  const showFilterBar = !editMode && nativeFiltersEnabled;
+  // In public view, hide the inline filter bars — filters are accessed via
+  // a drawer button in the header instead.
+  const showFilterBar = !editMode && nativeFiltersEnabled && !isPublicView;
 
   const offset =
     FILTER_BAR_HEADER_HEIGHT +
@@ -500,6 +612,7 @@ const DashboardBuilder: React.FC<DashboardBuilderProps> = ({
   const draggableStyle = useMemo(
     () => ({
       marginLeft:
+        isPublicView ||
         dashboardFiltersOpen ||
         editMode ||
         !nativeFiltersEnabled ||
@@ -508,6 +621,7 @@ const DashboardBuilder: React.FC<DashboardBuilderProps> = ({
           : -32,
     }),
     [
+      isPublicView,
       dashboardFiltersOpen,
       editMode,
       filterBarOrientation,
@@ -600,9 +714,11 @@ const DashboardBuilder: React.FC<DashboardBuilderProps> = ({
     ],
   );
 
-  const dashboardContentMarginLeft = !editMode
+  const dashboardContentMarginLeft = isPublicView
     ? theme.sizeUnit * 4
-    : theme.sizeUnit * 8;
+    : !editMode
+      ? theme.sizeUnit * 4
+      : theme.sizeUnit * 8;
 
   const renderChild = useCallback(
     adjustedWidth => {
@@ -642,7 +758,7 @@ const DashboardBuilder: React.FC<DashboardBuilderProps> = ({
   );
 
   return (
-    <DashboardWrapper>
+    <DashboardWrapper isPublicView={isPublicView}>
       {showFilterBar &&
         filterBarOrientation === FilterBarOrientation.Vertical && (
           <>
@@ -657,24 +773,52 @@ const DashboardBuilder: React.FC<DashboardBuilderProps> = ({
             </ResizableSidebar>
           </>
         )}
-      <StyledHeader ref={headerRef}>
-        {/* @ts-ignore */}
-        <Droppable
-          data-test="top-level-tabs"
-          className={cx(!topLevelTabs && editMode && 'empty-droptarget')}
-          component={dashboardRoot}
-          parentComponent={null}
-          depth={DASHBOARD_ROOT_DEPTH}
-          index={0}
-          orientation="column"
-          onDrop={handleDrop}
-          editMode={editMode}
-          // you cannot drop on/displace tabs if they already exist
-          disableDragDrop={!!topLevelTabs}
-          style={draggableStyle}
-        >
-          {renderDraggableContent}
-        </Droppable>
+      <StyledHeader ref={headerRef} isPublicView={isPublicView}>
+        {isPublicView ? (
+          /* Public view: render header directly without drag/drop wrappers
+             to eliminate unnecessary nesting (Droppable > dragdroppable divs) */
+          <>
+            {!hideDashboardHeader && (
+              <DashboardHeader
+                isPublicView={isPublicView}
+                onBack={onBack}
+                backLabel={backLabel}
+                badge={badge}
+                subtitle={subtitle}
+              />
+            )}
+            {!isReport && topLevelTabs && !uiConfig.hideNav && (
+              <DashboardComponent
+                id={topLevelTabs?.id}
+                parentId={DASHBOARD_ROOT_ID}
+                depth={DASHBOARD_ROOT_DEPTH + 1}
+                index={0}
+                renderTabContent={false}
+                renderHoverMenu={false}
+                onChangeTab={handleChangeTab}
+              />
+            )}
+          </>
+        ) : (
+          /* Edit / authenticated view: keep full drag/drop support */
+          /* @ts-ignore */
+          <Droppable
+            data-test="top-level-tabs"
+            className={cx(!topLevelTabs && editMode && 'empty-droptarget')}
+            component={dashboardRoot}
+            parentComponent={null}
+            depth={DASHBOARD_ROOT_DEPTH}
+            index={0}
+            orientation="column"
+            onDrop={handleDrop}
+            editMode={editMode}
+            // you cannot drop on/displace tabs if they already exist
+            disableDragDrop={!!topLevelTabs}
+            style={draggableStyle}
+          >
+            {renderDraggableContent}
+          </Droppable>
+        )}
       </StyledHeader>
       <StyledContent fullSizeChartId={fullSizeChartId}>
         {!editMode &&

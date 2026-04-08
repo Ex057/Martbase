@@ -2311,7 +2311,7 @@ class PublicPageRestApi(BaseApi):
                 return None
             path = (
                 f"/superset/public/dashboards/?dashboard="
-                f"{item.dashboard.id}"
+                f"{item.dashboard.slug or item.dashboard.id}"
             )
 
         if item.item_type == "page_collection":
@@ -2333,7 +2333,7 @@ class PublicPageRestApi(BaseApi):
                     "id": f"dashboard-{dash.id}",
                     "label": dash.dashboard_title,
                     "path": (
-                        f"/superset/public/dashboards/?dashboard={dash.id}"
+                        f"/superset/public/dashboards/?dashboard={dash.slug or dash.id}"
                     ),
                     "item_type": "dashboard",
                     "dashboard_id": dash.id,
@@ -2451,13 +2451,15 @@ class PublicPageRestApi(BaseApi):
         if chart_id:
             chart = db.session.query(Slice).filter(Slice.id == chart_id).one_or_none()
             if chart is None:
-                raise ValidationError({"chart_id": ["Chart not found"]})
-            if require_public and not getattr(chart, "is_public", False):
-                raise ValidationError({"chart_id": ["Chart must be marked public"]})
-            if not self._chart_uses_serving_tables(chart):
-                raise ValidationError(
-                    {"chart_id": ["Chart must query from a serving-table dataset"]}
-                )
+                if require_public:
+                    raise ValidationError({"chart_id": ["Chart not found"]})
+            else:
+                if require_public and not getattr(chart, "is_public", False):
+                    raise ValidationError({"chart_id": ["Chart must be marked public"]})
+                if require_public and not self._chart_uses_serving_tables(chart):
+                    raise ValidationError(
+                        {"chart_id": ["Chart must query from a serving-table dataset"]}
+                    )
 
         dashboard_id = component_data.get("dashboard_id")
         if dashboard_id:
@@ -2467,8 +2469,9 @@ class PublicPageRestApi(BaseApi):
                 .one_or_none()
             )
             if dash is None:
-                raise ValidationError({"dashboard_id": ["Dashboard not found"]})
-            if require_public and not getattr(dash, "published", False):
+                if require_public:
+                    raise ValidationError({"dashboard_id": ["Dashboard not found"]})
+            elif require_public and not getattr(dash, "published", False):
                 raise ValidationError(
                     {"dashboard_id": ["Dashboard must be published for public use"]}
                 )
@@ -2486,13 +2489,25 @@ class PublicPageRestApi(BaseApi):
         if chart_id:
             chart = db.session.query(Slice).filter(Slice.id == chart_id).one_or_none()
             if chart is None:
-                raise ValidationError({"chart_ref": ["Chart not found"]})
-            if require_public and not getattr(chart, "is_public", False):
-                raise ValidationError({"chart_ref": ["Chart must be marked public"]})
-            if not self._chart_uses_serving_tables(chart):
-                raise ValidationError(
-                    {"chart_ref": ["Chart must query from a serving-table dataset"]}
-                )
+                # Draft saves tolerate missing charts (may have been deleted);
+                # only block publishing with a dangling reference.
+                if require_public:
+                    raise ValidationError(
+                        {"chart_ref": [f"Chart {chart_id} not found"]}
+                    )
+            else:
+                if require_public and not getattr(chart, "is_public", False):
+                    raise ValidationError(
+                        {"chart_ref": [
+                            f"Chart '{chart.slice_name}' (id={chart_id}) must be marked public"
+                        ]}
+                    )
+                if require_public and not self._chart_uses_serving_tables(chart):
+                    raise ValidationError(
+                        {"chart_ref": [
+                            f"Chart '{chart.slice_name}' (id={chart_id}) must query from a serving-table dataset"
+                        ]}
+                    )
 
         dashboard_id = self._block_dashboard_reference(settings)
         if dashboard_id:
@@ -2502,10 +2517,15 @@ class PublicPageRestApi(BaseApi):
                 .one_or_none()
             )
             if dash is None:
-                raise ValidationError({"dashboard_ref": ["Dashboard not found"]})
-            if require_public and not getattr(dash, "published", False):
+                if require_public:
+                    raise ValidationError(
+                        {"dashboard_ref": [f"Dashboard {dashboard_id} not found"]}
+                    )
+            elif require_public and not getattr(dash, "published", False):
                 raise ValidationError(
-                    {"dashboard_ref": ["Dashboard must be published for public use"]}
+                    {"dashboard_ref": [
+                        f"Dashboard '{dash.dashboard_title}' (id={dashboard_id}) must be published for public use"
+                    ]}
                 )
 
         reusable_block_id = self._block_reusable_reference(settings)
@@ -2515,10 +2535,11 @@ class PublicPageRestApi(BaseApi):
                 admin=True,
             )
             if reusable_block is None:
-                raise ValidationError(
-                    {"reusable_block_id": ["Reusable block not found"]}
-                )
-            if require_public and not self._reusable_block_is_usable(reusable_block):
+                if require_public:
+                    raise ValidationError(
+                        {"reusable_block_id": ["Reusable block not found"]}
+                    )
+            elif require_public and not self._reusable_block_is_usable(reusable_block):
                 raise ValidationError(
                     {
                         "reusable_block_id": [
@@ -2526,11 +2547,12 @@ class PublicPageRestApi(BaseApi):
                         ]
                     }
                 )
-            for referenced_block in reusable_block.get_blocks():
-                self._validate_block_references(
-                    referenced_block,
-                    require_public=require_public,
-                )
+            if reusable_block is not None:
+                for referenced_block in reusable_block.get_blocks():
+                    self._validate_block_references(
+                        referenced_block,
+                        require_public=require_public,
+                    )
 
         asset_id = self._block_asset_reference(block_type, content, settings)
         if asset_id:
@@ -2585,9 +2607,43 @@ class PublicPageRestApi(BaseApi):
                 continue
             if not self._chart_uses_serving_tables(chart):
                 continue
-            # Public CMS pages render charts through the public embed path, so
+            # Public dynamic pages render charts through the public embed path, so
             # referenced serving-table charts must become public at publish time.
             chart.is_public = True
+
+    def _ensure_referenced_dashboards_are_published(
+        self,
+        blocks: list[dict[str, Any]],
+    ) -> None:
+        """Auto-publish dashboards referenced by blocks when a page is published."""
+        if not blocks:
+            return
+        dashboard_ids: set[int] = set()
+
+        def walk(block_data: dict[str, Any]) -> None:
+            dash_id = self._block_dashboard_reference(block_data.get("settings") or {})
+            if dash_id is not None:
+                dashboard_ids.add(dash_id)
+            for child in block_data.get("children") or []:
+                walk(child)
+
+        for block in blocks:
+            walk(block)
+        if not dashboard_ids:
+            return
+        dashboards = (
+            db.session.query(Dashboard)
+            .filter(Dashboard.id.in_(dashboard_ids))
+            .all()
+        )
+        for dash in dashboards:
+            if not getattr(dash, "published", False):
+                dash.published = True
+                logger.info(
+                    "Auto-published dashboard '%s' (id=%s) for CMS page publish",
+                    dash.dashboard_title,
+                    dash.id,
+                )
 
     def _payload_requires_public_references(
         self,
@@ -3202,7 +3258,10 @@ class PublicPageRestApi(BaseApi):
             require_public=require_public_references,
         )
         page.slug = requested_slug
-        page.title = payload["title"]
+        title = payload.get("title") or ""
+        if not title.strip():
+            raise ValidationError({"title": ["Title is required"]})
+        page.title = title.strip()
         page.subtitle = payload.get("subtitle")
         page.description = payload.get("description")
         page.excerpt = payload.get("excerpt")
@@ -3248,8 +3307,8 @@ class PublicPageRestApi(BaseApi):
             page.status = "draft"
         elif page.visibility == "authenticated":
             page.status = "private" if page.is_published else "draft"
-        elif page.status == "archived":
-            page.is_published = False
+        elif page.status == "archived" and not page.is_published:
+            pass  # stay archived when not explicitly publishing
         elif page.is_published:
             if page.scheduled_publish_at and page.scheduled_publish_at > now:
                 page.status = "scheduled"
@@ -3289,6 +3348,7 @@ class PublicPageRestApi(BaseApi):
         payload_blocks = self._coerce_page_blocks_payload(payload)
         if require_public_references:
             self._ensure_referenced_charts_are_public(payload_blocks)
+            self._ensure_referenced_dashboards_are_published(payload_blocks)
         for block_data in payload_blocks:
             self._validate_block_references(
                 block_data,
@@ -4461,9 +4521,9 @@ class PublicPageRestApi(BaseApi):
     @cms_auth_required
     @safe
     def get_admin_bootstrap(self) -> Response:
-        """Combined authenticated CMS bootstrap payload."""
+        """Combined authenticated dynamic pages bootstrap payload."""
         if not _can_manage_pages():
-            return self.response(403, message="You do not have access to CMS Pages")
+            return self.response(403, message="You do not have access to Dynamic Pages")
         try:
             payload = self._get_admin_payload(
                 page_slug=request.args.get("page") or request.args.get("slug"),
@@ -4592,9 +4652,9 @@ class PublicPageRestApi(BaseApi):
     @cms_auth_required
     @safe
     def get_admin_pages(self) -> Response:
-        """List CMS pages or fetch a single page for editing."""
+        """List dynamic pages or fetch a single page for editing."""
         if not _can_manage_pages():
-            return self.response(403, message="You do not have access to CMS Pages")
+            return self.response(403, message="You do not have access to Dynamic Pages")
         try:
             page_slug = request.args.get("slug")
             page_id = request.args.get("page_id", type=int)
@@ -4621,7 +4681,7 @@ class PublicPageRestApi(BaseApi):
                 count=len(pages),
             )
         except Exception as ex:  # pylint: disable=broad-except
-            logger.exception("Error fetching CMS pages")
+            logger.exception("Error fetching dynamic pages")
             return self.response_500(message=str(ex))
 
     @expose("/admin/pages", methods=("POST",))
@@ -4655,7 +4715,7 @@ class PublicPageRestApi(BaseApi):
     def get_admin_block_types(self) -> Response:
         """List available block definitions for the CMS editor."""
         if not _can_manage_pages():
-            return self.response(403, message="You do not have access to CMS Pages")
+            return self.response(403, message="You do not have access to Dynamic Pages")
         return self.response(200, result=list_block_definitions(), count=len(list_block_definitions()))
 
     @expose("/admin/reusable-blocks", methods=("GET",))
@@ -4800,10 +4860,15 @@ class PublicPageRestApi(BaseApi):
             )
         except ValidationError as ex:
             db.session.rollback()
+            logger.warning(
+                "Validation error publishing CMS page %s: %s",
+                page_id,
+                ex.messages,
+            )
             return self.response_400(message=str(ex.messages))
         except Exception as ex:  # pylint: disable=broad-except
             db.session.rollback()
-            logger.exception("Error publishing CMS page")
+            logger.exception("Error publishing CMS page %s", page_id)
             return self.response_500(message=str(ex))
 
     @expose("/admin/pages/<int:page_id>/archive", methods=("POST",))
@@ -4847,7 +4912,7 @@ class PublicPageRestApi(BaseApi):
     def get_admin_page_revisions(self, page_id: int) -> Response:
         """Return revision history for a CMS page."""
         if not _can_manage_pages():
-            return self.response(403, message="You do not have access to CMS Pages")
+            return self.response(403, message="You do not have access to Dynamic Pages")
         page = self._find_page(page_id=page_id, admin=True)
         if page is None:
             return self.response_404(message="Page not found")
@@ -4873,7 +4938,7 @@ class PublicPageRestApi(BaseApi):
     def get_admin_menus(self) -> Response:
         """List CMS menus for the authenticated studio."""
         if not _can_manage_pages():
-            return self.response(403, message="You do not have access to CMS Pages")
+            return self.response(403, message="You do not have access to Dynamic Pages")
         menus = (
             db.session.query(NavigationMenu)
             .order_by(NavigationMenu.display_order.asc(), NavigationMenu.id.asc())
@@ -4928,7 +4993,7 @@ class PublicPageRestApi(BaseApi):
     def get_admin_layout(self) -> Response:
         """Return the global portal layout config for CMS administration."""
         if not _can_manage_pages():
-            return self.response(403, message="You do not have access to CMS Pages")
+            return self.response(403, message="You do not have access to Dynamic Pages")
         layout_config = self._get_or_create_layout_config()
         return self.response(
             200,
@@ -5095,6 +5160,103 @@ class PublicPageRestApi(BaseApi):
         except Exception as ex:  # pylint: disable=broad-except
             db.session.rollback()
             logger.exception("Error archiving CMS theme")
+            return self.response_500(message=str(ex))
+
+    @expose("/admin/themes/sync-preset", methods=("POST",))
+    @cms_auth_required
+    @safe
+    def sync_preset_to_default_theme(self) -> Response:
+        """Sync pro theme preset colors to the default public page theme.
+
+        Accepts the preset's CSS variable overrides and maps them to the
+        portal theme token structure so public dashboards and pages
+        inherit the admin-selected colour scheme.
+        """
+        if not _can_manage_themes():
+            return self.response(403, message="You do not have permission to manage themes")
+        try:
+            payload = request.json or {}
+            preset_id = payload.get("preset_id", "")
+            css_vars: dict[str, str] = payload.get("css_vars", {})
+            tokens_patch: dict[str, str] = payload.get("tokens", {})
+            is_dark = bool(payload.get("is_dark", False))
+
+            default_theme = self._default_theme(admin=True)
+            if default_theme is None:
+                default_theme = self._ensure_default_theme_exists()
+            if default_theme is None:
+                return self.response_500(message="Could not resolve default theme")
+
+            current_tokens = default_theme.get_tokens() or {}
+
+            # Map pro-theme preset colors into portal token structure
+            accent = css_vars.get("--pro-accent") or tokens_patch.get("colorPrimary", "")
+            navy = css_vars.get("--pro-navy", "")
+            navy_light = css_vars.get("--pro-navy-light", "")
+
+            if accent:
+                current_tokens.setdefault("colors", {})
+                current_tokens["colors"]["accent"] = accent
+                current_tokens["colors"]["link"] = accent
+                current_tokens["colors"]["linkHover"] = css_vars.get(
+                    "--pro-accent-hover", accent
+                )
+                current_tokens.setdefault("buttons", {})
+                current_tokens["buttons"]["primaryBg"] = accent
+                current_tokens["buttons"]["primaryHover"] = css_vars.get(
+                    "--pro-accent-hover", accent
+                )
+
+            if navy:
+                current_tokens.setdefault("backgrounds", {})
+                current_tokens["backgrounds"]["hero"] = navy
+
+            if tokens_patch.get("colorSuccess"):
+                current_tokens.setdefault("colors", {})
+                current_tokens["colors"]["secondary"] = tokens_patch["colorSuccess"]
+
+            if is_dark:
+                current_tokens.setdefault("colors", {})
+                current_tokens["colors"]["background"] = navy or "#0D1B2A"
+                current_tokens["colors"]["backgroundElevated"] = navy_light or "#1B2838"
+                current_tokens["colors"]["surface"] = navy_light or "#1B2838"
+                current_tokens["colors"]["text"] = "#E2E8F0"
+                current_tokens["colors"]["muted"] = "#94A3B8"
+                current_tokens["colors"]["border"] = "rgba(255, 255, 255, 0.12)"
+                current_tokens["colors"]["borderStrong"] = "rgba(255, 255, 255, 0.2)"
+                current_tokens.setdefault("forms", {})
+                current_tokens["forms"]["inputBg"] = navy_light or "#1B2838"
+                current_tokens["forms"]["inputBorder"] = "rgba(255, 255, 255, 0.15)"
+                current_tokens.setdefault("buttons", {})
+                current_tokens["buttons"]["secondaryBg"] = "rgba(255, 255, 255, 0.06)"
+                current_tokens["buttons"]["secondaryText"] = "#E2E8F0"
+                current_tokens["buttons"]["secondaryHover"] = "rgba(255, 255, 255, 0.1)"
+                current_tokens.setdefault("backgrounds", {})
+                current_tokens["backgrounds"]["section"] = navy_light or "#1B2838"
+                current_tokens["backgrounds"]["card"] = navy_light or "#1B2838"
+            else:
+                current_tokens.setdefault("colors", {})
+                current_tokens["colors"].setdefault("background", "#ffffff")
+                current_tokens["colors"].setdefault("surface", "#ffffff")
+                current_tokens["colors"].setdefault("text", "#0f172a")
+
+            default_theme.set_tokens(current_tokens)
+
+            # Store the preset ID in theme settings for reference
+            settings = default_theme.get_settings() or {}
+            settings["synced_preset_id"] = preset_id
+            default_theme.set_settings(settings)
+            default_theme.changed_by_fk = get_user_id()
+            db.session.commit()
+
+            return self.response(200, result={
+                "synced": True,
+                "preset_id": preset_id,
+                "theme_id": default_theme.id,
+            })
+        except Exception as ex:  # pylint: disable=broad-except
+            db.session.rollback()
+            logger.exception("Error syncing preset to default theme")
             return self.response_500(message=str(ex))
 
     @expose("/admin/templates", methods=("GET",))

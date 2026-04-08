@@ -31,7 +31,6 @@ import {
   Alert,
   Button,
   Drawer,
-  Dropdown,
   Empty,
   Input,
   InputNumber,
@@ -42,7 +41,6 @@ import {
   Tooltip,
   message,
 } from 'antd';
-import type { MenuProps } from 'antd';
 import { useHistory, useLocation } from 'react-router-dom';
 import logoImage from 'src/assets/images/loog.jpg';
 import {
@@ -52,14 +50,12 @@ import {
   moveArrayItem,
   normalizeDraftPage,
   resolveLandingPagePath,
-  withDefaultWelcomeNavigationItems,
 } from './portalUtils';
 import { ensurePageBlocks } from './blockUtils';
 import { groupBlocksBySlot, RenderBlockTree } from './BlockRenderer';
 import DashboardPage from 'src/dashboard/containers/DashboardPage';
 import type {
   PortalDashboardSummary,
-  PortalNavigationItem,
   PortalPage,
   PortalPageComponent,
   PortalPageSection,
@@ -92,12 +88,15 @@ const PageShell = styled.div`
 `;
 
 const StickyHeader = styled.header`
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 30;
+  left: 0;
+  right: 0;
+  z-index: 1000;
   backdrop-filter: blur(18px);
   background: var(--portal-header-bg);
-  border-bottom: 1px solid var(--portal-border);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--portal-header-text, #ffffff);
 `;
 
 const HeaderInner = styled.div<{ $maxWidth: string }>`
@@ -146,7 +145,7 @@ const BrandEyebrow = styled.span`
   font-size: 11px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--portal-muted);
+  color: var(--portal-header-muted, rgba(255, 255, 255, 0.7));
 `;
 
 const BrandTitle = styled.span`
@@ -155,30 +154,17 @@ const BrandTitle = styled.span`
   letter-spacing: -0.02em;
 `;
 
-const HeaderActions = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  flex-wrap: wrap;
-`;
-
-const NavRow = styled.nav`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-`;
 
 const NavButton = styled.button<{ $active?: boolean }>`
   border: 0;
-  border-radius: var(--portal-radius-md, 0);
+  border-radius: var(--portal-radius-md, 8px);
   padding: 10px 16px;
   background: ${({ $active }) =>
     $active ? 'var(--portal-nav-active-bg)' : 'transparent'};
   color: ${({ $active }) =>
-    $active ? 'var(--portal-nav-active-text)' : 'var(--portal-muted-strong)'};
-  font-weight: ${({ $active }) => ($active ? 700 : 600)};
+    $active ? 'var(--portal-nav-active-text, #ffffff)' : 'rgba(255, 255, 255, 0.85)'};
+  font-weight: ${({ $active }) => ($active ? 700 : 500)};
+  font-size: 13px;
   cursor: pointer;
   transition:
     background 0.2s ease,
@@ -186,50 +172,105 @@ const NavButton = styled.button<{ $active?: boolean }>`
 
   &:hover {
     background: var(--portal-nav-hover-bg);
-    color: var(--portal-text);
+    color: #ffffff;
   }
 `;
 
-const NavButtonCluster = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-`;
 
-const NavDropdownTrigger = styled.button<{ $active?: boolean }>`
-  border: 0;
-  border-radius: var(--portal-radius-md, 0);
-  padding: 10px 12px;
-  background: ${({ $active }) =>
-    $active ? 'var(--portal-nav-active-bg)' : 'transparent'};
-  color: ${({ $active }) =>
-    $active ? 'var(--portal-nav-active-text)' : 'var(--portal-muted-strong)'};
+const DashboardPickerLabel = styled.span`
+  font-size: 13px;
   font-weight: 600;
-  cursor: pointer;
-  transition:
-    background 0.2s ease,
-    color 0.2s ease;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+`;
 
-  &:hover {
-    background: var(--portal-nav-hover-bg);
-    color: var(--portal-text);
+const DashboardPickerWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  max-width: 480px;
+
+  .ant-select {
+    flex: 1;
+    min-width: 240px;
+  }
+
+  .ant-select-selector {
+    background: rgba(255, 255, 255, 0.12) !important;
+    border: 1px solid rgba(255, 255, 255, 0.25) !important;
+    border-radius: 0 !important;
+    color: rgba(255, 255, 255, 0.95) !important;
+    height: 36px !important;
+    padding: 0 12px !important;
+  }
+
+  .ant-select-selector:hover {
+    border-color: rgba(255, 255, 255, 0.4) !important;
+    background: rgba(255, 255, 255, 0.18) !important;
+  }
+
+  .ant-select-focused .ant-select-selector {
+    border-color: var(--portal-accent, #4DA3FF) !important;
+    box-shadow: 0 0 0 2px rgba(77, 163, 255, 0.25) !important;
+  }
+
+  .ant-select-selection-search-input {
+    color: rgba(255, 255, 255, 0.95) !important;
+    height: 34px !important;
+  }
+
+  .ant-select-selection-placeholder {
+    color: rgba(255, 255, 255, 0.6) !important;
+  }
+
+  .ant-select-selection-item {
+    color: rgba(255, 255, 255, 0.95) !important;
+    line-height: 34px !important;
+  }
+
+  .ant-select-arrow {
+    color: rgba(255, 255, 255, 0.7) !important;
+  }
+
+  .ant-select-clear {
+    background: rgba(255, 255, 255, 0.12) !important;
+    color: rgba(255, 255, 255, 0.7) !important;
   }
 `;
 
-const NavDropdownCaret = styled.span`
-  display: inline-flex;
+const HeaderLeft = styled.div`
+  display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  line-height: 1;
+  gap: 16px;
+  flex: 1;
+  min-width: 0;
+
+  @media (max-width: 960px) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
 `;
 
-const PageContentShell = styled.div`
+const HeaderRight = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+`;
+
+const PageContentShell = styled.div<{ $dashboardMode?: boolean }>`
   width: 100%;
-  flex: 1 0 auto;
   display: flex;
   flex-direction: column;
-  overflow-x: hidden;
+  overflow-x: clip;
+  position: relative;
+  z-index: 1;
+  padding-top: var(--portal-header-height, 0px);
+  flex: 1 0 auto;
 `;
 
 const Main = styled.main<{ $maxWidth: string }>`
@@ -277,7 +318,7 @@ const CardBody = styled.div`
 /* ── end dashboard view layout ── */
 
 const Footer = styled.footer`
-  border-top: 1px solid var(--portal-border);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   background: var(--portal-footer-bg);
 `;
 
@@ -291,7 +332,8 @@ const FooterInner = styled.div<{ $maxWidth: string }>`
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  color: var(--portal-muted);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
 `;
 
 const FooterLinks = styled.div`
@@ -302,17 +344,17 @@ const FooterLinks = styled.div`
 `;
 
 const FooterLink = styled.a`
-  color: var(--portal-muted-strong);
+  color: rgba(255, 255, 255, 0.7);
   text-decoration: none;
 
   &:hover {
-    color: var(--portal-text);
+    color: #ffffff;
     text-decoration: none;
   }
 `;
 
 const FooterText = styled.span`
-  color: var(--portal-muted-strong);
+  color: rgba(255, 255, 255, 0.7);
 `;
 
 const DrawerStack = styled.div`
@@ -385,26 +427,20 @@ function getStoredTheme(): VisualMode {
   return theme === 'dark' ? 'dark' : 'light';
 }
 
-function persistTheme(theme: VisualMode) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-  window.localStorage.setItem(PORTAL_THEME_STORAGE_KEY, theme);
-}
 
 function buildPortalSearch({
   pageSlug,
-  dashboardRef,
+  dashboardSlug,
 }: {
   pageSlug?: string | null;
-  dashboardRef?: string | null;
+  dashboardSlug?: string | null;
 }) {
   const normalizedPath = pageSlug
     ? `/superset/public/${pageSlug}/`
     : '/superset/public/';
   const params = new URLSearchParams();
-  if (dashboardRef) {
-    params.set(DASHBOARD_QUERY_PARAM, dashboardRef);
+  if (dashboardSlug) {
+    params.set(DASHBOARD_QUERY_PARAM, dashboardSlug);
   }
 
   const query = params.toString();
@@ -530,15 +566,14 @@ export default function PublicLandingPage() {
   const history = useHistory();
   const location = useLocation();
 
-  // eslint-disable-next-line no-console
-  console.log('[PublicLandingPage] Mounted. Pathname:', location.pathname);
+  // Debug logging removed — was firing on every render, not just mount
   const pageSlug = readPageSlug(location.pathname, location.search);
   const selectedDashboardSlug = readDashboardSlug(location.search);
   const shouldOpenStudio = false;
   const shouldOpenLayout = false;
   const { data, error, loading, reloadPortal } = usePublicPortal(pageSlug);
   const [messageApi, contextHolder] = message.useMessage();
-  const [visualMode, setVisualMode] = useState<VisualMode>(getStoredTheme());
+  const visualMode: VisualMode = getStoredTheme();
   const [layoutDrawerOpen, setLayoutDrawerOpen] = useState(false);
   const [layoutSections, setLayoutSections] = useState<PortalPageSection[]>([]);
   const [draggedSectionId, setDraggedSectionId] = useState<number | null>(null);
@@ -597,8 +632,8 @@ export default function PublicLandingPage() {
     data?.portal_layout.config.portalTitle ||
     data?.config.navbar.title.text ||
     t('Public Analytics Portal');
-  const accentColor = data?.portal_layout.config.accentColor || '#0f766e';
-  const secondaryColor = data?.portal_layout.config.secondaryColor || '#1d4ed8';
+  const accentColor = data?.portal_layout.config.accentColor || '#1976D2';
+  const secondaryColor = data?.portal_layout.config.secondaryColor || '#4DA3FF';
   const surfaceColor = data?.portal_layout.config.surfaceColor || '#ffffff';
   const logoSrc =
     visualMode === 'dark'
@@ -679,24 +714,7 @@ export default function PublicLandingPage() {
     shouldOpenStudio,
   ]);
 
-  useEffect(() => {
-    if (!currentPage) {
-      return;
-    }
-    if (
-      location.pathname === '/superset/public/' &&
-      landingPagePath !== '/superset/public/'
-    ) {
-      history.replace(`${landingPagePath}${location.search}${location.hash}`);
-    }
-  }, [
-    currentPage,
-    history,
-    landingPagePath,
-    location.hash,
-    location.pathname,
-    location.search,
-  ]);
+  // No redirect — stay on /superset/public/ and let user pick a dashboard
 
   useEffect(() => {
     if (!currentPage) {
@@ -721,11 +739,6 @@ export default function PublicLandingPage() {
     }
     meta.content = description;
   }, [currentPage]);
-
-  function setTheme(nextTheme: VisualMode) {
-    setVisualMode(nextTheme);
-    persistTheme(nextTheme);
-  }
 
   function navigateToPath(path?: string | null, openInNewTab?: boolean) {
     if (!path) {
@@ -767,7 +780,7 @@ export default function PublicLandingPage() {
     history.push(
       buildPortalSearch({
         pageSlug: pageSlug || currentPage?.slug,
-        dashboardRef: String(dashboard.id),
+        dashboardSlug: dashboard.slug || String(dashboard.id),
       }),
     );
   }
@@ -778,37 +791,6 @@ export default function PublicLandingPage() {
     );
   }
 
-  function isNavItemActive(item: PortalNavigationItem) {
-    if (item.page_id && item.page_id === currentPage?.id) {
-      return true;
-    }
-    return Boolean(
-      item.children?.some(
-        child => child.page_id && child.page_id === currentPage?.id,
-      ),
-    );
-  }
-
-  function toMenuItems(items?: PortalNavigationItem[]): MenuProps['items'] {
-    return (items || []).map(item => ({
-      key: String(item.id),
-      label: item.label,
-      children: item.children?.length ? toMenuItems(item.children) : undefined,
-      onClick: () => {
-        const menuDashboard =
-          item.dashboard_id != null
-            ? data?.dashboards.find(
-                dashboard => dashboard.id === item.dashboard_id,
-              )
-            : undefined;
-        if (menuDashboard) {
-          navigateToPublicDashboard(menuDashboard);
-          return;
-        }
-        navigateToPath(item.path, item.open_in_new_tab);
-      },
-    }));
-  }
 
   async function saveLayout() {
     if (!currentPage) {
@@ -1135,7 +1117,7 @@ export default function PublicLandingPage() {
 
     return (
       <DashboardPage
-        idOrSlug={String(dashboard.id)}
+        idOrSlug={dashboard.slug || String(dashboard.id)}
         isPublicView
         onBack={clearSelectedDashboard}
         backLabel={dashboardBackLabel}
@@ -1148,42 +1130,47 @@ export default function PublicLandingPage() {
   const shellThemeStyle = {
     '--portal-accent': accentColor,
     '--portal-secondary': secondaryColor,
-    '--portal-bg': visualMode === 'dark' ? '#08111f' : '#f3f7fb',
-    '--portal-bg-elevated': visualMode === 'dark' ? '#101a2c' : '#eef3f9',
+    '--portal-bg': visualMode === 'dark' ? '#0A1929' : '#F5F7FA',
+    '--portal-bg-elevated': visualMode === 'dark' ? '#132F4C' : '#EEF2F7',
     '--portal-wash':
       visualMode === 'dark'
-        ? 'rgba(45, 212, 191, 0.12)'
-        : 'rgba(15, 118, 110, 0.12)',
-    '--portal-surface': visualMode === 'dark' ? '#132033' : surfaceColor,
-    '--portal-text': visualMode === 'dark' ? '#ecf5ff' : '#0f172a',
-    '--portal-muted': visualMode === 'dark' ? '#94a3b8' : '#64748b',
-    '--portal-muted-strong': visualMode === 'dark' ? '#cbd5e1' : '#475569',
+        ? 'rgba(25, 118, 210, 0.12)'
+        : 'rgba(25, 118, 210, 0.08)',
+    '--portal-surface': visualMode === 'dark' ? '#132F4C' : surfaceColor,
+    '--portal-text': visualMode === 'dark' ? '#ecf5ff' : '#1A1F2C',
+    '--portal-muted': visualMode === 'dark' ? '#94a3b8' : '#6B7280',
+    '--portal-muted-strong': visualMode === 'dark' ? '#cbd5e1' : '#4B5563',
     '--portal-border':
       visualMode === 'dark'
         ? 'rgba(148, 163, 184, 0.18)'
-        : 'rgba(148, 163, 184, 0.22)',
+        : '#E5EAF0',
     '--portal-border-strong':
       visualMode === 'dark'
         ? 'rgba(148, 163, 184, 0.26)'
-        : 'rgba(148, 163, 184, 0.28)',
+        : '#CBD5E1',
     '--portal-header-bg':
       visualMode === 'dark'
-        ? 'rgba(8, 17, 31, 0.86)'
-        : 'rgba(255, 255, 255, 0.84)',
+        ? 'rgba(10, 25, 41, 0.92)'
+        : '#0D3B66',
     '--portal-footer-bg':
       visualMode === 'dark'
-        ? 'rgba(8, 17, 31, 0.92)'
-        : 'rgba(255, 255, 255, 0.62)',
+        ? 'rgba(10, 25, 41, 0.95)'
+        : '#0D3B66',
     '--portal-nav-hover-bg':
       visualMode === 'dark'
         ? 'rgba(148, 163, 184, 0.12)'
-        : 'rgba(15, 23, 42, 0.06)',
+        : 'rgba(255, 255, 255, 0.12)',
     '--portal-nav-active-bg':
       visualMode === 'dark'
-        ? 'rgba(45, 212, 191, 0.18)'
-        : 'rgba(15, 118, 110, 0.12)',
-    '--portal-nav-active-text': accentColor,
+        ? 'rgba(25, 118, 210, 0.18)'
+        : 'rgba(255, 255, 255, 0.18)',
+    '--portal-nav-active-text': visualMode === 'dark' ? accentColor : '#ffffff',
     '--portal-header-height': `${portalHeaderHeight}px`,
+    '--portal-link': accentColor,
+    '--portal-shadow-card':
+      '0 1px 3px rgba(13,59,102,0.06), 0 1px 2px rgba(13,59,102,0.04)',
+    '--portal-radius-md': '8px',
+    '--portal-radius-lg': '12px',
   } as CSSProperties;
   const pageContentStyle = {
     ...(currentPage?.rendering?.css_variables || {}),
@@ -1207,94 +1194,88 @@ export default function PublicLandingPage() {
     Boolean(
       currentPage?.rendering?.template_structure?.regions?.sidebar?.enabled,
     ) && renderedRegions.sidebar.length > 0;
-  const headerItems = withDefaultWelcomeNavigationItems(
-    data?.navigation.header || [],
-    data?.pages || [],
-    currentPage,
-  );
-
   return (
     <PageShell style={shellThemeStyle}>
       {contextHolder}
       <StickyHeader ref={stickyHeaderRef}>
         <HeaderInner $maxWidth={shellMaxWidth}>
-          <Brand type="button" onClick={openHomepage}>
-            {data?.config.navbar.logo.enabled !== false && (
-              <BrandImage
-                src={logoSrc}
-                alt={data?.config.navbar.logo.alt || t('Portal logo')}
-              />
-            )}
-            <BrandLabel>
-              <BrandEyebrow>
-                {data?.portal_layout.config.welcomeBadge}
-              </BrandEyebrow>
-              <BrandTitle>{portalTitle}</BrandTitle>
-            </BrandLabel>
-          </Brand>
-          <HeaderActions>
-            <NavRow>
-              {headerItems.map(item =>
-                item.children?.length ? (
-                  <NavButtonCluster key={String(item.id)}>
-                    <NavButton
-                      $active={isNavItemActive(item)}
-                      type="button"
-                      onClick={() =>
-                        navigateToPath(item.path, item.open_in_new_tab)
-                      }
-                    >
-                      {item.label}
-                    </NavButton>
-                    <Dropdown
-                      trigger={['click', 'hover']}
-                      menu={{ items: toMenuItems(item.children) }}
-                    >
-                      <NavDropdownTrigger
-                        $active={isNavItemActive(item)}
-                        type="button"
-                        aria-label={t('Open submenu for %s', item.label)}
-                      >
-                        <NavDropdownCaret aria-hidden="true">
-                          v
-                        </NavDropdownCaret>
-                      </NavDropdownTrigger>
-                    </Dropdown>
-                  </NavButtonCluster>
-                ) : (
-                  <NavButton
-                    key={String(item.id)}
-                    $active={isNavItemActive(item)}
-                    type="button"
-                    onClick={() =>
-                      navigateToPath(item.path, item.open_in_new_tab)
-                    }
-                  >
-                    {item.label}
-                  </NavButton>
-                ),
+          {/* ── Left: Brand | Welcome | Dashboard Select ── */}
+          <HeaderLeft>
+            <Brand type="button" onClick={openHomepage}>
+              {data?.config.navbar.logo.enabled !== false && (
+                <BrandImage
+                  src={logoSrc}
+                  alt={data?.config.navbar.logo.alt || t('Portal logo')}
+                />
               )}
-              {(data?.config.navbar.customLinks || []).map(link => (
-                <NavButton
-                  key={link.url}
-                  type="button"
-                  onClick={() => navigateToPath(link.url, link.external)}
-                >
-                  {link.text}
-                </NavButton>
-              ))}
-            </NavRow>
-            {data?.portal_layout.config.showThemeToggle && (
-              <Button
-                onClick={() =>
-                  setTheme(visualMode === 'dark' ? 'light' : 'dark')
-                }
-              >
-                {visualMode === 'dark'
-                  ? data?.portal_layout.config.lightModeLabel || t('Light mode')
-                  : data?.portal_layout.config.darkModeLabel || t('Dark mode')}
-              </Button>
+              <BrandLabel>
+                <BrandEyebrow>
+                  {data?.portal_layout.config.welcomeBadge}
+                </BrandEyebrow>
+                <BrandTitle>{portalTitle}</BrandTitle>
+              </BrandLabel>
+            </Brand>
+            <NavButton
+              $active={!selectedDashboard}
+              type="button"
+              onClick={openHomepage}
+            >
+              {t('Welcome')}
+            </NavButton>
+            {data?.dashboards && data.dashboards.length > 0 && (
+              <DashboardPickerWrapper>
+                <DashboardPickerLabel>
+                  {t('Select a Dashboard')}
+                </DashboardPickerLabel>
+                <Select
+                  showSearch
+                  allowClear
+                  placeholder={t('Search dashboards...')}
+                  value={selectedDashboardSlug || undefined}
+                  onChange={(slug: string | undefined) => {
+                    if (slug) {
+                      const dashboard = data.dashboards.find(
+                        d => (d.slug || String(d.id)) === slug,
+                      );
+                      if (dashboard) {
+                        navigateToPublicDashboard(dashboard);
+                      }
+                    } else {
+                      clearSelectedDashboard();
+                    }
+                  }}
+                  filterOption={(input, option) =>
+                    (option?.label ?? '')
+                      .toLowerCase()
+                      .includes(input.toLowerCase())
+                  }
+                  options={data.dashboards.map(d => ({
+                    value: d.slug || String(d.id),
+                    label: d.dashboard_title,
+                  }))}
+                  classNames={{ popup: { root: 'portal-dashboard-dropdown' } }}
+                />
+              </DashboardPickerWrapper>
             )}
+          </HeaderLeft>
+
+          {/* ── Right: About | Login ── */}
+          <HeaderRight>
+            {(data?.config.navbar.customLinks || []).map(link => (
+              <NavButton
+                key={link.url}
+                type="button"
+                onClick={() => navigateToPath(link.url, link.external)}
+              >
+                {link.text}
+              </NavButton>
+            ))}
+            <NavButton
+              type="button"
+              onClick={() => navigateToPath('/superset/public/about/')}
+            >
+              {t('About')}
+            </NavButton>
             {data?.config.navbar.loginButton.enabled !== false && (
               <Button
                 type={data?.config.navbar.loginButton?.type || 'primary'}
@@ -1310,7 +1291,7 @@ export default function PublicLandingPage() {
                   t('Sign in')}
               </Button>
             )}
-          </HeaderActions>
+          </HeaderRight>
         </HeaderInner>
       </StickyHeader>
 

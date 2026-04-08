@@ -28,8 +28,13 @@ import getBootstrapData from 'src/utils/getBootstrapData';
 
 // not lazy loaded since this is the home page.
 import Welcome from 'src/pages/Home';
-// Public landing page for unauthenticated users
-import PublicLandingPage from 'src/pages/PublicLandingPage';
+
+const PublicLandingPage = lazy(
+  () =>
+    import(
+      /* webpackChunkName: "PublicLandingPage" */ 'src/pages/PublicLandingPage'
+    ),
+);
 
 const CMSAdminPage = lazy(
   () => import(/* webpackChunkName: "CMSAdminPage" */ 'src/pages/CMSAdminPage'),
@@ -383,10 +388,9 @@ export const routes: Routes = [
     path: '/superset/local-staging/',
     Component: LocalStagingSettings,
   },
-  {
-    path: '/superset/ai-management/',
-    Component: AIManagement,
-  },
+  ...(isFeatureEnabled(FeatureFlag.AiInsights)
+    ? [{ path: '/superset/ai-management/', Component: AIManagement }]
+    : []),
   {
     path: '/rowlevelsecurity/list',
     Component: RowLevelSecurityList,

@@ -23,16 +23,12 @@ import { Currency } from '@superset-ui/core';
 import { useApiV1Resource, useTransformedResource } from './apiResources';
 
 export const useDashboard = (
-  idOrSlug: string | number | null | undefined,
-  isPublic = false,
+  idOrSlug: string | number,
+  enabled = true,
 ) =>
   useTransformedResource(
     useApiV1Resource<Dashboard>(
-      idOrSlug
-        ? isPublic
-          ? `/api/v1/dashboard/public/${idOrSlug}`
-          : `/api/v1/dashboard/${idOrSlug}`
-        : null,
+      enabled ? `/api/v1/dashboard/${idOrSlug}` : undefined,
     ),
     dashboard => ({
       ...dashboard,
@@ -45,28 +41,51 @@ export const useDashboard = (
     }),
   );
 
+export const usePublicDashboard = (
+  idOrSlug: string | number,
+  enabled = true,
+) =>
+  useTransformedResource(
+    useApiV1Resource<Dashboard>(
+      enabled ? `/api/v1/dashboard/public/${idOrSlug}` : undefined,
+    ),
+    dashboard => ({
+      ...dashboard,
+      metadata:
+        (dashboard.json_metadata && JSON.parse(dashboard.json_metadata)) || {},
+      position_data:
+        dashboard.position_json && JSON.parse(dashboard.position_json),
+      owners: dashboard.owners || [],
+    }),
+  );
+
 // gets the chart definitions for a dashboard
 export const useDashboardCharts = (
-  idOrSlug: string | number | null | undefined,
-  isPublic = false,
+  idOrSlug: string | number,
+  enabled = true,
 ) =>
   useApiV1Resource<Chart[]>(
-    idOrSlug
-      ? isPublic
-        ? `/api/v1/chart/public/?dashboard_id=${idOrSlug}`
-        : `/api/v1/dashboard/${idOrSlug}/charts`
-      : null,
+    enabled ? `/api/v1/chart/dashboard/${idOrSlug}/charts` : undefined,
+  );
+
+export const usePublicDashboardCharts = (
+  idOrSlug: string | number,
+  enabled = true,
+) =>
+  useApiV1Resource<Chart[]>(
+    enabled ? `/api/v1/chart/public/?dashboard_id=${idOrSlug}` : undefined,
   );
 
 // gets the datasets for a dashboard
 // important: this endpoint only returns the fields in the dataset
 // that are necessary for rendering the given dashboard
 export const useDashboardDatasets = (
-  idOrSlug: string | number | null | undefined,
+  idOrSlug: string | number,
+  enabled = true,
 ) =>
   useTransformedResource(
     useApiV1Resource<Datasource[]>(
-      idOrSlug ? `/api/v1/dashboard/${idOrSlug}/datasets` : null,
+      enabled ? `/api/v1/dashboard/${idOrSlug}/datasets` : undefined,
     ),
     datasets =>
       datasets.map(dataset => ({

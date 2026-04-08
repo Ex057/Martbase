@@ -179,3 +179,25 @@ logs/*.log
 
 # Claude
 .claude/
+
+# Local workspace/tooling directories
+.codex*/
+.cursor/
+.clickhouse/
+.tmp/
+.qodo/
+
+# Local runtime and diagnostics artifacts
+cookies.txt
+db_upgrade.log
+superset_backend.log
+superset_frontend.log
+superset_run.log
+webpack_dev.log
+test-results/
+superset-frontend/test-report.html
+.git.worktree.broken
+*.rdb
+
+# Local archived patches
+scripts/archive/patches/*.patch
