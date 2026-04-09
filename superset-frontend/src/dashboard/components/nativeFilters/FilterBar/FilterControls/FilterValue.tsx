@@ -40,7 +40,9 @@ import {
   t,
   ClientErrorObject,
   getClientErrorObject,
+  SupersetClient,
 } from '@superset-ui/core';
+import { GenericDataType } from '@apache-superset/core/api/core';
 import { useDispatch, useSelector } from 'react-redux';
 import { isEqual, isEqualWith } from 'lodash';
 import { getChartDataRequest } from 'src/components/Chart/chartAction';
@@ -72,6 +74,14 @@ const StyledDiv = styled.div`
 
 const queriesDataPlaceholder = [{ data: [{}] }];
 const behaviors = [Behavior.NativeFilter];
+
+type DHis2FilterMeta = {
+  generated?: boolean;
+  category?: string;
+  columnName?: string;
+  level?: number;
+  useRepositoryOptions?: boolean;
+};
 
 const useShouldFilterRefresh = () => {
   const isDashboardRefreshing = useSelector<RootState, boolean>(
@@ -134,6 +144,8 @@ const FilterValue: FC<FilterControlProps> = ({
     column = {},
   }: Partial<{ datasetId: number; column: { name?: string } }> = target;
   const { name: groupby } = column;
+  const dhis2FilterMeta = (filter.controlValues as Record<string, unknown> | undefined)
+    ?.dhis2FilterMeta as DHis2FilterMeta | undefined;
   const hasDataSource = !!datasetId;
   const [isLoading, setIsLoading] = useState<boolean>(hasDataSource);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -163,6 +175,17 @@ const FilterValue: FC<FilterControlProps> = ({
     const parentIds = filter?.cascadeParentIds || [];
     return parentIds.length ? parentIds[parentIds.length - 1] : undefined;
   }, [cascadeParentId, filter?.cascadeParentIds]);
+
+  const cascadeParentLevel = useMemo(() => {
+    if (!resolvedCascadeParentId) {
+      return undefined;
+    }
+    const parentFilter = allFilters?.[resolvedCascadeParentId];
+    const parentMeta = (
+      parentFilter?.controlValues as Record<string, unknown> | undefined
+    )?.dhis2FilterMeta as DHis2FilterMeta | undefined;
+    return parentMeta?.level;
+  }, [resolvedCascadeParentId, allFilters]);
 
   const getCascadeParentInfo = useCallback(() => {
     if (!resolvedCascadeParentId) {
@@ -250,7 +273,53 @@ const FilterValue: FC<FilterControlProps> = ({
       if (!hasDataSource) {
         return;
       }
+      const shouldUseRepositoryOptions =
+        dhis2FilterMeta?.generated === true &&
+        dhis2FilterMeta?.useRepositoryOptions === true &&
+        dhis2FilterMeta?.category === 'ou_hierarchy' &&
+        !!dashboardId &&
+        !!datasetId &&
+        !!groupby;
       setIsRefreshing(true);
+      if (shouldUseRepositoryOptions) {
+        SupersetClient.post({
+          endpoint: `/api/v1/dashboard/${dashboardId}/dhis2-filter-options`,
+          jsonPayload: {
+            dataset_id: datasetId,
+            column_name: groupby,
+            category: dhis2FilterMeta?.category,
+            level: dhis2FilterMeta?.level,
+            parent_value: cascadeParentInfo.cascade_parent_value,
+            parent_level: cascadeParentLevel,
+          },
+        })
+          .then(({ json }) => {
+            if (!mountedRef.current) return;
+            const options = Array.isArray(json?.result?.options)
+              ? json.result.options
+              : [];
+            setState([
+              {
+                data: options.map((option: Record<string, unknown>) => ({
+                  [groupby]: option.value,
+                })),
+                colnames: [groupby],
+                coltypes: [GenericDataType.String],
+              } as ChartDataResponseResult,
+            ]);
+            setError(undefined);
+            handleFilterLoadFinish();
+          })
+          .catch((error: Response) => {
+            if (!mountedRef.current) return;
+            getClientErrorObject(error).then(clientErrorObject => {
+              if (!mountedRef.current) return;
+              setError(clientErrorObject);
+              handleFilterLoadFinish();
+            });
+          });
+        return;
+      }
       getChartDataRequest({
         formData: newFormData,
         force: shouldRefresh,
@@ -312,6 +381,9 @@ const FilterValue: FC<FilterControlProps> = ({
     dataMaskSelected,
     getCascadeParentInfo,
     resolvedCascadeParentId,
+    dhis2FilterMeta,
+    dashboardId,
+    cascadeParentLevel,
   ]);
 
   useEffect(() => {

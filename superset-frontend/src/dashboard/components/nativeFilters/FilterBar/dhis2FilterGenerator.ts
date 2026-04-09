@@ -39,7 +39,11 @@ export interface BlueprintFilter {
   category: string; // "ou_hierarchy" | "ou_group" | "ou_group_set" | "period_hierarchy"
   cascade_parent_key: string | null;
   order: number;
-  targets?: { datasetId: number; column: { name: string } }[];
+  targets?: {
+    datasetId: number;
+    column: { name: string };
+    datasetRole?: string;
+  }[];
   extra?: Record<string, unknown>;
 }
 
@@ -108,10 +112,21 @@ export function blueprintToNativeFilters(
       : null;
     const cascadeParentIds = cascadeParentId ? [cascadeParentId] : [];
 
-    // Use the first target's datasetId, or fall back to any available
-    const targets = bf.targets?.length
-      ? [bf.targets[0]]
-      : [];
+    const rankTarget = (target: NonNullable<BlueprintFilter['targets']>[number]) => {
+      const role = String(target.datasetRole || '').toUpperCase();
+      if (role === 'MART') return 0;
+      if (role === 'METADATA') return 1;
+      return 2;
+    };
+    const sortedTargets = (bf.targets || []).slice().sort((left, right) => {
+      const rankDiff = rankTarget(left) - rankTarget(right);
+      if (rankDiff !== 0) return rankDiff;
+      return left.datasetId - right.datasetId;
+    });
+    const targets = sortedTargets.map(target => ({
+      datasetId: target.datasetId,
+      column: target.column,
+    }));
 
     // Multi-select for all filters; period filters sort ascending
     const isPeriod = bf.category === 'period_hierarchy';
@@ -122,6 +137,13 @@ export function blueprintToNativeFilters(
       inverseSelection: false,
       searchAllOptions: false,
       sortAscending: isPeriod,
+      dhis2FilterMeta: {
+        generated: true,
+        category: bf.category,
+        columnName: bf.column_name,
+        level: bf.extra?.dhis2_ou_level,
+        useRepositoryOptions: bf.category === 'ou_hierarchy',
+      },
     };
 
     return {

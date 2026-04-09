@@ -186,6 +186,7 @@ class DashboardRestApi(BaseSupersetModelRestApi):
         "put_filters",
         "put_colors",
         "dhis2_filter_blueprint",
+        "dhis2_filter_options",
         "get_public_dashboards",
         "get_public_dashboard",
         "get_public_entry_dashboard",
@@ -830,6 +831,60 @@ class DashboardRestApi(BaseSupersetModelRestApi):
 
         return self.response(200, result=result)
 
+    @expose("/<pk>/dhis2-filter-options", methods=("POST",))
+    @protect()
+    @safe
+    @statsd_metrics
+    @event_logger.log_this_with_context(
+        action=lambda self, *args, **kwargs: f"{self.__class__.__name__}.dhis2_filter_options",
+        log_to_statsd=False,
+    )
+    def dhis2_filter_options(self, pk: int) -> Response:
+        """Return repository-backed DHIS2 filter options for generated OU filters."""
+        try:
+            from superset.daos.dashboard import DashboardDAO  # pylint: disable=import-outside-toplevel
+
+            dashboard = DashboardDAO.find_by_id(pk)
+        except Exception:  # pylint: disable=broad-except
+            return self.response_404()
+        if dashboard is None:
+            return self.response_404()
+
+        body = request.get_json(silent=True) or {}
+        try:
+            dataset_id = int(body.get("dataset_id"))
+        except (TypeError, ValueError):
+            return self.response_400(message="dataset_id is required")
+
+        column_name = str(body.get("column_name") or "").strip()
+        category = str(body.get("category") or "").strip()
+        if not column_name or category != "ou_hierarchy":
+            return self.response_400(
+                message="column_name and category=ou_hierarchy are required"
+            )
+
+        try:
+            result = self._build_dashboard_dhis2_filter_options(
+                dashboard=dashboard,
+                dataset_id=dataset_id,
+                column_name=column_name,
+                level=body.get("level"),
+                parent_value=body.get("parent_value"),
+                parent_level=body.get("parent_level"),
+            )
+        except ValueError as ex:
+            return self.response_400(message=str(ex))
+        except Exception:  # pylint: disable=broad-except
+            logger.exception(
+                "Error building DHIS2 filter options for dashboard=%s dataset=%s column=%s",
+                pk,
+                dataset_id,
+                column_name,
+            )
+            return self.response_500(message="Failed to load DHIS2 filter options")
+
+        return self.response(200, result=result)
+
     @staticmethod
     def _build_dashboard_dhis2_filter_blueprint(dashboard: Any) -> dict[str, Any]:
         """Collect DHIS2 filter blueprints from all datasets in a dashboard.
@@ -930,7 +985,11 @@ class DashboardRestApi(BaseSupersetModelRestApi):
                     filters_by_key[key] = entry
                 # Track which Superset datasets have this column
                 dataset_targets.setdefault(key, [])
-                target = {"datasetId": table.id, "column": {"name": col_name}}
+                target = {
+                    "datasetId": table.id,
+                    "column": {"name": col_name},
+                    "datasetRole": str(getattr(table, "dataset_role", "") or ""),
+                }
                 if target not in dataset_targets[key]:
                     dataset_targets[key].append(target)
 
@@ -1022,6 +1081,205 @@ class DashboardRestApi(BaseSupersetModelRestApi):
             "dataset_count": len(tables),
             "filters": result_filters,
         }
+
+    @staticmethod
+    def _build_dashboard_dhis2_filter_options(
+        *,
+        dashboard: Any,
+        dataset_id: int,
+        column_name: str,
+        level: Any,
+        parent_value: Any = None,
+        parent_level: Any = None,
+    ) -> dict[str, Any]:
+        from superset.connectors.sqla.models import SqlaTable  # pylint: disable=import-outside-toplevel
+        from superset.models.core import Database  # pylint: disable=import-outside-toplevel
+        from superset.dhis2 import staged_dataset_service as staged_dataset_svc  # pylint: disable=import-outside-toplevel
+
+        dataset_ids = {
+            int(sl.datasource.id)
+            for sl in (dashboard.slices or [])
+            if getattr(getattr(sl, "datasource", None), "id", None) is not None
+        }
+        if dataset_id not in dataset_ids:
+            raise ValueError("dataset_id is not used by this dashboard")
+
+        dataset = db.session.get(SqlaTable, dataset_id)
+        if dataset is None:
+            raise ValueError("dataset not found")
+
+        try:
+            resolved_level = int(level)
+        except (TypeError, ValueError):
+            raise ValueError("level is required")
+
+        source_database: Any = getattr(dataset, "database", None)
+        extra = getattr(dataset, "extra_dict", {}) or {}
+        source_database_id = extra.get("dhis2_source_database_id")
+        if isinstance(source_database_id, int):
+            source_database = db.session.get(Database, source_database_id) or source_database
+
+        dataset_options: list[dict[str, Any]] = []
+        extra = getattr(dataset, "extra_dict", {}) or {}
+        staged_dataset_id = extra.get("dhis2_staged_dataset_id")
+        parent_column_name: str | None = None
+        if parent_level is not None:
+            try:
+                resolved_parent_level = int(parent_level)
+            except (TypeError, ValueError):
+                resolved_parent_level = resolved_level - 1
+            for column in list(getattr(dataset, "columns", None) or []):
+                extra_raw = getattr(column, "extra", None) or "{}"
+                try:
+                    column_extra = (
+                        json.loads(extra_raw)
+                        if isinstance(extra_raw, str)
+                        else (extra_raw or {})
+                    )
+                except Exception:  # pylint: disable=broad-except
+                    column_extra = {}
+                if not isinstance(column_extra, dict):
+                    continue
+                if column_extra.get("dhis2_is_ou_hierarchy") is not True:
+                    continue
+                try:
+                    column_level = int(column_extra.get("dhis2_ou_level"))
+                except (TypeError, ValueError):
+                    continue
+                if column_level == resolved_parent_level:
+                    parent_column_name = getattr(column, "column_name", None)
+                    break
+
+        if isinstance(staged_dataset_id, int):
+            staged_filters: list[dict[str, Any]] | None = None
+            if parent_column_name and parent_value is not None:
+                parent_values = (
+                    list(parent_value)
+                    if isinstance(parent_value, (list, tuple, set))
+                    else [parent_value]
+                )
+                normalized_parent_values = [
+                    str(value).strip()
+                    for value in parent_values
+                    if str(value).strip()
+                ]
+                if normalized_parent_values:
+                    staged_filters = [
+                        {
+                            "column": parent_column_name,
+                            "operator": "eq",
+                            "value": normalized_parent_values,
+                        }
+                    ]
+            try:
+                local_filter_options = staged_dataset_svc.get_local_filter_options(
+                    staged_dataset_id,
+                    filters=staged_filters,
+                )
+                dataset_options = next(
+                    (
+                        list(filter_entry.get("options") or [])
+                        for filter_entry in list(
+                            local_filter_options.get("org_unit_filters") or []
+                        )
+                        if str(filter_entry.get("column_name") or "").strip()
+                        == column_name
+                    ),
+                    [],
+                )
+            except Exception:  # pylint: disable=broad-except
+                logger.warning(
+                    "Failed to load dataset-backed DHIS2 filter options for dataset=%s column=%s",
+                    dataset_id,
+                    column_name,
+                    exc_info=True,
+                )
+
+        repository_units = (
+            list(getattr(source_database, "repository_org_units_data", []) or [])
+            if source_database is not None
+            else []
+        )
+        if not repository_units:
+            return {"options": dataset_options, "source": "dataset_rows"}
+
+        parent_names: set[str] = set()
+        if isinstance(parent_value, (list, tuple, set)):
+            parent_names = {
+                str(value).strip()
+                for value in parent_value
+                if str(value).strip()
+            }
+        elif parent_value is not None:
+            parent_text = str(parent_value).strip()
+            if parent_text:
+                parent_names = {parent_text}
+
+        parent_keys: set[str] | None = None
+        if parent_names:
+            try:
+                resolved_parent_level = int(parent_level)
+            except (TypeError, ValueError):
+                resolved_parent_level = resolved_level - 1
+            parent_keys = {
+                str(unit.get("repository_key") or "").strip()
+                for unit in repository_units
+                if int(unit.get("level") or 0) == resolved_parent_level
+                and str(unit.get("display_name") or "").strip() in parent_names
+            }
+            if not parent_keys:
+                return {"options": [], "source": "repository_intersection"}
+
+        filtered_units = []
+        for unit in repository_units:
+            try:
+                unit_level = int(unit.get("level") or 0)
+            except (TypeError, ValueError):
+                continue
+            if unit_level != resolved_level:
+                continue
+            if parent_keys is not None:
+                parent_repository_key = str(unit.get("parent_repository_key") or "").strip()
+                if parent_repository_key not in parent_keys:
+                    continue
+            filtered_units.append(unit)
+
+        deduped_options: list[dict[str, Any]] = []
+        seen_labels: set[str] = set()
+        for unit in sorted(
+            filtered_units,
+            key=lambda item: (
+                str(item.get("display_name") or "").lower(),
+                str(item.get("repository_key") or "").lower(),
+            ),
+        ):
+            display_name = str(unit.get("display_name") or "").strip()
+            if not display_name or display_name in seen_labels:
+                continue
+            seen_labels.add(display_name)
+            deduped_options.append(
+                {
+                    "label": display_name,
+                    "value": display_name,
+                    "row_count": 0,
+                    "column_name": column_name,
+                }
+            )
+
+        if not dataset_options:
+            return {"options": deduped_options, "source": "repository_org_units"}
+
+        allowed_values = {
+            str(option.get("value") or "").strip()
+            for option in deduped_options
+            if str(option.get("value") or "").strip()
+        }
+        intersected_options = [
+            option
+            for option in dataset_options
+            if str(option.get("value") or "").strip() in allowed_values
+        ]
+        return {"options": intersected_options, "source": "repository_intersection"}
 
     @expose("/<pk>/colors", methods=("PUT",))
     @protect()
