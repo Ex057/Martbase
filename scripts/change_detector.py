@@ -124,7 +124,7 @@ def main(event_type: str, sha: str, repo: str) -> None:
         print("Files touched since previous commit:")
         print_files(files)
 
-    elif event_type == "workflow_dispatch":
+    elif event_type in {"workflow_dispatch", "schedule"}:
         print("Workflow dispatched, assuming all changed")
 
     else:
