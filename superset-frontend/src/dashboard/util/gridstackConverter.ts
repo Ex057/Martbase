@@ -12,7 +12,6 @@
  */
 import {
   GRID_COLUMN_COUNT,
-  GRID_BASE_UNIT,
   DASHBOARD_ROOT_ID,
   DASHBOARD_GRID_ID,
 } from './constants';

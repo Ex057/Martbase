@@ -72,17 +72,13 @@ export const useDownloadMenuItems = (
     logEvent?.(LOG_ACTIONS_DASHBOARD_DOWNLOAD_AS_PDF);
   };
 
-  const onDownloadImage = async (
-    e: SyntheticEvent,
-    format: 'png' | 'jpg' | 'svg' = 'png',
-  ) => {
+  const onDownloadImage = async (e: SyntheticEvent) => {
     try {
       downloadAsImage(
         SCREENSHOT_NODE_SELECTOR,
         dashboardTitle,
         true,
         undefined,
-        format,
       )(e);
     } catch (error) {
       logging.error(error);
@@ -113,17 +109,17 @@ export const useDownloadMenuItems = (
         {
           key: 'download-png',
           label: t('Download as PNG'),
-          onClick: (e: any) => onDownloadImage(e.domEvent, 'png'),
+          onClick: (e: any) => onDownloadImage(e.domEvent),
         },
         {
           key: 'download-jpg',
           label: t('Download as JPG'),
-          onClick: (e: any) => onDownloadImage(e.domEvent, 'jpg'),
+          onClick: (e: any) => onDownloadImage(e.domEvent),
         },
         {
           key: 'download-svg',
           label: t('Download as SVG'),
-          onClick: (e: any) => onDownloadImage(e.domEvent, 'svg'),
+          onClick: (e: any) => onDownloadImage(e.domEvent),
         },
       ];
 

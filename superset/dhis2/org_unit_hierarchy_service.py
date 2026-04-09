@@ -754,8 +754,11 @@ class OrgUnitHierarchyService:
         hierarchy_columns: list[dict[str, Any]],
         mapping_rows: list[dict[str, Any]] | None,
     ) -> dict[int, str]:
+        default_map = {
+            int(col["level"]): col["column_name"] for col in hierarchy_columns
+        }
         if mapping_rows is None:
-            return {int(col["level"]): col["column_name"] for col in hierarchy_columns}
+            return default_map
 
         result: dict[int, str] = {}
         merged_level_to_column = {
@@ -774,6 +777,13 @@ class OrgUnitHierarchyService:
                 result[int(raw_level)] = column_name
             except (TypeError, ValueError):
                 continue
+        if not result and default_map:
+            logger.warning(
+                "Org unit hierarchy level mapping missing for instance=%s; falling back to identity mapping levels=%s",
+                instance_id,
+                sorted(default_map.keys()),
+            )
+            return default_map
         return result
 
     def _build_hierarchy_lookup(
@@ -794,12 +804,23 @@ class OrgUnitHierarchyService:
             )
             snapshot = self._load_snapshot(_ORG_UNIT_HIERARCHY_NAMESPACE, instance_id)
             if snapshot is None or snapshot.get("status") != "success":
+                logger.warning(
+                    "Org unit hierarchy snapshot unavailable for instance=%s status=%s",
+                    instance_id,
+                    None if snapshot is None else snapshot.get("status"),
+                )
                 continue
             nodes = [
                 node
                 for node in list(snapshot.get("result") or [])
                 if isinstance(node, dict) and str(node.get("id") or "").strip()
             ]
+            logger.info(
+                "Org unit hierarchy snapshot loaded for instance=%s nodes=%s mapped_levels=%s",
+                instance_id,
+                len(nodes),
+                sorted(relevant_levels.keys()),
+            )
             node_lookup = {
                 str(node.get("id") or "").strip(): node
                 for node in nodes
@@ -835,6 +856,17 @@ class OrgUnitHierarchyService:
                     )
 
                 hierarchy_lookup[(instance_id, node_id)] = level_values
+
+            populated_nodes = sum(
+                1 for (lookup_instance_id, _node_id), values in hierarchy_lookup.items()
+                if lookup_instance_id == instance_id and values
+            )
+            logger.info(
+                "Org unit hierarchy lookup built for instance=%s total_nodes=%s populated_nodes=%s",
+                instance_id,
+                len(nodes),
+                populated_nodes,
+            )
 
         return hierarchy_lookup
 

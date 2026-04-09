@@ -18,13 +18,14 @@ import json
 import logging
 from typing import Any
 
+import sqlalchemy as sa
 from sqlalchemy import event
 from sqlalchemy.orm import Mapper
 
-from superset import db
 from superset.connectors.sqla.models import SqlaTable
 from superset.dhis2.models import DHIS2StagedDataset
 from superset.dhis2.staged_dataset_service import _get_engine
+from superset.staging.models import StagedDataset as GenericStagedDataset
 
 logger = logging.getLogger(__name__)
 
@@ -83,13 +84,48 @@ def _after_sqla_table_delete(mapper: Mapper, connection: Any, target: Any) -> No
             staged_dataset_id,
         )
 
-        staged_dataset = db.session.query(DHIS2StagedDataset).get(staged_dataset_id)
-        if staged_dataset:
-            # We don't call svc.delete_staged_dataset because it tries to delete
-            # the SqlaTable (which is currently being deleted).
-            # The before_delete listener on DHIS2StagedDataset will handle physical tables.
-            db.session.delete(staged_dataset)
-            # We don't commit here; the parent transaction will commit.
+        staged_row = connection.execute(
+            sa.select(
+                DHIS2StagedDataset.__table__.c.id,
+                DHIS2StagedDataset.__table__.c.database_id,
+                DHIS2StagedDataset.__table__.c.generic_dataset_id,
+                DHIS2StagedDataset.__table__.c.name,
+            ).where(DHIS2StagedDataset.__table__.c.id == staged_dataset_id)
+        ).mappings().first()
+        if not staged_row:
+            return
+
+        try:
+            engine = _get_engine(staged_row["database_id"])
+            lightweight_target = type(
+                "ListenerDatasetTarget",
+                (),
+                {
+                    "id": staged_row["id"],
+                    "name": staged_row["name"],
+                    "database_id": staged_row["database_id"],
+                },
+            )()
+            engine.drop_staging_table(lightweight_target)
+            engine.drop_serving_table(lightweight_target)
+        except Exception:
+            logger.exception(
+                "DHIS2 listener: failed dropping physical tables after SqlaTable delete for staged dataset id=%s",
+                staged_dataset_id,
+            )
+
+        generic_dataset_id = staged_row["generic_dataset_id"]
+        if generic_dataset_id:
+            connection.execute(
+                GenericStagedDataset.__table__.delete().where(
+                    GenericStagedDataset.__table__.c.id == generic_dataset_id
+                )
+            )
+        connection.execute(
+            DHIS2StagedDataset.__table__.delete().where(
+                DHIS2StagedDataset.__table__.c.id == staged_dataset_id
+            )
+        )
     except Exception:
         logger.exception("DHIS2 listener: failed to clean up staged dataset after SqlaTable delete")
 
@@ -106,10 +142,19 @@ def _before_dhis2_staged_dataset_delete(mapper: Mapper, connection: Any, target:
         # 1. Drop physical tables
         engine = _get_engine(target.database_id)
         engine.drop_staging_table(target)
-        
-        # 2. Delete generic StagedDataset record if it exists
-        if target.generic_dataset:
-            logger.info("DHIS2 listener: also deleting generic StagedDataset record id=%s", target.generic_dataset.id)
-            db.session.delete(target.generic_dataset)
+        engine.drop_serving_table(target)
+
+        # 2. Delete generic StagedDataset record if it exists using the current connection.
+        generic_dataset_id = getattr(target, "generic_dataset_id", None)
+        if generic_dataset_id:
+            logger.info(
+                "DHIS2 listener: also deleting generic StagedDataset record id=%s",
+                generic_dataset_id,
+            )
+            connection.execute(
+                GenericStagedDataset.__table__.delete().where(
+                    GenericStagedDataset.__table__.c.id == generic_dataset_id
+                )
+            )
     except Exception:
         logger.exception("DHIS2 listener: failed to clean up physical state for staged dataset id=%s", target.id)

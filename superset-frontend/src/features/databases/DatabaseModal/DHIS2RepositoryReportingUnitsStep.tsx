@@ -1629,7 +1629,7 @@ export default function DHIS2RepositoryReportingUnitsStep({
                 value: option.value,
                 label: option.label,
               }))}
-              optionFilterProp="label"
+              optionFilterProps={['label']}
               dropdownStyle={SELECT_DROPDOWN_STYLE}
               styles={{ root: { width: '100%' } }}
             />
@@ -1655,7 +1655,7 @@ export default function DHIS2RepositoryReportingUnitsStep({
                 value: option.value,
                 label: option.label,
               }))}
-              optionFilterProp="label"
+              optionFilterProps={['label']}
               dropdownStyle={SELECT_DROPDOWN_STYLE}
               styles={{ root: { width: '100%' } }}
             />
@@ -1681,7 +1681,7 @@ export default function DHIS2RepositoryReportingUnitsStep({
                 value: option.value,
                 label: option.label,
               }))}
-              optionFilterProp="label"
+              optionFilterProps={['label']}
               dropdownStyle={SELECT_DROPDOWN_STYLE}
               styles={{ root: { width: '100%' } }}
             />

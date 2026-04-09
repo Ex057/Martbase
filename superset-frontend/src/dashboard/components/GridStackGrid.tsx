@@ -23,7 +23,6 @@ import { createPortal } from 'react-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { css, styled, t } from '@superset-ui/core';
 import { GridStack } from 'gridstack';
-import type { GridStackNode } from 'gridstack';
 import { useDrop } from 'react-dnd';
 import 'gridstack/dist/gridstack.min.css';
 
@@ -381,19 +380,66 @@ const WidgetContent = memo(
 
     useEffect(() => {
       if (ready) return;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       const raf = requestAnimationFrame(() => {
         if (!mountedRef.current) return;
         const el = containerRef.current;
         if (el && el.offsetWidth > 0 && el.offsetHeight > 0) {
+          setMeasuredWidth(el.offsetWidth);
           setReady(true);
         } else {
-          const timer = setTimeout(() => {
-            if (mountedRef.current) setReady(true);
+          timer = setTimeout(() => {
+            if (!mountedRef.current) return;
+            const retryEl = containerRef.current;
+            if (retryEl && retryEl.offsetWidth > 0 && retryEl.offsetHeight > 0) {
+              setMeasuredWidth(retryEl.offsetWidth);
+              setReady(true);
+            }
           }, 200);
-          return () => clearTimeout(timer);
         }
       });
+      return () => {
+        cancelAnimationFrame(raf);
+        if (timer) {
+          clearTimeout(timer);
+        }
+      };
+    }, [ready]);
+
+    useEffect(() => {
+      if (!ready || measuredWidth <= 0) return;
+      const raf = requestAnimationFrame(() => {
+        window.dispatchEvent(new Event('resize'));
+      });
       return () => cancelAnimationFrame(raf);
+    }, [ready, measuredWidth]);
+
+    useEffect(() => {
+      if (!ready) return;
+      let attempts = 0;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+
+      const measure = () => {
+        if (!mountedRef.current) return;
+        const el = containerRef.current;
+        if (el && el.offsetWidth > 0) {
+          setMeasuredWidth(current =>
+            current > 0 ? current : el.offsetWidth,
+          );
+          window.dispatchEvent(new Event('resize'));
+        }
+        attempts += 1;
+        if (attempts < 5 && mountedRef.current) {
+          timer = setTimeout(measure, 150);
+        }
+      };
+
+      timer = setTimeout(measure, 0);
+      return () => {
+        if (timer) {
+          clearTimeout(timer);
+        }
+      };
     }, [ready]);
 
     // Check if this component exists in layout
@@ -628,7 +674,6 @@ const GridStackGrid = ({
   // the idSetKey to change mid-drag and trigger a full grid rebuild
   // (destroying portal targets and charts).
   const knownWidgetIdsRef = useRef<Set<string>>(new Set());
-  const [portalVersion, setPortalVersion] = useState(0);
   const [dropIndicator, setDropIndicator] = useState<DropIndicatorState>(null);
 
   const layout = useSelector(
@@ -942,8 +987,16 @@ const GridStackGrid = ({
 
     gsRef.current = gs;
     isDraggingRef.current = false;
-    setPortalVersion(n => n + 1);
-
+    requestAnimationFrame(() => {
+      safeGs(currentGrid => {
+        try {
+          currentGrid.compact('compact');
+        } catch {
+          // ok
+        }
+      });
+      window.dispatchEvent(new Event('resize'));
+    });
     return () => {
       if (gsRef.current) {
         try {

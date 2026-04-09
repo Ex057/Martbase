@@ -759,16 +759,20 @@ THEME_DEFAULT: Theme = {
         # Spinner
         "brandSpinnerUrl": None,
         "brandSpinnerSvg": None,
-        # Default colors
-        "colorPrimary": "#2893B3",  # NOTE: previous lighter primary color was #20a7c9 # noqa: E501
-        "colorLink": "#2893B3",
-        "colorError": "#e04355",
-        "colorWarning": "#fcc700",
-        "colorSuccess": "#5ac189",
-        "colorInfo": "#66bcfe",
-        # Fonts
-        "fontFamily": "Inter, Helvetica, Arial",
-        "fontFamilyCode": "'Fira Code', 'Courier New', monospace",
+        # Pro Theme palette
+        "colorPrimary": "#1976D2",
+        "colorLink": "#1976D2",
+        "colorError": "#D32F2F",
+        "colorWarning": "#F9A825",
+        "colorSuccess": "#2E7D32",
+        "colorInfo": "#4DA3FF",
+        # Pro typography
+        "fontFamily": 'Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+        "fontFamilyCode": '"Fira Code", "Cascadia Code", Consolas, monospace',
+        # Pro shape
+        "borderRadius": 8,
+        "borderRadiusLG": 12,
+        "borderRadiusSM": 6,
         # Extra tokens
         "transitionTiming": 0.3,
         "brandIconMaxWidth": 37,
@@ -1260,11 +1264,11 @@ AI_INSIGHTS_CONFIG: dict[str, Any] = {
     "max_dashboard_charts": 12,
     "max_follow_up_messages": 6,
     "max_generated_sql_rows": 200,
-    "request_timeout_seconds": 30,
-    "max_tokens": 1200,
+    "request_timeout_seconds": 300,
+    "max_tokens": 16384,
     "temperature": 0.1,
-    "default_provider": None,
-    "default_model": None,
+    "default_provider": "localai",
+    "default_model": "ai-insights-model-26.04",
     "allowed_roles": [],
     "mode_roles": {
         "chart": [],
@@ -1272,26 +1276,15 @@ AI_INSIGHTS_CONFIG: dict[str, Any] = {
         "sql": [],
     },
     "providers": {
-        # Example:
-        # "openai": {
-        #     "enabled": True,
-        #     "type": "openai_compatible",
-        #     "label": "OpenAI",
-        #     "base_url": "https://api.openai.com/v1",
-        #     "api_key_env": "OPENAI_API_KEY",
-        #     "models": ["gpt-4.1-mini"],
-        #     "default_model": "gpt-4.1-mini",
-        #     "is_local": False,
-        # },
-        # "ollama": {
-        #     "enabled": True,
-        #     "type": "ollama",
-        #     "label": "Ollama",
-        #     "base_url": "http://127.0.0.1:11434",
-        #     "models": ["llama3.1:8b"],
-        #     "default_model": "llama3.1:8b",
-        #     "is_local": True,
-        # },
+        "localai": {
+            "enabled": True,
+            "type": "localai",
+            "label": "LocalAI",
+            "base_url": "http://127.0.0.1:39671",
+            "models": ["ai-insights-model-26.04"],
+            "default_model": "ai-insights-model-26.04",
+            "is_local": True,
+        },
     },
 }
 

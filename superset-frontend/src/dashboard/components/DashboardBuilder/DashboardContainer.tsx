@@ -198,6 +198,13 @@ const DashboardContainer: FC<DashboardContainerProps> = ({ topLevelTabs }) => {
     () => (topLevelTabs ? topLevelTabs.children : [DASHBOARD_GRID_ID]),
     [topLevelTabs],
   );
+  const initialParentSize = useMemo(
+    () => ({
+      width: typeof window !== 'undefined' ? window.innerWidth : 1440,
+      height: typeof window !== 'undefined' ? window.innerHeight : 900,
+    }),
+    [],
+  );
   const min = Math.min(tabIndex, childIds.length - 1);
   const activeKey = min === 0 ? DASHBOARD_GRID_ID : min.toString();
 
@@ -316,7 +323,9 @@ const DashboardContainer: FC<DashboardContainerProps> = ({ topLevelTabs }) => {
 
   return (
     <div className="grid-container" data-test="grid-container">
-      <ParentSize>{renderParentSizeChildren}</ParentSize>
+      <ParentSize initialSize={initialParentSize}>
+        {renderParentSizeChildren}
+      </ParentSize>
     </div>
   );
 };

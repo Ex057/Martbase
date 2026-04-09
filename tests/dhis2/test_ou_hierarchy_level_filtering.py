@@ -749,3 +749,39 @@ def test_repository_selected_root_details_use_repository_keys_for_structure():
     roots = svc._selected_root_details(dataset_config, [101, 102])
 
     assert [detail["selectionKey"] for detail in roots] == ["1:uganda"]
+
+
+def test_build_instance_level_map_falls_back_when_instance_mapping_missing():
+    from superset.dhis2.org_unit_hierarchy_service import OrgUnitHierarchyService
+
+    svc = OrgUnitHierarchyService(database_id=10)
+    hierarchy_columns = [
+        {"level": 1, "column_name": "national"},
+        {"level": 2, "column_name": "region"},
+        {"level": 3, "column_name": "district_city"},
+    ]
+    mapping_rows = [
+        {
+            "merged_level": 1,
+            "label": "National",
+            "instance_levels": {"1": 1},
+        },
+        {
+            "merged_level": 2,
+            "label": "Region",
+            "instance_levels": {"1": 2},
+        },
+        {
+            "merged_level": 3,
+            "label": "District/City",
+            "instance_levels": {"1": 3},
+        },
+    ]
+
+    result = svc._build_instance_level_map(2, hierarchy_columns, mapping_rows)
+
+    assert result == {
+        1: "national",
+        2: "region",
+        3: "district_city",
+    }

@@ -32,6 +32,18 @@ from superset.local_staging.engine_factory import get_active_staging_engine
 logger = logging.getLogger(__name__)
 
 
+def _query_single_int(engine: Any, sql: str) -> int | None:
+    try:
+        result = engine._qry(sql)
+        if not result.result_rows:
+            return None
+        value = result.result_rows[0][0]
+        return int(value) if value is not None else None
+    except Exception:
+        logger.exception("ClickHouse diagnostic query failed: %s", sql)
+        return None
+
+
 def build_serving_table_clickhouse(
     dataset: Any,
     *,
@@ -83,6 +95,42 @@ def build_serving_table_clickhouse(
                  if c["column_name"] not in dropped_cols
              ]
              logger.info("Pruned empty hierarchy columns: %s", dropped_cols)
+
+        staging_ref = resolved_engine.get_superset_sql_table_ref(dataset)
+        if ou_map_table:
+            ou_map_rows = _query_single_int(
+                resolved_engine,
+                f"SELECT count() FROM {ou_map_table}",
+            )
+            matched_rows = _query_single_int(
+                resolved_engine,
+                f"""
+                SELECT count()
+                FROM {staging_ref} s
+                INNER JOIN {ou_map_table} ou_map
+                  ON s.source_instance_id = ou_map.source_instance_id
+                 AND s.ou = ou_map.org_unit_id
+                """,
+            )
+            staging_rows = _query_single_int(
+                resolved_engine,
+                f"SELECT count() FROM {staging_ref}",
+            )
+            logger.info(
+                "ClickHouse OU enrichment diagnostics: dataset_id=%s hierarchy_lookup=%s ou_map_rows=%s staging_rows=%s matched_rows=%s active_ou_cols=%s",
+                dataset.id,
+                len(manifest.get("hierarchy_lookup") or {}),
+                ou_map_rows,
+                staging_rows,
+                matched_rows,
+                sorted(active_ou_cols),
+            )
+        else:
+            logger.warning(
+                "ClickHouse OU enrichment diagnostics: dataset_id=%s no ou_map generated hierarchy_lookup=%s",
+                dataset.id,
+                len(manifest.get("hierarchy_lookup") or {}),
+            )
 
         # 2. Generate SELECT SQL
         select_sql = _generate_serving_sql(
@@ -345,6 +393,10 @@ def _upload_org_unit_map(
 ) -> tuple[str, set[str]]:
     hierarchy_lookup = manifest.get("hierarchy_lookup") or {}
     if not hierarchy_lookup:
+        logger.warning(
+            "ClickHouse OU map skipped: dataset_id=%s hierarchy_lookup is empty",
+            dataset.id,
+        )
         return "", set()
 
     hierarchy_cols = set()
@@ -374,6 +426,15 @@ def _upload_org_unit_map(
     
     col_names = ["source_instance_id", "org_unit_id"] + sorted_cols
     engine.insert_temp_rows(table_name, rows, col_names)
+    populated_rows = sum(1 for row in rows if any(row.get(col) for col in sorted_cols))
+    logger.info(
+        "ClickHouse OU map uploaded: dataset_id=%s rows=%s populated_rows=%s columns=%s table=%s",
+        dataset.id,
+        len(rows),
+        populated_rows,
+        sorted_cols,
+        table_name,
+    )
     
     return f"`{engine._serving_database}`.`{table_name}`", set(sorted_cols)
 

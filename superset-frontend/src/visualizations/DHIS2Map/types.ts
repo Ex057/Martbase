@@ -149,6 +149,7 @@ export interface DHIS2MapProps {
   showLabels: boolean;
   labelType: 'name' | 'value' | 'name_value' | 'percent';
   labelFontSize: number;
+  labelTextColor?: string;
   showLegend: boolean;
   legendPosition: MapCornerPosition;
   legendDisplayType?: LegendDisplayType;

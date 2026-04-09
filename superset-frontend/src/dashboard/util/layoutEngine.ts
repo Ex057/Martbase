@@ -33,7 +33,7 @@
  */
 
 import { GRID_COLUMN_COUNT, GRID_MIN_COLUMN_COUNT } from './constants';
-import { ROW_TYPE, TABS_TYPE, TAB_TYPE } from './componentTypes';
+import { ROW_TYPE, TAB_TYPE } from './componentTypes';
 import newComponentFactory from './newComponentFactory';
 
 type LayoutEntity = {
@@ -156,7 +156,7 @@ export function reflowContainer(
       };
     } else {
       // Create a new row at the end
-      const newRow = newComponentFactory(ROW_TYPE);
+      const newRow = newComponentFactory(ROW_TYPE) as LayoutEntity;
       newRow.children = overflow;
       newRow.parents = (container.parents || []).concat(containerId);
       // Update parent references for overflow items

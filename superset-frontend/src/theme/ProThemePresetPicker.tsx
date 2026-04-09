@@ -24,7 +24,7 @@ import {
   PRESETS_BY_CATEGORY,
   type PresetCategory,
 } from './presets';
-import { ALL_LAYOUTS } from './layouts';
+import { ALL_LAYOUTS } from './layouts/index';
 
 /* ── Styled ─────────────────────────────────────────────────────────── */
 

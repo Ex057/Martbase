@@ -53,7 +53,7 @@ import {
 import { areObjectsEqual } from 'src/reduxUtils';
 import { StandardModal, useModalValidation } from 'src/components/Modal';
 import { getPreset } from 'src/theme/presets';
-import { getLayout, layoutCssVars } from 'src/theme/layouts';
+import { getLayout, layoutCssVars } from 'src/theme/layouts/index';
 import { densityCssVars } from 'src/theme/density';
 import {
   BasicInfoSection,

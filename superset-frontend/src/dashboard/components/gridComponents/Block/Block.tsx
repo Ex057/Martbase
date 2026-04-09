@@ -62,7 +62,7 @@ const BlockContainer = styled.div`
 
     .block-title {
       font-size: ${theme.fontSizeLG}px;
-      font-weight: ${theme.fontWeightBold};
+      font-weight: ${theme.fontWeightStrong};
       margin-bottom: ${theme.sizeUnit * 2}px;
     }
 
@@ -101,7 +101,7 @@ const BlockContainer = styled.div`
 
     .block-statistic-value {
       font-size: 36px;
-      font-weight: ${theme.fontWeightBold};
+      font-weight: ${theme.fontWeightStrong};
       color: ${theme.colorPrimary};
       line-height: 1.2;
     }

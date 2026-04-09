@@ -41,7 +41,6 @@ import {
   SetDataMaskHook,
 } from '@superset-ui/core';
 import { Layer, PickingInfo, Color } from '@deck.gl/core';
-import { ScaleLinear } from 'd3-scale';
 import { ColorBreakpointType } from '../types';
 import { matchesBreakpoint } from 'src/explore/components/controls/ColorBreakpointsControl/colorBreakpointUtils';
 import sandboxedEval from '../utils/sandbox';
@@ -145,6 +144,10 @@ export function commonLayerProps({
   };
 }
 
+type RangeColorScale = {
+  range: () => Array<string | number>;
+};
+
 const percentiles = {
   p1: 0.01,
   p5: 0.05,
@@ -237,14 +240,14 @@ export const getColorRange = ({
   defaultBreakpointsColor: { r: number; g: number; b: number; a: number };
   fixedColor?: { r: number; g: number; b: number; a: number };
   colorBreakpoints?: ColorBreakpointType[];
-  colorScale?: CategoricalColorScale | ScaleLinear<string, string>;
+  colorScale?: CategoricalColorScale | RangeColorScale;
   stagedLegendDefinition?: DHIS2LegendDefinition;
 }) => {
   let colorRange: Color[] | undefined;
   switch (colorSchemeType) {
     case COLOR_SCHEME_TYPES.linear_palette:
     case COLOR_SCHEME_TYPES.categorical_palette: {
-      colorRange = colorScale?.range().map(color => hexToRGB(color)) as Color[];
+      colorRange = colorScale?.range().map(color => hexToRGB(String(color))) as Color[];
       break;
     }
     case COLOR_SCHEME_TYPES.color_breakpoints: {

@@ -17,7 +17,7 @@
  * under the License.
  */
 /* eslint-disable theme-colors/no-literal-colors */
-import React, { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { styled, t } from '@superset-ui/core';
 import {
   SummaryTransformedProps,
@@ -28,7 +28,6 @@ import {
   Layout,
   Alignment,
   BorderStyle,
-  ImagePlacement,
 } from './types';
 
 /* ── Styled Components ─────────────────────────────── */

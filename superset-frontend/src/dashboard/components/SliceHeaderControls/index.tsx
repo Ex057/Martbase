@@ -333,19 +333,11 @@ const SliceHeaderControls = (
         if (menu) {
           menu.style.visibility = 'hidden';
         }
-        const formatMap: Record<string, 'png' | 'jpg' | 'svg'> = {
-          [MenuKeys.DownloadAsPng]: 'png',
-          [MenuKeys.DownloadAsJpg]: 'jpg',
-          [MenuKeys.DownloadAsSvg]: 'svg',
-          [MenuKeys.DownloadAsImage]: 'png',
-        };
-        const imgFormat = formatMap[key] || 'png';
         downloadAsImage(
           getScreenshotNodeSelector(props.slice.slice_id),
           props.slice.slice_name,
           true,
           theme,
-          imgFormat,
         )(domEvent).then(() => {
           if (menu) {
             menu.style.visibility = 'visible';

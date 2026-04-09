@@ -16,10 +16,10 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { ResizeCallback, ResizeStartCallback, Resizable } from 're-resizable';
 import cx from 'classnames';
-import { css, styled, useTheme } from '@superset-ui/core';
+import { css, styled } from '@superset-ui/core';
 
 import {
   RightResizeHandle,

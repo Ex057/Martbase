@@ -52,8 +52,8 @@ const StyledHeader = styled.header`
       top: 0;
       left: 0;
       right: 0;
-      background: #1e2d45;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      background: linear-gradient(135deg, var(--pro-navy, #0D3B66) 0%, var(--pro-navy-light, #164E8A) 100%);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
       z-index: 1000;
 
       &:nth-last-of-type(2) nav {
@@ -74,8 +74,7 @@ const StyledHeader = styled.header`
         display: flex;
         flex-direction: column;
         justify-content: center;
-        /* must be exactly the height of the Antd navbar */
-        min-height: 46px;
+        min-height: 48px;
         padding: ${theme.sizeUnit}px
           ${theme.sizeUnit * 2}px
           ${theme.sizeUnit}px
@@ -98,9 +97,9 @@ const StyledHeader = styled.header`
         padding-left: ${theme.sizeUnit * 4}px;
         padding-right: ${theme.sizeUnit * 4}px;
         margin-right: ${theme.sizeUnit * 4}px;
-        font-size: 20px;
+        font-size: 18px;
         font-weight: 700;
-        letter-spacing: -0.2px;
+        letter-spacing: -0.3px;
         float: left;
         display: flex;
         flex-direction: column;
@@ -110,14 +109,22 @@ const StyledHeader = styled.header`
           white-space: nowrap;
         }
         @media (max-width: 1127px) {
-          font-size: 16px;
+          font-size: 15px;
           padding-left: ${theme.sizeUnit * 3}px;
           padding-right: ${theme.sizeUnit * 3}px;
+        }
+        @media (max-width: 767px) {
+          font-size: 13px;
+          padding-left: ${theme.sizeUnit * 2}px;
+          padding-right: ${theme.sizeUnit * 2}px;
+          margin-right: ${theme.sizeUnit * 2}px;
         }
       }
       @media (max-width: 767px) {
         .navbar-brand {
           float: none;
+          min-height: 40px;
+          padding: ${theme.sizeUnit}px ${theme.sizeUnit * 2}px;
         }
       }
       .main-nav {
@@ -125,16 +132,17 @@ const StyledHeader = styled.header`
         border-bottom: none;
 
         .ant-menu-item {
-          color: rgba(255, 255, 255, 0.95);
+          color: rgba(255, 255, 255, 0.92);
           font-weight: 500;
+          font-size: 13px;
 
           a {
-            color: rgba(255, 255, 255, 0.95);
+            color: rgba(255, 255, 255, 0.92);
           }
 
           &:hover {
             color: #ffffff;
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.08);
 
             a {
               color: #ffffff;
@@ -144,7 +152,7 @@ const StyledHeader = styled.header`
           &.ant-menu-item-selected {
             color: #ffffff;
             background: rgba(255, 255, 255, 0.06);
-            border-bottom: 2px solid #2b6a6a;
+            border-bottom: 2px solid var(--pro-accent, #4DA3FF);
             border-radius: 0;
 
             a {
@@ -154,7 +162,7 @@ const StyledHeader = styled.header`
         }
 
         .ant-menu-submenu {
-          padding: ${theme.sizeUnit * 1.5}px ${theme.sizeUnit * 4}px;
+          padding: ${theme.sizeUnit * 1.5}px ${theme.sizeUnit * 2.5}px;
           display: flex;
           align-items: center;
           height: 100%;
@@ -227,14 +235,35 @@ const StyledHeader = styled.header`
 
       @media (max-width: 767px) {
         .ant-menu-item {
-          padding: 0 ${theme.sizeUnit * 6}px 0
-            ${theme.sizeUnit * 3}px !important;
+          padding: 0 ${theme.sizeUnit * 3}px !important;
+          font-size: 12px;
         }
         .ant-menu > .ant-menu-item > span > a {
           padding: 0px;
         }
         .main-nav .ant-menu-submenu-title > svg:nth-of-type(1) {
           display: none;
+        }
+        .ant-menu-submenu {
+          padding: ${theme.sizeUnit}px ${theme.sizeUnit * 2}px !important;
+        }
+        .ant-menu-submenu .ant-menu-title-content {
+          font-size: 12px;
+        }
+      }
+
+      /* ── Tablet compact nav ── */
+      @media (max-width: 1024px) {
+        .ant-menu-item {
+          padding: 0 ${theme.sizeUnit * 4}px 0
+            ${theme.sizeUnit * 3}px !important;
+          font-size: 12px;
+        }
+        .ant-menu-submenu {
+          padding: ${theme.sizeUnit}px ${theme.sizeUnit * 3}px !important;
+        }
+        .ant-menu-submenu .ant-menu-title-content {
+          font-size: 12px;
         }
       }
   `}
@@ -369,7 +398,7 @@ export function Menu({
   const renderBrand = () =>
     // Hide logo - only show text title
     null;
-  const mainNavItems = menu.map((item, index) => {
+  const mainNavItems: MenuItem[] = menu.map((item, index) => {
     const props = {
       index,
       ...item,
@@ -388,10 +417,11 @@ export function Menu({
 
     return renderMenuItem(props);
   });
+
   return (
     <StyledHeader className="top" id="main-menu" role="navigation">
-      <Row>
-        <Col md={16} xs={24} style={{ display: 'flex' }}>
+      <Row style={{ flexWrap: 'wrap' }}>
+        <Col md={18} xs={24} style={{ display: 'flex', minWidth: 0, overflow: 'visible' }}>
           <Tooltip
             id="brand-tooltip"
             placement="bottomLeft"
@@ -414,7 +444,7 @@ export function Menu({
             items={mainNavItems}
           />
         </Col>
-        <Col md={8} xs={24}>
+        <Col md={6} xs={24}>
           <RightMenu
             align={screens.md ? 'flex-end' : 'flex-start'}
             settings={settings}
@@ -431,7 +461,7 @@ export function Menu({
 // transform the menu data to reorganize components
 export default function MenuWrapper({ data, ...rest }: MenuProps) {
   const sqlLabSeparator = '-' as const;
-  const CMS_PAGES_MENU_LABEL = 'CMS Pages';
+  const CMS_PAGES_MENU_LABEL = 'Dynamic Pages';
   const bootstrapData = getBootstrapData();
   const canViewCms = userHasPermission(
     bootstrapData.user || {},
@@ -609,8 +639,8 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
           label: CMS_PAGES_MENU_LABEL,
           childs: [
             {
-              name: 'CMS Dashboard',
-              label: 'CMS Dashboard',
+              name: 'Admin Dashboard',
+              label: 'Admin Dashboard',
               url: '/superset/cms/',
             },
             {

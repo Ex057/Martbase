@@ -114,6 +114,70 @@ def _fetch_distinct_periods(
         return []
 
 
+def _fetch_distinct_column_values(
+    engine: Any,
+    dataset: Any,
+    column: str,
+    *,
+    use_serving: bool = True,
+    limit: int = 2000,
+) -> list[str]:
+    """Return distinct values for *column* using the active staging engine."""
+    table_ref = (
+        engine.get_serving_sql_table_ref(dataset)
+        if use_serving
+        else engine.get_superset_sql_table_ref(dataset)
+    )
+
+    try:
+        if hasattr(engine, "_qry"):
+            sql = (
+                f"SELECT DISTINCT `{column}` AS v FROM {table_ref} "
+                f"WHERE isNotNull(`{column}`) "
+                f"ORDER BY `{column}` LIMIT {int(limit)}"
+            )
+            result = engine._qry(sql)  # pylint: disable=protected-access
+            return [str(r[0]) for r in result.result_rows if r[0] is not None]
+
+        if hasattr(engine, "_connect_read_only"):
+            conn = engine._connect_read_only()  # pylint: disable=protected-access
+            try:
+                rows = conn.execute(
+                    f'SELECT DISTINCT "{column}" AS v FROM {table_ref} '
+                    f'WHERE "{column}" IS NOT NULL '
+                    f'ORDER BY "{column}" LIMIT {int(limit)}'
+                ).fetchall()
+                return [str(r[0]) for r in rows if r[0] is not None]
+            finally:
+                try:
+                    conn.close()
+                except Exception:  # pylint: disable=broad-except
+                    pass
+
+        from sqlalchemy import text as _text  # pylint: disable=import-outside-toplevel
+        from superset import db as _db  # pylint: disable=import-outside-toplevel
+
+        sql = (
+            f'SELECT DISTINCT "{column}" AS v FROM {table_ref} '
+            f'WHERE "{column}" IS NOT NULL '
+            f'ORDER BY "{column}" LIMIT {int(limit)}'
+        )
+        with _db.engine.connect() as conn:
+            DHIS2StagingEngine.apply_connection_optimizations(
+                conn, str(getattr(_db.engine.dialect, "name", "") or "")
+            )
+            rows = conn.execute(_text(sql)).fetchall()
+            return [str(r[0]) for r in rows if r[0] is not None]
+    except Exception:  # pylint: disable=broad-except
+        logger.warning(
+            "Failed to fetch distinct values from %s.%s",
+            table_ref,
+            column,
+            exc_info=True,
+        )
+        return []
+
+
 def _normalize_variable_mappings(
     variables_data: list[dict[str, Any]] | None,
 ) -> list[dict[str, Any]]:
@@ -1163,30 +1227,24 @@ class DHIS2StagedDatasetApi(BaseApi):
                 return self.response(200, result=cached)
 
         try:
-            from sqlalchemy import text  # pylint: disable=import-outside-toplevel
-            from superset import db  # pylint: disable=import-outside-toplevel
-
             engine = _get_engine(dataset.database_id)
 
             if engine.serving_table_exists(dataset):
-                table_ref = engine.get_serving_sql_table_ref(dataset)
+                values = _fetch_distinct_column_values(
+                    engine,
+                    dataset,
+                    column,
+                    use_serving=True,
+                )
             elif engine.table_exists(dataset):
-                table_ref = engine.get_superset_sql_table_ref(dataset)
+                values = _fetch_distinct_column_values(
+                    engine,
+                    dataset,
+                    column,
+                    use_serving=False,
+                )
             else:
                 return self.response(200, result=[])
-
-            # Use quoted identifier to avoid reserved-word clashes
-            sql = (
-                f'SELECT DISTINCT "{column}" AS v FROM {table_ref} '
-                f'WHERE "{column}" IS NOT NULL '
-                f'ORDER BY "{column}" LIMIT 2000'
-            )
-            with db.engine.connect() as conn:
-                DHIS2StagingEngine.apply_connection_optimizations(
-                    conn, str(getattr(db.engine.dialect, "name", "") or "")
-                )
-                rows = conn.execute(text(sql)).fetchall()
-                values = [str(row[0]) for row in rows if row[0] is not None]
         except Exception:  # pylint: disable=broad-except
             logger.exception(
                 "Failed to load column values for dataset id=%s column=%s", pk, column

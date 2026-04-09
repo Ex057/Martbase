@@ -18,7 +18,9 @@
  * under the License.
  */
 import { extent } from 'd3-array';
-import { ScaleLinear, ScaleThreshold, scaleThreshold } from 'd3-scale';
+import {
+  scaleThreshold,
+} from 'd3-scale';
 import {
   getSequentialSchemeRegistry,
   JsonObject,
@@ -48,6 +50,10 @@ export type Buckets = {
 export type BucketsWithColorScale = Buckets & {
   linear_color_scheme: string | string[];
   opacity: number;
+};
+
+type ColorScaler = ((value: number) => string) & {
+  range: () => string[];
 };
 
 export function getBreakPoints(
@@ -142,7 +148,7 @@ export function getBreakPointColorScaler(
   if (!colorScheme) {
     return () => TRANSPARENT_COLOR_ARRAY;
   }
-  let scaler: ScaleLinear<string, string> | ScaleThreshold<number, string>;
+  let scaler: ColorScaler;
   let maskPoint: (v: number | undefined) => boolean;
   if (breakPoints !== null) {
     // bucket colors into discrete colors
@@ -161,7 +167,7 @@ export function getBreakPointColorScaler(
     const points = breakPoints.map(parseFloat);
     scaler = scaleThreshold<number, string>()
       .domain(points)
-      .range(bucketedColors);
+      .range(bucketedColors) as ColorScaler;
     // Only mask values that are strictly outside the min/max bounds
     // Include values equal to the max breakpoint
     maskPoint = value =>
@@ -170,11 +176,11 @@ export function getBreakPointColorScaler(
     // interpolate colors linearly
     const linearScaleDomain = extent(features, accessor);
     if (!linearScaleDomain.some(i => typeof i === 'number')) {
-      scaler = colorScheme.createLinearScale();
+      scaler = colorScheme.createLinearScale() as ColorScaler;
     } else {
       scaler = colorScheme.createLinearScale(
         extent(features, accessor) as number[],
-      );
+      ) as ColorScaler;
     }
     maskPoint = () => false;
   }
