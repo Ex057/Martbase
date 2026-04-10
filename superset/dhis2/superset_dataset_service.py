@@ -441,6 +441,7 @@ def register_serving_table_as_superset_dataset(
     existing = None
     stale_sv_records: list[Any] = []
     legacy_wrapper_candidates: list[Any] = []
+    same_role_stale_records: list[Any] = []
     if all_candidates:
         for c in all_candidates:
             extra = json.loads(c.extra or "{}") if c.extra else {}
@@ -463,6 +464,19 @@ def register_serving_table_as_superset_dataset(
                     existing = c
                 else:
                     stale_sv_records.append(c)
+            elif (
+                effective_dataset_role == DatasetRole.MART.value
+                and candidate_is_mart
+            ) or (
+                effective_dataset_role != DatasetRole.MART.value
+                and not candidate_is_metadata
+                and not candidate_is_mart
+            ):
+                # Keep only one physical dataset per staged dataset + role.
+                # Old renamed serving rows (for example a prior table ref before
+                # dataset rename) should be pruned so they do not continue to
+                # appear in dataset pickers or get rebound during refresh.
+                same_role_stale_records.append(c)
             elif candidate_serving_ref == "":
                 # Legacy friendly wrapper for the current staged dataset/ref.
                 legacy_wrapper_candidates.append(c)
@@ -510,16 +524,29 @@ def register_serving_table_as_superset_dataset(
             stale_sv_records.append(existing)
         existing = exact_physical_match
 
-    # Clean up stale records that duplicate the current physical serving ref.
-    if existing is not None and stale_sv_records:
-        for stale in stale_sv_records:
-            if stale.id != existing.id:
-                logger.info(
-                    "superset_dataset_service: removing stale DHIS2 SqlaTable id=%d ('%s')",
-                    stale.id,
-                    stale.table_name,
-                )
-                db.session.delete(stale)
+    # Clean up stale physical datasets for this staged dataset/role.
+    stale_records_to_delete: list[Any] = []
+    if existing is not None:
+        stale_records_to_delete.extend(
+            stale
+            for stale in stale_sv_records + same_role_stale_records
+            if stale.id != existing.id
+        )
+    elif same_role_stale_records:
+        same_role_stale_records.sort(key=lambda item: int(getattr(item, "id", 0) or 0))
+        existing = same_role_stale_records[0]
+        stale_records_to_delete.extend(
+            stale for stale in same_role_stale_records[1:] if stale.id != existing.id
+        )
+
+    if stale_records_to_delete:
+        for stale in stale_records_to_delete:
+            logger.info(
+                "superset_dataset_service: removing stale DHIS2 SqlaTable id=%d ('%s')",
+                stale.id,
+                stale.table_name,
+            )
+            db.session.delete(stale)
 
     with db.session.no_autoflush:
         cross_database_stale_records = (

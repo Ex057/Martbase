@@ -1397,13 +1397,35 @@ class SqlaTable(
         changed = False
         extra = self.extra_dict
         role = getattr(self, "dataset_role", None)
+        staged_display_name = str(extra.get("dhis2_dataset_display_name") or "").strip()
 
         # Preserve user-facing METADATA datasets on the logical DHIS2 database.
         # Query execution is already routed through get_serving_database(), so
         # mutating these rows into ClickHouse physical tables makes Dataset
         # Management show the wrong database/schema and defeats the staged-local
         # metadata layer entirely.
-        if role == "METADATA" and self.sql:
+        if role == "METADATA":
+            source_database_id = extra.get("dhis2_source_database_id")
+            if isinstance(source_database_id, int) and source_database_id != self.database_id:
+                source_database = db.session.get(Database, source_database_id)
+                if source_database is not None:
+                    self.database = source_database
+                    self.database_id = source_database_id
+                    changed = True
+            if self.schema is not None:
+                self.schema = None
+                changed = True
+            if staged_display_name and self.table_name != staged_display_name:
+                self.table_name = staged_display_name
+                changed = True
+            serving_table_ref = self.get_staged_local_serving_table_ref(
+                ensure_exists=ensure_exists
+            )
+            if serving_table_ref:
+                metadata_sql = f"SELECT * FROM {serving_table_ref}"
+                if self.sql != metadata_sql:
+                    self.sql = metadata_sql
+                    changed = True
             if extra.get("dhis2_staged_local") is not True:
                 extra["dhis2_staged_local"] = True
                 changed = True
