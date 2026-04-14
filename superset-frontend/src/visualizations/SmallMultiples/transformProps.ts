@@ -371,7 +371,19 @@ export default function transformProps(
   const rawTopN = fdValue<number>(fd, 'topN', 'top_n') ?? 0;
   const topN = Number(rawTopN);
   const effectiveTopN = Number.isFinite(topN) ? topN : 0;
-  if (effectiveTopN > 0 && sortPanels !== 'alphabetical') {
+  const dhis2SplitPreset = fdValue(
+    fd,
+    'dhis2SplitPreset',
+    'dhis2_split_preset',
+  );
+  const isDhis2PresetSplit = Boolean(
+    dhis2SplitPreset && dhis2SplitPreset !== 'custom',
+  );
+  if (
+    effectiveTopN > 0 &&
+    sortPanels !== 'alphabetical' &&
+    !isDhis2PresetSplit
+  ) {
     panels = panels.slice(0, effectiveTopN);
   }
 

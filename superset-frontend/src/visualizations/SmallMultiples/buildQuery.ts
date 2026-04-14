@@ -34,14 +34,26 @@ const FALLBACK_PRESET_COLUMNS: Record<string, string[]> = {
 
 const DEFAULT_SMALL_MULTIPLES_ROW_LIMIT = 50000;
 
-function applySmallMultiplesRowLimit(query: Record<string, any>) {
-  const currentLimit = Number(query.row_limit ?? 0);
+function getSmallMultiplesExtras(fd: Record<string, any>) {
+  return {
+    ...(fd.extras || {}),
+    dhis2_terminal_hierarchy_filtering: false,
+  };
+}
+
+function getSmallMultiplesRowLimit(fd: Record<string, any>) {
+  const currentLimit = Number(fd.row_limit ?? fd.rowLimit ?? 0);
   if (
-    !Number.isFinite(currentLimit) ||
-    currentLimit < DEFAULT_SMALL_MULTIPLES_ROW_LIMIT
+    Number.isFinite(currentLimit) &&
+    currentLimit >= DEFAULT_SMALL_MULTIPLES_ROW_LIMIT
   ) {
-    query.row_limit = DEFAULT_SMALL_MULTIPLES_ROW_LIMIT;
+    return currentLimit;
   }
+  return DEFAULT_SMALL_MULTIPLES_ROW_LIMIT;
+}
+
+function applySmallMultiplesRowLimit(query: Record<string, any>) {
+  query.row_limit = getSmallMultiplesRowLimit(query);
 }
 
 function resolveSplitColumn(fd: Record<string, any>): string | null {
@@ -98,10 +110,19 @@ function resolveSplitColumn(fd: Record<string, any>): string | null {
 }
 
 export default function buildQuery(formData: QueryFormData) {
-  const fd = formData as Record<string, any>;
+  const originalFd = formData as Record<string, any>;
+  const safeRowLimit = getSmallMultiplesRowLimit(originalFd);
+  const normalizedFormData = {
+    ...originalFd,
+    extras: getSmallMultiplesExtras(originalFd),
+    row_limit: safeRowLimit,
+    rowLimit: safeRowLimit,
+  } as QueryFormData;
+  const fd = normalizedFormData as Record<string, any>;
 
-  return buildQueryContext(formData, baseQueryObject => {
+  return buildQueryContext(normalizedFormData, baseQueryObject => {
     const query = { ...baseQueryObject } as Record<string, any>;
+    query.extras = getSmallMultiplesExtras(query);
 
     // NOTE: buildQuery receives raw formData with snake_case keys (control names).
     // camelCase conversion only happens in ChartProps for transformProps.

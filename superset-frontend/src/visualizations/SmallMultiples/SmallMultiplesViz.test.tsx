@@ -227,6 +227,45 @@ describe('SmallMultiples transformProps', () => {
     ]);
   });
 
+  test('does not hide DHIS2 region panels when top N and value sorting are set', () => {
+    const result = transformProps(
+      makeChartProps({
+        data: [
+          { region: 'Acholi', period: '202501', cases: 10 },
+          { region: 'Ankole', period: '202501', cases: 20 },
+          { region: 'Bugisu', period: '202501', cases: 30 },
+          { region: 'Central 1', period: '202501', cases: 40 },
+          { region: 'Central 2', period: '202501', cases: 50 },
+          { region: 'Karamoja', period: '202501', cases: 60 },
+          { region: 'Lango', period: '202501', cases: 70 },
+          { region: 'Teso', period: '202501', cases: 80 },
+        ],
+        formData: {
+          dhis2_split_preset: 'by_region',
+          groupby: ['should_be_ignored'],
+          x_axis: ['period'],
+          top_n: 7,
+          sort_panels: 'latest-value',
+        },
+        datasource: {
+          columns: [
+            {
+              column_name: 'region',
+              verbose_name: 'Region',
+              extra: JSON.stringify({
+                dhis2_is_ou_hierarchy: true,
+                dhis2_ou_level: 2,
+              }),
+            },
+            { column_name: 'period', verbose_name: 'Period' },
+          ],
+        },
+      }),
+    );
+
+    expect(result.panels).toHaveLength(8);
+  });
+
   test('uses metric column fallback when query result key differs from metric label', () => {
     const result = transformProps(
       makeChartProps({
@@ -359,8 +398,27 @@ describe('DHIS2 presets', () => {
       x_axis: ['period'],
       metrics: [{ label: 'cch precipitation chirps' }],
       row_limit: 5,
+      rowLimit: 5,
     } as any);
 
     expect(queryContext.queries[0].row_limit).toBe(50000);
+    expect(queryContext.form_data.row_limit).toBe(50000);
+  });
+
+  test('buildQuery disables terminal hierarchy filtering for region rollups', () => {
+    const queryContext = buildQuery({
+      datasource: '1__table',
+      dhis2_split_preset: 'by_region',
+      x_axis: ['period'],
+      metrics: [{ label: 'cch relative humidity era5 land' }],
+      extras: { where: '' },
+    } as any);
+
+    expect(
+      queryContext.queries[0].extras.dhis2_terminal_hierarchy_filtering,
+    ).toBe(false);
+    expect(
+      queryContext.form_data.extras.dhis2_terminal_hierarchy_filtering,
+    ).toBe(false);
   });
 });
