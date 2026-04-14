@@ -65,11 +65,6 @@ import DrillControls from './components/DrillControls';
 import DataPreviewPanel from './components/DataPreviewPanel';
 import FiltersPanel from './components/FiltersPanel';
 import {
-  BaseMapSelector,
-  BaseMapLayer,
-  BaseMapType,
-} from './components/BaseMaps';
-import {
   buildLegendEntries,
   getColorScale,
   formatValue,
@@ -133,19 +128,20 @@ const MapWrapper = styled.div`
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
   isolation: isolate;
+  z-index: 0;
 `;
 
 const MapCanvas = styled.div<{ $backgroundColor?: string }>`
   position: relative;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
-  isolation: isolate;
   background: ${({ $backgroundColor }) => $backgroundColor || '#ffffff'};
 
   .leaflet-container {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     background: ${({ $backgroundColor }) => $backgroundColor || '#ffffff'};
@@ -176,25 +172,27 @@ const MapCanvas = styled.div<{ $backgroundColor?: string }>`
     left: 0;
     right: 0;
     bottom: 0;
-    min-height: 50vh;
     background: rgba(255, 255, 255, 0.85);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-direction: column;
     gap: 16px;
-    z-index: 999;
+    z-index: 4;
   }
 
   .map-error-message {
     position: absolute;
     top: 8px;
     right: 8px;
-    background: #ff4d4f;
+    background: var(--pro-error);
     color: #ffffff;
     padding: 8px 16px;
-    border-radius: 4px;
-    z-index: 999;
+    border-radius: var(--pro-radius-sm, 6px);
+    z-index: 4;
+    font-family: var(--pro-font-family, 'Inter', sans-serif);
+    font-size: 13px;
+    box-shadow: var(--pro-shadow-md, 0 4px 12px rgba(0,0,0,0.15));
   }
 
   .map-zoom-controls {
@@ -261,7 +259,7 @@ const MapCanvas = styled.div<{ $backgroundColor?: string }>`
   .map-interaction-overlay {
     position: absolute;
     inset: 0;
-    z-index: 900;
+    z-index: 3;
     background: rgba(255, 255, 255, 0.55);
     display: flex;
     align-items: center;
@@ -269,61 +267,43 @@ const MapCanvas = styled.div<{ $backgroundColor?: string }>`
     pointer-events: auto;
     font-size: 12px;
     font-weight: 500;
-    color: #333333;
+    color: var(--pro-text-primary);
+    font-family: var(--pro-font-family, 'Inter', sans-serif);
   }
 `;
 
-const MapFooterBar = styled.div`
-  flex: 0 0 auto;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 10px;
-  min-height: 0;
-  background: rgba(248, 250, 252, 0.85);
-  border-top: 1px solid rgba(148, 163, 184, 0.15);
-`;
-
-const MapFooterControlSlot = styled.div`
-  flex: 0 0 auto;
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-`;
-
-const FooterActionButton = styled.button<{ $active?: boolean }>`
+const FloatingActionButton = styled.button<{ $active?: boolean }>`
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  border-radius: 999px;
+  border-radius: 6px;
   border: 1px solid ${({ $active }) =>
-    $active ? '#0066cc' : 'rgba(148, 163, 184, 0.45)'};
-  background: ${({ $active }) => ($active ? '#0066cc' : 'rgba(255, 255, 255, 0.96)')};
-  color: ${({ $active }) => ($active ? '#ffffff' : '#334155')};
+    $active ? 'var(--pro-accent)' : 'var(--pro-border)'};
+  background: ${({ $active }) =>
+    $active ? 'var(--pro-accent)' : 'var(--pro-bg-card)'};
+  color: ${({ $active }) =>
+    $active ? '#ffffff' : 'var(--pro-text-secondary)'};
   cursor: pointer;
   font-size: 11px;
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--pro-shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.06));
+  transition: background 0.15s ease, box-shadow 0.15s ease;
 
   &:hover {
-    background: ${({ $active }) => ($active ? '#0057ad' : 'rgba(241, 245, 249, 0.98)')};
+    background: ${({ $active }) =>
+      $active ? 'var(--pro-accent-hover)' : 'var(--pro-bg-canvas)'};
+    box-shadow: var(--pro-shadow-md, 0 4px 12px rgba(0,0,0,0.08));
   }
 `;
 
-const FooterStatusPill = styled.div<{ $cacheHit?: boolean }>`
-  display: inline-flex;
-  align-items: center;
-  padding: 5px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  background: ${({ $cacheHit }) => ($cacheHit ? '#d4edda' : '#cce5ff')};
-  color: ${({ $cacheHit }) => ($cacheHit ? '#155724' : '#004085')};
+const FloatingControls = styled.div`
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 1003;
+  display: flex;
+  gap: 8px;
 `;
 
 const QuickFiltersOverlay = styled.div`
@@ -355,9 +335,11 @@ function fitMapToBoundaries(
 
   const applyFit = (shouldAnimate: boolean) => {
     const size = map.getSize();
+    // Use actual map canvas dimensions. Fall back to viewport props only
+    // when the map container has no size yet (e.g. first render before layout).
     const fitConfig = getMapFitViewportConfig(
-      Math.max(size.x, viewportWidth),
-      Math.max(size.y, viewportHeight),
+      size.x > 0 ? size.x : viewportWidth,
+      size.y > 0 ? size.y : viewportHeight,
       {},
     );
 
@@ -1199,9 +1181,6 @@ function DHIS2Map({
     null,
   );
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
-  const [baseMapType, setBaseMapType] = useState<BaseMapType>('none');
-  const [loadTime, setLoadTime] = useState<number | null>(null);
-  const [cacheHit, setCacheHit] = useState(false);
   const [dhis2Data, setDhis2Data] = useState<Record<string, any>[] | null>(
     null,
   );
@@ -2580,8 +2559,6 @@ function DHIS2Map({
         console.warn(
           `[DHIS2Map] No child boundaries returned for focused selection. Falling back to selected parent boundaries.`,
         );
-        setLoadTime(result.loadTimeMs);
-        setCacheHit(result.fromCache);
         setActiveFocusedBoundaryRequest(null);
         setBoundaries(selectedParents);
         return;
@@ -2621,8 +2598,6 @@ function DHIS2Map({
       }
       const validFeatures = convertToBoundaryFeatures(result.allFeatures);
 
-      setLoadTime(result.loadTimeMs);
-      setCacheHit(result.fromCache);
       setBoundaries(validFeatures);
     } catch (err: any) {
       const message = err?.message || '';
@@ -3112,8 +3087,8 @@ function DHIS2Map({
       <MapContainer
         center={[1.3733, 32.2903]}
         zoom={7}
-        zoomSnap={1}
-        zoomDelta={1}
+        zoomSnap={0.25}
+        zoomDelta={0.25}
         zoomControl={false}
         scrollWheelZoom={false}
         dragging={interactionEnabled}
@@ -3123,8 +3098,6 @@ function DHIS2Map({
         touchZoom={interactionEnabled}
       >
         <MapInstanceBridge onReady={handleMapInstanceReady} />
-        {/* @ts-ignore - React 19 compatibility */}
-        <BaseMapLayer mapType={baseMapType} />
 
       {/* Auto-focus map when boundaries load */}
       {/* @ts-ignore - React 19 compatibility */}
@@ -3138,10 +3111,7 @@ function DHIS2Map({
 
       {/* Light basemap focus mask to de-emphasize areas outside boundaries */}
       {/* @ts-ignore - React 19 compatibility */}
-      <BoundaryMask
-        boundaries={displayBoundaries}
-        enabled={displayBoundaries.length > 0 && baseMapType !== 'none'}
-      />
+      <BoundaryMask boundaries={displayBoundaries} enabled={false} />
 
         {/* Explicit in-map zoom controls */}
         {/* @ts-ignore - React 19 compatibility */}
@@ -3305,35 +3275,20 @@ function DHIS2Map({
           style={(compassStyle as CompassStyle) || 'north_badge'}
         />
       )}
-      </MapCanvas>
 
-      <MapFooterBar>
-        <MapFooterControlSlot>
-          {loadTime !== null && !loading && (
-            <FooterStatusPill
-              $cacheHit={cacheHit}
-              title={cacheHit ? 'Loaded from browser cache' : 'Loaded from server'}
-            >
-              {cacheHit ? '⚡ ' : ''}
-              {loadTime}ms
-            </FooterStatusPill>
-          )}
-          {quickFilterColumns.length > 0 && !loading && (
-            <FooterActionButton
-              type="button"
-              $active={showFilters}
-              onClick={() => setShowFilters(!showFilters)}
-              title="Toggle filters panel"
-            >
-              <FilterOutlined /> {t('Quick Filters')}
-            </FooterActionButton>
-          )}
-        </MapFooterControlSlot>
-        <MapFooterControlSlot>
-          {/* @ts-ignore - React 19 compatibility */}
-          <BaseMapSelector currentMap={baseMapType} onMapChange={setBaseMapType} />
-        </MapFooterControlSlot>
-      </MapFooterBar>
+      {quickFilterColumns.length > 0 && !loading && (
+        <FloatingControls>
+          <FloatingActionButton
+            type="button"
+            $active={showFilters}
+            onClick={() => setShowFilters(!showFilters)}
+            title="Toggle filters panel"
+          >
+            <FilterOutlined /> {t('Quick Filters')}
+          </FloatingActionButton>
+        </FloatingControls>
+      )}
+      </MapCanvas>
 
       {dhis2Data && dhis2Data.length > 0 && !loading && (
         <button

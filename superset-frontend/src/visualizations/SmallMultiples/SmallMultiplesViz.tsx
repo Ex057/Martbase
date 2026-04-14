@@ -20,11 +20,7 @@
 import { useRef, useEffect, useMemo, useCallback } from 'react';
 import * as echarts from 'echarts';
 import { styled, getNumberFormatter } from '@superset-ui/core';
-import {
-  SmallMultiplesChartProps,
-  PanelData,
-  MiniChartType,
-} from './types';
+import { SmallMultiplesChartProps, PanelData, MiniChartType } from './types';
 import { buildOption, MiniPanelConfig } from './chartOptions';
 import SharedLegend from './SharedLegend';
 import MiniMapPanel from './MiniMapPanel';
@@ -215,8 +211,7 @@ function BigNumberMiniPanel({
   const primarySeries = panel.series[0];
   if (!primarySeries) return null;
 
-  const latestVal =
-    panel.latestValues[primarySeries.metricLabel];
+  const latestVal = panel.latestValues[primarySeries.metricLabel];
   const displayVal =
     latestVal != null && Number.isFinite(latestVal)
       ? formatter(latestVal)
@@ -233,9 +228,7 @@ function BigNumberMiniPanel({
           return (
             <BigNumberLabel key={s.metricLabel} style={{ color: s.color }}>
               {s.metricLabel}:{' '}
-              {val != null && Number.isFinite(val)
-                ? formatter(val)
-                : nullText}
+              {val != null && Number.isFinite(val) ? formatter(val) : nullText}
             </BigNumberLabel>
           );
         })}
@@ -292,9 +285,10 @@ export default function SmallMultiplesViz(props: SmallMultiplesChartProps) {
   // boundaryLevel is now "level:columnName" (e.g. "3:district_city") — extract numeric level
   const blStr = String(boundaryLevel || '');
   const blColonIdx = blStr.indexOf(':');
-  const effectiveBoundaryLevel = blColonIdx >= 0
-    ? Number(blStr.slice(0, blColonIdx)) || 2
-    : Number(boundaryLevel) || 2;
+  const effectiveBoundaryLevel =
+    blColonIdx >= 0
+      ? Number(blStr.slice(0, blColonIdx)) || 2
+      : Number(boundaryLevel) || 2;
   const {
     features: dhis2Features,
     loading: boundaryLoading,
@@ -307,7 +301,8 @@ export default function SmallMultiplesViz(props: SmallMultiplesChartProps) {
 
   // Build a name-lookup from DHIS2 boundary features
   const boundaryLookup = useMemo(
-    () => (dhis2Features.length > 0 ? buildBoundaryLookup(dhis2Features) : null),
+    () =>
+      dhis2Features.length > 0 ? buildBoundaryLookup(dhis2Features) : null,
     [dhis2Features],
   );
 
@@ -366,10 +361,7 @@ export default function SmallMultiplesViz(props: SmallMultiplesChartProps) {
   const effectiveColumns = useMemo(() => {
     if (!responsiveColumns) return maxColumns;
     const available = width - panelPadding * 2;
-    const fitColumns = Math.max(
-      1,
-      Math.floor(available / minPanelWidth),
-    );
+    const fitColumns = Math.max(1, Math.floor(available / minPanelWidth));
     return Math.min(maxColumns, fitColumns);
   }, [width, maxColumns, responsiveColumns, minPanelWidth, panelPadding]);
 
@@ -412,22 +404,24 @@ export default function SmallMultiplesViz(props: SmallMultiplesChartProps) {
   const availableHeight = height - legendHeight;
   const rows = Math.ceil(panels.length / effectiveColumns);
   const autoPanelHeight = Math.max(
-    60,
+    showXAxis ? 120 : 80,
     (availableHeight - panelPadding * (rows + 1)) / rows -
       (showPanelTitle ? 18 : 0) -
       (showPanelSubtitle ? 14 : 0) -
       panelPadding * 2,
   );
-  const panelHeight = fixedPanelHeight && fixedPanelHeight > 0
-    ? fixedPanelHeight
-    : autoPanelHeight;
+  const panelHeight =
+    fixedPanelHeight && fixedPanelHeight > 0
+      ? fixedPanelHeight
+      : autoPanelHeight;
 
   // Build subtitle text
   const getSubtitle = useCallback(
     (panel: PanelData): string => {
       const parts = metricLabels.map((ml: string) => {
         const val = panel.latestValues[ml];
-        if (val == null || !Number.isFinite(val)) return `${ml}: ${nullValueText}`;
+        if (val == null || !Number.isFinite(val))
+          return `${ml}: ${nullValueText}`;
         return `${ml}: ${yFormatter(val)}`;
       });
       return parts.join('  ·  ');
@@ -529,9 +523,7 @@ export default function SmallMultiplesViz(props: SmallMultiplesChartProps) {
           ))}
         </GridContainer>
       </ScrollArea>
-      {showLegend && (
-        <SharedLegend items={legendItems} position="bottom" />
-      )}
+      {showLegend && <SharedLegend items={legendItems} position="bottom" />}
     </Wrapper>
   );
 }

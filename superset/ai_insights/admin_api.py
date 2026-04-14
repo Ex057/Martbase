@@ -647,6 +647,7 @@ class AIManagementRestApi(BaseSupersetApi):
     @staticmethod
     def _trim_output(output: str, *, max_chars: int = 4000) -> str:
         text = str(output or "").strip()
+        text = re.sub(r"\x1b\[[0-9;]*m", "", text)
         if len(text) <= max_chars:
             return text
         return f"{text[:max_chars]}…"
@@ -1114,21 +1115,7 @@ class AIManagementRestApi(BaseSupersetApi):
         try:
             command_result = self._run_localai_setup_command("start")
         except FileNotFoundError as ex:
-            return self.response(
-                400,
-                message=(
-                    "LocalAI setup is unavailable in this checkout. "
-                    f"Missing script: {ex}"
-                ),
-                result={
-                    "localai_running": False,
-                    "base_url": self._localai_base_url() or "http://127.0.0.1:39671",
-                    "stdout": "",
-                    "stderr": str(ex),
-                    "returncode": 127,
-                    **dep_status,
-                },
-            )
+            return self.response_500(message=str(ex))
         stdout = command_result["stdout"]
         stderr = command_result["stderr"]
 
@@ -1178,20 +1165,7 @@ class AIManagementRestApi(BaseSupersetApi):
         try:
             command_result = self._run_localai_setup_command("stop")
         except FileNotFoundError as ex:
-            return self.response(
-                400,
-                message=(
-                    "LocalAI setup is unavailable in this checkout. "
-                    f"Missing script: {ex}"
-                ),
-                result={
-                    "localai_running": False,
-                    "base_url": self._localai_base_url() or "http://127.0.0.1:39671",
-                    "stdout": "",
-                    "stderr": str(ex),
-                    "returncode": 127,
-                },
-            )
+            return self.response_500(message=str(ex))
 
         base_url = self._localai_base_url() or "http://127.0.0.1:39671"
         running = self._localai_health_check(base_url)

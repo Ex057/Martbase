@@ -186,6 +186,7 @@ logs/*.log
 .clickhouse/
 .tmp/
 .qodo/
+.localai/
 
 # Local runtime and diagnostics artifacts
 cookies.txt

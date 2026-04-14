@@ -847,7 +847,7 @@ export default function LocalAIModelHub() {
             key: 'training',
             label: (
               <Space>
-                <Icons.BarChartOutlined />
+                <Icons.BulbOutlined />
                 <Text strong>
                   {t('Fine-Tuning Pipeline — %s', CUSTOM_MODEL_ID)}
                 </Text>
@@ -1012,7 +1012,7 @@ export default function LocalAIModelHub() {
                   >
                     <Button
                       type="primary"
-                      icon={<Icons.BarChartOutlined />}
+                      icon={<Icons.BulbOutlined />}
                       loading={evaluating}
                       onClick={runEvaluation}
                       disabled={!localaiRunning}
@@ -1025,7 +1025,7 @@ export default function LocalAIModelHub() {
                       'Full training requires a CUDA GPU. Use the pipeline script on a server.',
                     )}
                   >
-                    <Button icon={<Icons.SettingOutlined />} disabled>
+                    <Button icon={<Icons.FileTextOutlined />} disabled>
                       {t('Train (requires GPU)')}
                     </Button>
                   </Tooltip>

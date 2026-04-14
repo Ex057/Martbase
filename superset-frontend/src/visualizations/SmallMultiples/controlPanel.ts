@@ -76,8 +76,14 @@ const config: ControlPanelConfig = {
               mapStateToProps: (state: any) => {
                 const preset = state.controls?.dhis2_split_preset?.value;
                 const dsColumns = state.datasource?.columns || [];
-                const dataColumns = dsColumns.map((c: any) => String(c.column_name || ''));
-                const resolved = resolvePresetColumn(preset, dsColumns, dataColumns);
+                const dataColumns = dsColumns.map((c: any) =>
+                  String(c.column_name || ''),
+                );
+                const resolved = resolvePresetColumn(
+                  preset,
+                  dsColumns,
+                  dataColumns,
+                );
                 return { value: resolved || null };
               },
             },
@@ -138,9 +144,7 @@ const config: ControlPanelConfig = {
                   'disaggregates data by the matching OU column.',
               ),
               default: '2:region',
-              choices: [
-                ['2:region', t('Level 2 (Region)')],
-              ],
+              choices: [['2:region', t('Level 2 (Region)')]],
               mapStateToProps: (state: any) => {
                 const dsColumns = state.datasource?.columns || [];
                 const levels = getDatasourceBoundaryLevels(dsColumns);
@@ -158,7 +162,10 @@ const config: ControlPanelConfig = {
                     ['2:region', t('Level 2 (Region)')],
                     ['3:district_city', t('Level 3 (District)')],
                     ['4:dlg_municipality_city_council', t('Level 4 (County)')],
-                    ['5:sub_county_town_council_division', t('Level 5 (Sub-county)')],
+                    [
+                      '5:sub_county_town_council_division',
+                      t('Level 5 (Sub-county)'),
+                    ],
                     ['6:health_facility', t('Level 6 (Facility)')],
                   ],
                 };
@@ -170,7 +177,6 @@ const config: ControlPanelConfig = {
           },
         ],
         ['adhoc_filters'],
-        ['row_limit'],
       ],
     },
     {
@@ -351,7 +357,9 @@ const config: ControlPanelConfig = {
                 categoricalSchemeRegistry.keys().forEach(key => {
                   merged[key] = categoricalSchemeRegistry.get(key);
                 });
-                (sequentialSchemeRegistry.values() as SequentialScheme[]).forEach(s => {
+                (
+                  sequentialSchemeRegistry.values() as SequentialScheme[]
+                ).forEach(s => {
                   merged[s.id] = s;
                 });
                 return merged;
@@ -521,7 +529,7 @@ const config: ControlPanelConfig = {
             config: {
               type: 'CheckboxControl',
               label: t('Show X-Axis Labels'),
-              default: false,
+              default: true,
               renderTrigger: true,
               visibility: ({ controls }: any) =>
                 !['pie', 'donut', 'big_number', 'gauge', 'mini_map'].includes(

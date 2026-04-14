@@ -92,6 +92,9 @@ const plugins = [
     process: 'process/browser.js',
     ...(isDevMode ? { Buffer: ['buffer', 'Buffer'] } : {}), // Fix legacy-plugin-chart-paired-t-test broken Story
   }),
+  new webpack.NormalModuleReplacementPlugin(/^node:/, resource => {
+    resource.request = resource.request.replace(/^node:/, '');
+  }),
 
   // creates a manifest.json mapping of name to hashed output used in template files
   new WebpackManifestPlugin({
@@ -412,10 +415,16 @@ const config = {
           './node_modules/@storybook/react-dom-shim/dist/react-16',
         ),
       ),
+      'node:fs': false,
+      'node:https': false,
+      'node:path': false,
+      'node:os': false,
     },
     extensions: ['.ts', '.tsx', '.js', '.jsx', '.yml'],
     fallback: {
       fs: false,
+      https: false,
+      os: false,
       vm: require.resolve('vm-browserify'),
       path: false,
       stream: require.resolve('stream-browserify'),

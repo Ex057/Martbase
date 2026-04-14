@@ -1057,14 +1057,6 @@ class LocalAIProvider(BaseProvider):
             temperature=temperature,
             extra_payload={
                 "repeat_penalty": 1.4,
-                "stop": [
-                    "\nThe data reveals",
-                    "\nIn conclusion",
-                    "\nIn summary",
-                    "\nOverall,",
-                    "\nTo summarize",
-                    "\n---\n",
-                ],
             },
         )
 
@@ -1195,6 +1187,29 @@ class ProviderRegistry:
             raise AIProviderError(f"AI provider {selected_provider_id} is unavailable")
         return provider
 
+    def _lookup_provider(self, provider_id: str | None) -> BaseProvider | None:
+        """Look up a provider by ID without checking availability.
+
+        Returns the provider instance even if its health-check fails, so
+        callers can read metadata like ``is_local`` and ``provider_type``
+        without risking a timeout or exception from the availability check.
+        """
+        pid = provider_id or self._default_provider
+        if not pid:
+            # Fall back to the first registered provider (any state)
+            for provider in self._providers.values():
+                return provider
+            return None
+        return self._providers.get(pid)
+
+    def _resolve_timeout(self, provider: BaseProvider) -> int:
+        timeout = self._timeout
+        if provider.provider_type == "localai":
+            timeout = max(timeout, 120)
+        elif provider.is_local:
+            timeout = max(timeout, 90)
+        return timeout
+
     def generate(
         self,
         *,
@@ -1205,14 +1220,15 @@ class ProviderRegistry:
         provider = self._resolve_provider(provider_id)
         selected_model = model or self._default_model
         max_tokens = self._max_tokens
+        timeout = self._resolve_timeout(provider)
         if provider.provider_type == "localai":
-            max_tokens = max(max_tokens, 16384)
+            max_tokens = min(max(max_tokens, 8192), 16384)
         elif provider.is_local:
             max_tokens = max(max_tokens, 8192)
         return provider.generate(
             messages=messages,
             model=selected_model,
-            timeout=self._timeout,
+            timeout=timeout,
             max_tokens=max_tokens,
             temperature=self._temperature,
         )
@@ -1228,14 +1244,15 @@ class ProviderRegistry:
         selected_model = model or self._default_model
         # Local models: give LocalAI a larger generation budget for full insight reports.
         max_tokens = self._max_tokens
+        timeout = self._resolve_timeout(provider)
         if provider.provider_type == "localai":
-            max_tokens = max(max_tokens, 16384)
+            max_tokens = min(max(max_tokens, 8192), 16384)
         elif provider.is_local:
             max_tokens = max(max_tokens, 8192)
         yield from provider.generate_stream(
             messages=messages,
             model=selected_model,
-            timeout=self._timeout,
+            timeout=timeout,
             max_tokens=max_tokens,
             temperature=self._temperature,
         )

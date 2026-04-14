@@ -17,6 +17,7 @@ import {
   Switch,
   Tabs,
   Tag,
+  type SelectValue,
 } from '@superset-ui/core/components';
 import { Icons } from '@superset-ui/core/components/Icons';
 import { Typography } from '@superset-ui/core/components/Typography';
@@ -234,6 +235,13 @@ function normalizeProviderForUI(
     is_local: Boolean(provider.is_local ?? preset?.is_local),
     catalog_key: provider.catalog_key ?? preset?.catalog_key ?? null,
   };
+}
+
+function toStringArray(value: SelectValue): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string');
+  }
+  return typeof value === 'string' ? [value] : [];
 }
 
 /**
@@ -468,7 +476,7 @@ export default function AIManagement() {
           wrap
         >
           <Space align="start" size="middle">
-            <Icons.BarChartOutlined style={{ fontSize: 28, marginTop: 4 }} />
+            <Icons.BulbOutlined style={{ fontSize: 28, marginTop: 4 }} />
             <div>
               <Title level={3} style={{ margin: 0 }}>
                 {t('AI Management')}
@@ -614,20 +622,22 @@ export default function AIManagement() {
                             value={defaultModelCombo}
                             options={defaultModelOptions}
                             onChange={value => {
-                              if (!value) {
+                              if (typeof value !== 'string') {
                                 updateSettings({
                                   default_provider: null,
                                   default_model: null,
                                 });
                                 return;
                               }
-                              const [pid, mid] = (value as string).split('::');
+                              const [pid, mid] = value.split('::');
                               updateSettings({
                                 default_provider: pid,
                                 default_model: mid,
                               });
                             }}
-                            styles={{ root: { width: '100%' } }}
+                            css={css`
+                              width: 100%;
+                            `}
                           />
                         </Form.Item>
                       </Form>
@@ -898,7 +908,7 @@ export default function AIManagement() {
                             }))}
                             onChange={value =>
                               updateSettings({
-                                allowed_roles: ((value as string[]) || []),
+                                allowed_roles: toStringArray(value),
                               })
                             }
                           />
@@ -926,14 +936,15 @@ export default function AIManagement() {
                                         value: role,
                                       }),
                                     )}
-                                    onChange={value =>
+                                    onChange={value => {
+                                      const selectedRoles = toStringArray(value);
                                       updateSettings({
                                         mode_roles: {
                                           ...payload.settings.mode_roles,
-                                          [mode]: ((value as string[]) || []),
+                                          [mode]: selectedRoles,
                                         },
-                                      })
-                                    }
+                                      });
+                                    }}
                                   />
                                 </Form.Item>
                               </Form>
@@ -1146,20 +1157,19 @@ export default function AIManagement() {
                                       : []
                                   }
                                   onChange={value => {
-                                    const selectedModels =
-                                      (value as string[]) || [];
                                     // Defer state update to avoid React
                                     // "setState during render" warning
                                     // triggered by Ant Design Select
                                     // reconciling tags internally.
+                                    const valueArray = toStringArray(value);
                                     queueMicrotask(() =>
                                       updateProvider(providerId, {
-                                        models: selectedModels,
-                                        default_model: selectedModels.includes(
+                                        models: valueArray,
+                                        default_model: valueArray.includes(
                                           provider.default_model || '',
                                         )
                                           ? provider.default_model
-                                          : selectedModels[0] || null,
+                                          : valueArray[0] || null,
                                       }),
                                     );
                                   }}
@@ -1180,7 +1190,9 @@ export default function AIManagement() {
                                     queueMicrotask(() =>
                                       updateProvider(providerId, {
                                         default_model:
-                                          (value as string | undefined) || null,
+                                          typeof value === 'string'
+                                            ? value
+                                            : null,
                                       }),
                                     )
                                   }

@@ -36,10 +36,7 @@ export interface MiniPanelConfig {
   linearColors?: string[];
 }
 
-function buildMarkLine(
-  refVal: number | null,
-  color: string,
-): any {
+function buildMarkLine(refVal: number | null, color: string): any {
   if (refVal == null) return undefined;
   return {
     silent: true,
@@ -54,7 +51,7 @@ function baseGrid(showXAxis: boolean, showYAxis: boolean) {
   return {
     top: 6,
     right: 6,
-    bottom: showXAxis ? 22 : 6,
+    bottom: showXAxis ? 38 : 6,
     left: showYAxis ? 36 : 6,
   };
 }
@@ -64,16 +61,20 @@ function baseXAxis(xValues: string[], show: boolean): any {
     type: 'category',
     data: xValues,
     show,
-    axisLabel: { fontSize: 8, color: '#9CA3AF', rotate: xValues.length > 12 ? 45 : 0 },
+    axisLabel: {
+      fontSize: 8,
+      color: '#9CA3AF',
+      hideOverlap: true,
+      interval: 'auto',
+      margin: 8,
+      rotate: xValues.length > 6 ? 35 : 0,
+    },
     axisLine: { show: false },
     axisTick: { show: false },
   };
 }
 
-function baseYAxis(
-  config: MiniPanelConfig,
-  show: boolean,
-): any {
+function baseYAxis(config: MiniPanelConfig, show: boolean): any {
   return {
     type: 'value',
     show,
@@ -162,8 +163,7 @@ export function buildPieOption(
     value: s.values[i] ?? 0,
   }));
 
-  const radius =
-    config.chartType === 'donut' ? ['35%', '65%'] : ['0%', '65%'];
+  const radius = config.chartType === 'donut' ? ['35%', '65%'] : ['0%', '65%'];
 
   // Apply scheme colors to pie slices
   const colors = config.schemeColors;
@@ -227,7 +227,9 @@ export function buildScatterOption(
       name: xSeries.metricLabel,
       nameTextStyle: { fontSize: 8, color: '#9CA3AF' },
       axisLabel: { fontSize: 8, color: '#9CA3AF' },
-      splitLine: { lineStyle: { color: '#E5EAF0', type: 'dashed', width: 0.5 } },
+      splitLine: {
+        lineStyle: { color: '#E5EAF0', type: 'dashed', width: 0.5 },
+      },
     },
     yAxis: {
       type: 'value',
@@ -235,7 +237,9 @@ export function buildScatterOption(
       name: ySeries.metricLabel,
       nameTextStyle: { fontSize: 8, color: '#9CA3AF' },
       axisLabel: { fontSize: 8, color: '#9CA3AF' },
-      splitLine: { lineStyle: { color: '#E5EAF0', type: 'dashed', width: 0.5 } },
+      splitLine: {
+        lineStyle: { color: '#E5EAF0', type: 'dashed', width: 0.5 },
+      },
     },
     series: [
       {
@@ -303,9 +307,10 @@ export function buildHeatmapOption(
       bottom: 0,
       show: false,
       inRange: {
-        color: config.linearColors && config.linearColors.length >= 3
-          ? config.linearColors
-          : ['#E3F2FD', '#64B5F6', '#1976D2', '#0D3B66'],
+        color:
+          config.linearColors && config.linearColors.length >= 3
+            ? config.linearColors
+            : ['#E3F2FD', '#64B5F6', '#1976D2', '#0D3B66'],
       },
     },
     series: [

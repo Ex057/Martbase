@@ -74,6 +74,8 @@ import { Icons } from '@superset-ui/core/components/Icons';
 import { nativeFilterGate } from 'src/dashboard/components/nativeFilters/utils';
 import { TagTypeEnum } from 'src/components/Tag/TagType';
 import { loadTags } from 'src/components/Tag/utils';
+import AIChartGeneratorModal from 'src/features/ai/AIChartGeneratorModal';
+import { useAIEnabled } from 'src/features/ai/useAIEnabled';
 import ChartCard from 'src/features/charts/ChartCard';
 import { UserWithPermissionsAndRoles } from 'src/types/bootstrapTypes';
 import { findPermission } from 'src/utils/findPermission';
@@ -204,6 +206,8 @@ function ChartList(props: ChartListProps) {
     closeChartEditModal,
   } = useChartEditModal(setCharts, charts);
 
+  const [showAIGenerator, setShowAIGenerator] = useState(false);
+  const aiEnabled = useAIEnabled();
   const [importingChart, showImportModal] = useState<boolean>(false);
   const [passwordFields, setPasswordFields] = useState<string[]>([]);
   const [preparingExport, setPreparingExport] = useState<boolean>(false);
@@ -858,6 +862,15 @@ function ChartList(props: ChartListProps) {
     });
   }
 
+  if (canCreate && aiEnabled) {
+    subMenuButtons.push({
+      name: t('AI Create Charts'),
+      buttonStyle: 'primary',
+      'data-test': 'ai-create-charts',
+      onClick: () => setShowAIGenerator(true),
+    });
+  }
+
   if (canCreate) {
     subMenuButtons.push({
       icon: <Icons.PlusOutlined iconSize="m" />,
@@ -872,6 +885,11 @@ function ChartList(props: ChartListProps) {
   return (
     <>
       <SubMenu name={t('Charts')} buttons={subMenuButtons} />
+      <AIChartGeneratorModal
+        show={showAIGenerator}
+        onHide={() => setShowAIGenerator(false)}
+        onChartsCreated={refreshData}
+      />
       {sliceCurrentlyEditing && (
         <PropertiesModal
           onHide={closeChartEditModal}

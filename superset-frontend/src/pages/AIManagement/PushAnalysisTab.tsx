@@ -707,15 +707,14 @@ export default function PushAnalysisTab() {
                     <Select
                       allowClear
                       showSearch
-                      optionFilterProps={['label']}
                       placeholder={t('Select a dashboard...')}
-                      onChange={(val: number | undefined) => {
+                      onChange={(val: any) => {
                         setSelectedDashboard(val || null);
                         form.setFieldValue('chart_id', undefined);
                       }}
                       options={dashboards.map(d => ({
-                        value: d.id,
                         label: `${d.title}${d.chart_count ? ` (${d.chart_count} charts)` : ''}`,
+                        value: d.id,
                       }))}
                     />
                   </Form.Item>
@@ -728,11 +727,10 @@ export default function PushAnalysisTab() {
                     <Select
                       allowClear
                       showSearch
-                      optionFilterProps={['label']}
                       placeholder={t('All charts in dashboard')}
                       options={charts.map(c => ({
-                        value: c.id,
                         label: `${c.name}${c.viz_type ? ` (${c.viz_type})` : ''}`,
+                        value: c.id,
                       }))}
                     />
                   </Form.Item>
@@ -761,12 +759,9 @@ export default function PushAnalysisTab() {
                     >
                       <Select
                         options={[
-                          {
-                            value: 'pdf',
-                            label: t('PDF Report (recommended)'),
-                          },
-                          { value: 'html', label: t('HTML Email Only') },
-                          { value: 'text', label: t('Plain Text') },
+                          { label: t('PDF Report (recommended)'), value: 'pdf' },
+                          { label: t('HTML Email Only'), value: 'html' },
+                          { label: t('Plain Text'), value: 'text' },
                         ]}
                       />
                     </Form.Item>
@@ -819,14 +814,8 @@ export default function PushAnalysisTab() {
                   >
                     <Select
                       options={[
-                        {
-                          value: 'periodic',
-                          label: t('Recurring Schedule'),
-                        },
-                        {
-                          value: 'one_time',
-                          label: t('One-Time Run'),
-                        },
+                        { label: t('Recurring Schedule'), value: 'periodic' },
+                        { label: t('One-Time Run'), value: 'one_time' },
                       ]}
                     />
                   </Form.Item>
@@ -834,13 +823,13 @@ export default function PushAnalysisTab() {
                   <Form.Item label={t('Frequency')}>
                     <Select
                       value={selectedCronPreset}
-                      onChange={(val: string) => {
+                      onChange={(val: any) => {
                         setSelectedCronPreset(val);
                         if (val !== '__custom__') setCustomCron('');
                       }}
                       options={CRON_PRESETS.map(p => ({
-                        value: p.value,
                         label: t(p.label),
+                        value: p.value,
                       }))}
                     />
                   </Form.Item>

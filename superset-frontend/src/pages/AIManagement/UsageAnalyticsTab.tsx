@@ -549,13 +549,13 @@ export default function UsageAnalyticsTab() {
         <div css={css`display: flex; gap: 8px; align-items: center;`}>
           <Select
             value={days}
-            onChange={value => setDays(Number(value))}
+            onChange={(val: any) => setDays(val || 7)}
             styles={{ root: { width: 150 } }}
             options={[
-              { value: 7, label: t('Last 7 days') },
-              { value: 30, label: t('Last 30 days') },
-              { value: 90, label: t('Last 90 days') },
-              { value: 365, label: t('Last year') },
+              { label: t('Last 7 days'), value: 7 },
+              { label: t('Last 30 days'), value: 30 },
+              { label: t('Last 90 days'), value: 90 },
+              { label: t('Last year'), value: 365 },
             ]}
           />
           <Button
@@ -993,53 +993,53 @@ export default function UsageAnalyticsTab() {
         <FilterBar>
           <Select
             value={filterMode}
-            onChange={value => setFilterMode(value as string | undefined)}
+            onChange={(val: any) => setFilterMode(val || undefined)}
             allowClear
             placeholder={t('All modes')}
             styles={{ root: { width: 140 } }}
             options={[
-              { value: 'chart', label: t('Chart') },
-              { value: 'dashboard', label: t('Dashboard') },
-              { value: 'sql', label: t('SQL') },
-              { value: 'chart_generate', label: t('Chart Gen') },
+              { label: t('Chart'), value: 'chart' },
+              { label: t('Dashboard'), value: 'dashboard' },
+              { label: t('SQL'), value: 'sql' },
+              { label: t('Chart Gen'), value: 'chart_generate' },
             ]}
           />
           <Select
             value={filterStatus}
-            onChange={value => setFilterStatus(value as string | undefined)}
+            onChange={(val: any) => setFilterStatus(val || undefined)}
             allowClear
             placeholder={t('All statuses')}
             styles={{ root: { width: 140 } }}
             options={[
-              { value: 'success', label: t('Success') },
-              { value: 'error', label: t('Error') },
+              { label: t('Success'), value: 'success' },
+              { label: t('Error'), value: 'error' },
             ]}
           />
           <Select
             value={filterProvider}
-            onChange={(val: string | undefined) => {
-              setFilterProvider(val);
+            onChange={(val: any) => {
+              setFilterProvider(val || undefined);
               setFilterModel(undefined);
             }}
             allowClear
             placeholder={t('All providers')}
             styles={{ root: { width: 160 } }}
             options={enabledProviders.map(p => ({
-              value: p.provider_id,
               label: p.label,
+              value: p.provider_id,
             }))}
           />
           <Select
             value={filterModel}
-            onChange={value => setFilterModel(value as string | undefined)}
+            onChange={(val: any) => setFilterModel(val || undefined)}
             allowClear
             placeholder={t('All models')}
             styles={{ root: { width: 200 } }}
             options={enabledModels
               .filter(m => !filterProvider || m.provider_id === filterProvider)
               .map(m => ({
-                value: m.model,
                 label: m.model,
+                value: m.model,
               }))}
           />
           <span

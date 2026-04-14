@@ -53,6 +53,16 @@ const PERIOD_PRESET_MAP: Array<{
   },
 ];
 
+const OU_LEVEL_PRESET_MAP: Record<number, DHIS2SplitPreset> = {
+  1: 'by_national',
+  2: 'by_region',
+  3: 'by_district',
+  4: 'by_county',
+  5: 'by_subcounty',
+  6: 'by_parish',
+  7: 'by_facility',
+};
+
 function parseExtra(extra: unknown): Record<string, any> | undefined {
   if (!extra) return undefined;
   if (typeof extra === 'string') {
@@ -92,15 +102,14 @@ export function detectAvailablePresets(
     const extra = parseExtra(col.extra);
     if (!extra) continue;
     const isHierarchy =
-      extra.dhis2_is_ou_hierarchy === true ||
-      extra.dhis2IsOuHierarchy === true;
+      extra.dhis2_is_ou_hierarchy === true || extra.dhis2IsOuHierarchy === true;
     if (!isHierarchy) continue;
     const level = Number(extra.dhis2_ou_level ?? extra.dhis2OuLevel ?? 0);
     if (level <= 0) continue;
     const colName = String(col.column_name || '').trim();
     const label = col.verbose_name || colName || `Level ${level}`;
-    // Map level to a generic preset key (by_national, by_region, etc.)
-    const presetKey = `by_level_${level}` as DHIS2SplitPreset;
+    const presetKey =
+      OU_LEVEL_PRESET_MAP[level] || (`by_level_${level}` as DHIS2SplitPreset);
     options.push({
       presetKey,
       label: `By ${label.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}`,
@@ -154,7 +163,19 @@ export function resolvePresetColumn(
   if (!preset || preset === 'custom') return null;
 
   const presets = detectAvailablePresets(datasourceColumns);
-  const match = presets.find(p => p.presetKey === preset);
+  const levelMatch = String(preset).match(/^by_level_(\d+)$/);
+  const match = levelMatch
+    ? presets.find(p => {
+        const source = datasourceColumns.find(
+          col => String(col.column_name || '').trim() === p.columnName,
+        );
+        const extra = parseExtra(source?.extra);
+        return (
+          Number(extra?.dhis2_ou_level ?? extra?.dhis2OuLevel ?? 0) ===
+          Number(levelMatch[1])
+        );
+      })
+    : presets.find(p => p.presetKey === preset);
   if (!match) return null;
 
   // Exact match in data columns

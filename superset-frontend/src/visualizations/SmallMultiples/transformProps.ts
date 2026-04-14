@@ -29,16 +29,28 @@ import {
   ReferenceLineMode,
 } from './types';
 import { resolvePresetColumn } from './dhis2Presets';
-import { formatDhis2Period } from './periodUtils';
+import { formatDhis2Period, getDhis2PeriodSortKey } from './periodUtils';
 
 const DEFAULT_COLORS = [
-  '#1976D2', '#E53935', '#43A047', '#FB8C00', '#8E24AA',
-  '#00ACC1', '#D81B60', '#3949AB', '#00897B', '#F4511E',
+  '#1976D2',
+  '#E53935',
+  '#43A047',
+  '#FB8C00',
+  '#8E24AA',
+  '#00ACC1',
+  '#D81B60',
+  '#3949AB',
+  '#00897B',
+  '#F4511E',
 ];
 
 function resolveDatabaseId(datasource: any, formData: any): number | undefined {
   const dsAny = datasource || {};
-  const extra = dsAny.extra ? (typeof dsAny.extra === 'string' ? JSON.parse(dsAny.extra) : dsAny.extra) : {};
+  const extra = dsAny.extra
+    ? typeof dsAny.extra === 'string'
+      ? JSON.parse(dsAny.extra)
+      : dsAny.extra
+    : {};
   return (
     extra.dhis2_source_database_id ||
     extra.dhis2SourceDatabaseId ||
@@ -52,7 +64,50 @@ function resolveDatabaseId(datasource: any, formData: any): number | undefined {
   );
 }
 
-export default function transformProps(chartProps: any): SmallMultiplesChartProps {
+function fdValue<T = any>(
+  formData: any,
+  camelKey: string,
+  snakeKey: string,
+): T {
+  return formData?.[camelKey] ?? formData?.[snakeKey];
+}
+
+function fdArrayValue<T = any>(
+  formData: any,
+  camelKey: string,
+  snakeKey: string,
+): T[] {
+  const value = fdValue<T | T[]>(formData, camelKey, snakeKey);
+  if (value == null) {
+    return [];
+  }
+  return Array.isArray(value) ? value : [value];
+}
+
+function metricValueKeys(metric: any, label: string): string[] {
+  return [
+    label,
+    metric?.label,
+    metric?.column?.columnName,
+    metric?.column?.column_name,
+    metric?.sqlExpression,
+    metric?.optionName,
+  ].filter(Boolean);
+}
+
+function getRowMetricValue(row: Record<string, any>, keys: string[]): number {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(row, key)) {
+      const value = Number(row[key]);
+      return Number.isFinite(value) ? value : 0;
+    }
+  }
+  return 0;
+}
+
+export default function transformProps(
+  chartProps: any,
+): SmallMultiplesChartProps {
   const { width, height, formData, queriesData, datasource } = chartProps;
   const fd = formData as SmallMultiplesFormData;
   const data: Record<string, any>[] = queriesData?.[0]?.data || [];
@@ -63,25 +118,32 @@ export default function transformProps(chartProps: any): SmallMultiplesChartProp
   let groupCol: string;
 
   // Hidden control _resolved_split_col → camelCase resolvedSplitCol
-  const presetCol = fd.resolvedSplitCol || resolvePresetColumn(
-    fd.dhis2SplitPreset,
-    dsColumns,
-    dataColumns,
-  );
+  const presetCol =
+    fdValue(fd, 'resolvedSplitCol', '_resolved_split_col') ||
+    resolvePresetColumn(
+      fdValue(fd, 'dhis2SplitPreset', 'dhis2_split_preset'),
+      dsColumns,
+      dataColumns,
+    );
   if (presetCol) {
     groupCol = presetCol;
   } else {
     groupCol = Array.isArray(fd.groupby) ? fd.groupby[0] : fd.groupby;
   }
 
-  const isMiniMap = (fd.miniChartType || 'line') === 'mini_map';
-  let xCol = Array.isArray(fd.xAxis) ? fd.xAxis[0] : fd.xAxis;
+  const miniChartType =
+    fdValue(fd, 'miniChartType', 'mini_chart_type') || 'line';
+  const isMiniMap = miniChartType === 'mini_map';
+  const xAxis = fdArrayValue<string>(fd, 'xAxis', 'x_axis');
+  let xCol = xAxis[0];
 
   // For mini_map: boundary_level value is "level:columnName" (e.g. "3:district_city").
   // camelCase conversion: boundary_level → boundaryLevel
   // Extract the column name and use it as xCol (replaces manual x_axis).
   if (isMiniMap) {
-    const blValue = String(fd.boundaryLevel || '');
+    const blValue = String(
+      fdValue(fd, 'boundaryLevel', 'boundary_level') || '',
+    );
     const colonIdx = blValue.indexOf(':');
     if (colonIdx >= 0) {
       const ouCol = blValue.slice(colonIdx + 1);
@@ -96,16 +158,22 @@ export default function transformProps(chartProps: any): SmallMultiplesChartProp
   const metricLabels = rawMetrics
     .filter(Boolean)
     .map((m: any) => getMetricLabel(m));
+  const metricKeysByLabel = new Map<string, string[]>(
+    rawMetrics.filter(Boolean).map((metric: any) => {
+      const label = getMetricLabel(metric);
+      return [label, metricValueKeys(metric, label)] as [string, string[]];
+    }),
+  );
 
   // ── Unified color scheme resolution ──
   // Single merged color_scheme control lists both categorical and sequential schemes.
   // Try categorical registry first, then sequential. The resolved palette is used
   // for ALL chart types automatically.
-  const schemeKey = fd.colorScheme || 'supersetColors';
+  const schemeKey =
+    fdValue(fd, 'colorScheme', 'color_scheme') || 'supersetColors';
 
   let schemeColors: string[] = DEFAULT_COLORS;
   let linearColors: string[] = [];
-  let metricColors: string[];
   let resolved = false;
 
   // Try categorical registry first
@@ -118,7 +186,9 @@ export default function transformProps(chartProps: any): SmallMultiplesChartProp
       linearColors = schemeColors.slice(0, Math.min(9, schemeColors.length));
       resolved = true;
     }
-  } catch { /* try sequential */ }
+  } catch {
+    /* try sequential */
+  }
 
   // Try sequential registry if not found in categorical
   if (!resolved) {
@@ -128,23 +198,33 @@ export default function transformProps(chartProps: any): SmallMultiplesChartProp
       if (seqScheme) {
         linearColors = seqScheme.getColors(9);
         // For series/pie/donut, sample distinct colors from the gradient
-        schemeColors = seqScheme.getColors(
-          Math.max(metricLabels.length, 8),
-        );
+        schemeColors = seqScheme.getColors(Math.max(metricLabels.length, 8));
         resolved = true;
       }
-    } catch { /* use defaults */ }
+    } catch {
+      /* use defaults */
+    }
   }
 
   // Fallback linear gradient if still empty
   if (linearColors.length === 0) {
-    linearColors = schemeColors.length >= 3
-      ? schemeColors.slice(0, Math.min(9, schemeColors.length))
-      : ['#eff3ff', '#c6dbef', '#9ecae1', '#6baed6', '#4292c6',
-         '#2171b5', '#08519c', '#08306b', '#041733'];
+    linearColors =
+      schemeColors.length >= 3
+        ? schemeColors.slice(0, Math.min(9, schemeColors.length))
+        : [
+            '#eff3ff',
+            '#c6dbef',
+            '#9ecae1',
+            '#6baed6',
+            '#4292c6',
+            '#2171b5',
+            '#08519c',
+            '#08306b',
+            '#041733',
+          ];
   }
 
-  metricColors = metricLabels.map(
+  const metricColors = metricLabels.map(
     (_: string, i: number) => schemeColors[i % schemeColors.length],
   );
 
@@ -172,7 +252,7 @@ export default function transformProps(chartProps: any): SmallMultiplesChartProp
     group.xValues.push(xVal);
 
     for (const ml of metricLabels) {
-      const val = (row[ml] as number) ?? 0;
+      const val = getRowMetricValue(row, metricKeysByLabel.get(ml) || [ml]);
       group.seriesMap.get(ml)!.push(val);
     }
   }
@@ -182,19 +262,41 @@ export default function transformProps(chartProps: any): SmallMultiplesChartProp
   let globalYMin = Infinity;
   let globalYMax = -Infinity;
 
-  const refMode = (fd.referenceLineMode || 'none') as ReferenceLineMode;
+  const refMode = (fdValue(fd, 'referenceLineMode', 'reference_line_mode') ||
+    'none') as ReferenceLineMode;
+  const referenceValue = fdValue(fd, 'referenceValue', 'reference_value');
   const globalRefVal =
-    fd.referenceValue !== '' && fd.referenceValue != null
-      ? Number(fd.referenceValue)
+    referenceValue !== '' && referenceValue != null
+      ? Number(referenceValue)
       : null;
 
   for (const [title, group] of groups) {
+    const orderedPoints = group.xValues
+      .map((xValue, index) => ({
+        xValue,
+        index,
+        sortKey: getDhis2PeriodSortKey(xValue),
+      }))
+      .sort((a, b) => {
+        if (a.sortKey != null && b.sortKey != null) {
+          return a.sortKey - b.sortKey;
+        }
+        if (a.sortKey != null) {
+          return -1;
+        }
+        if (b.sortKey != null) {
+          return 1;
+        }
+        return a.index - b.index;
+      });
+    const orderedXValues = orderedPoints.map(point => point.xValue);
+
     const series: PanelSeries[] = metricLabels.map(
       (ml: string, idx: number) => {
         const values = group.seriesMap.get(ml) || [];
         return {
           metricLabel: ml,
-          values,
+          values: orderedPoints.map(point => values[point.index] ?? 0),
           color: metricColors[idx],
         };
       },
@@ -212,7 +314,8 @@ export default function transformProps(chartProps: any): SmallMultiplesChartProp
     const latestValues: Record<string, number | null> = {};
     for (const s of series) {
       const vals = s.values.filter(v => v != null && Number.isFinite(v));
-      latestValues[s.metricLabel] = vals.length > 0 ? vals[vals.length - 1] : null;
+      latestValues[s.metricLabel] =
+        vals.length > 0 ? vals[vals.length - 1] : null;
     }
 
     // Per-panel reference value
@@ -230,8 +333,8 @@ export default function transformProps(chartProps: any): SmallMultiplesChartProp
     // mini_map GeoJSON is built client-side from DHIS2 boundaries (in SmallMultiplesViz)
     panels.push({
       title: formatDhis2Period(title),
-      xValues: group.xValues.map(formatDhis2Period),
-      rawXValues: group.xValues,
+      xValues: orderedXValues.map(formatDhis2Period),
+      rawXValues: orderedXValues,
       yValues: series[0]?.values || [],
       series,
       latestValues,
@@ -243,7 +346,8 @@ export default function transformProps(chartProps: any): SmallMultiplesChartProp
   if (!Number.isFinite(globalYMax)) globalYMax = 100;
 
   // Sort panels
-  const sortPanels = (fd.sortPanels || 'alphabetical') as string;
+  const sortPanels = (fdValue(fd, 'sortPanels', 'sort_panels') ||
+    'alphabetical') as string;
   if (sortPanels === 'alphabetical') {
     panels.sort((a, b) => a.title.localeCompare(b.title));
   } else if (sortPanels === 'latest-value') {
@@ -258,53 +362,65 @@ export default function transformProps(chartProps: any): SmallMultiplesChartProp
     );
   } else if (sortPanels === 'lowest-first') {
     panels.sort(
-      (a, b) => Math.min(...a.yValues, Infinity) - Math.min(...b.yValues, Infinity),
+      (a, b) =>
+        Math.min(...a.yValues, Infinity) - Math.min(...b.yValues, Infinity),
     );
   }
 
   // Top N filtering
-  const topN = fd.topN ?? 0;
-  if (topN > 0) {
-    panels = panels.slice(0, topN);
+  const rawTopN = fdValue<number>(fd, 'topN', 'top_n') ?? 0;
+  const topN = Number(rawTopN);
+  const effectiveTopN = Number.isFinite(topN) ? topN : 0;
+  if (effectiveTopN > 0 && sortPanels !== 'alphabetical') {
+    panels = panels.slice(0, effectiveTopN);
   }
 
   return {
     width,
     height,
     panels,
-    columns: fd.gridColumns ?? 4,
-    miniChartType: fd.miniChartType || 'line',
-    syncYAxis: fd.syncYAxis ?? true,
-    showPanelTitle: fd.showPanelTitle ?? true,
-    showXAxis: fd.showXAxis ?? false,
-    showYAxis: fd.showYAxis ?? false,
-    panelPadding: fd.panelPadding ?? 8,
-    lineWidth: fd.lineWidth ?? 1.5,
+    columns: fdValue<number>(fd, 'gridColumns', 'grid_columns') ?? 4,
+    miniChartType,
+    syncYAxis: fdValue<boolean>(fd, 'syncYAxis', 'sync_y_axis') ?? true,
+    showPanelTitle:
+      fdValue<boolean>(fd, 'showPanelTitle', 'show_panel_title') ?? true,
+    showXAxis: fdValue<boolean>(fd, 'showXAxis', 'show_x_axis') ?? true,
+    showYAxis: fdValue<boolean>(fd, 'showYAxis', 'show_y_axis') ?? false,
+    panelPadding: fdValue<number>(fd, 'panelPadding', 'panel_padding') ?? 8,
+    lineWidth: fdValue<number>(fd, 'lineWidth', 'line_width') ?? 1.5,
     globalYMin,
     globalYMax,
-    yAxisFormat: fd.yAxisFormat || 'SMART_NUMBER',
+    yAxisFormat: fdValue(fd, 'yAxisFormat', 'y_axis_format') || 'SMART_NUMBER',
     sortPanels,
-    topN,
+    topN: effectiveTopN,
     showReferenceLine: refMode !== 'none',
     referenceValue: globalRefVal,
     referenceLineMode: refMode,
-    referenceColor: fd.referenceColor || '#E53935',
-    showPanelSubtitle: fd.showPanelSubtitle ?? false,
-    densityTier: (fd.densityTier || 'compact') as string,
-    panelBorderRadius: fd.panelBorderRadius ?? 8,
-    nullValueText: fd.nullValueText || '–',
-    showLegend: fd.showLegend ?? metricLabels.length > 1,
-    legendPosition: fd.legendPosition || 'top',
-    syncTooltips: fd.syncTooltips ?? true,
-    responsiveColumns: fd.responsiveColumns ?? true,
-    minPanelWidth: fd.minPanelWidth ?? 180,
-    fixedPanelHeight: fd.panelHeight ?? 0,
+    referenceColor:
+      fdValue(fd, 'referenceColor', 'reference_color') || '#E53935',
+    showPanelSubtitle:
+      fdValue<boolean>(fd, 'showPanelSubtitle', 'show_panel_subtitle') ?? false,
+    densityTier: (fdValue(fd, 'densityTier', 'density_tier') ||
+      'compact') as string,
+    panelBorderRadius:
+      fdValue<number>(fd, 'panelBorderRadius', 'panel_border_radius') ?? 8,
+    nullValueText: fdValue(fd, 'nullValueText', 'null_value_text') || '–',
+    showLegend:
+      fdValue<boolean>(fd, 'showLegend', 'show_legend') ??
+      metricLabels.length > 1,
+    legendPosition: fdValue(fd, 'legendPosition', 'legend_position') || 'top',
+    syncTooltips: fdValue<boolean>(fd, 'syncTooltips', 'sync_tooltips') ?? true,
+    responsiveColumns:
+      fdValue<boolean>(fd, 'responsiveColumns', 'responsive_columns') ?? true,
+    minPanelWidth:
+      fdValue<number>(fd, 'minPanelWidth', 'min_panel_width') ?? 180,
+    fixedPanelHeight: fdValue<number>(fd, 'panelHeight', 'panel_height') ?? 0,
     metricLabels,
     metricColors,
     schemeColors,
     linearColors,
     databaseId: resolveDatabaseId(datasource, formData),
-    boundaryLevel: fd.boundaryLevel || undefined,
+    boundaryLevel: fdValue(fd, 'boundaryLevel', 'boundary_level') || undefined,
     chartId: fd.sliceId ? Number(fd.sliceId) : undefined,
   };
 }

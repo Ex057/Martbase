@@ -743,8 +743,8 @@ export default function AIChartGeneratorModal({ show, onHide, onChartsCreated }:
                 <AsyncSelect
                   ariaLabel={t('Dataset')}
                   name="ai-chart-dataset"
-                  onChange={val =>
-                    setSelectedDataset((val as DatasetOption | null) ?? null)
+                  onChange={value =>
+                    setSelectedDataset((value as DatasetOption | null) ?? null)
                   }
                   options={loadDatasets}
                   optionFilterProps={['id', 'customLabel']}

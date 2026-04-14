@@ -17,6 +17,85 @@
  * under the License.
  */
 import { buildQueryContext, QueryFormData } from '@superset-ui/core';
+import { resolvePresetColumn } from './dhis2Presets';
+
+const FALLBACK_PRESET_COLUMNS: Record<string, string[]> = {
+  by_national: ['national'],
+  by_region: ['region'],
+  by_district: ['district_city', 'district'],
+  by_county: ['county'],
+  by_subcounty: ['subcounty', 'sub_county'],
+  by_parish: ['parish'],
+  by_facility: ['facility', 'facility_name', 'organisationunitname'],
+  by_period_monthly: ['month', 'period'],
+  by_period_quarterly: ['quarter', 'period'],
+  by_period_yearly: ['year', 'period'],
+};
+
+const DEFAULT_SMALL_MULTIPLES_ROW_LIMIT = 50000;
+
+function applySmallMultiplesRowLimit(query: Record<string, any>) {
+  const currentLimit = Number(query.row_limit ?? 0);
+  if (
+    !Number.isFinite(currentLimit) ||
+    currentLimit < DEFAULT_SMALL_MULTIPLES_ROW_LIMIT
+  ) {
+    query.row_limit = DEFAULT_SMALL_MULTIPLES_ROW_LIMIT;
+  }
+}
+
+function resolveSplitColumn(fd: Record<string, any>): string | null {
+  const { _resolved_split_col: resolvedSplitCol = null } = fd;
+  if (resolvedSplitCol) {
+    return resolvedSplitCol;
+  }
+
+  const preset = String(fd.dhis2_split_preset || '');
+  if (preset && preset !== 'custom') {
+    const datasourceColumns = fd.datasource?.columns || fd.columns || [];
+    const dataColumns = datasourceColumns.map((column: any) =>
+      String(column.column_name || column.name || ''),
+    );
+    const resolvedPresetCol = resolvePresetColumn(
+      preset,
+      datasourceColumns,
+      dataColumns,
+    );
+    if (resolvedPresetCol) {
+      return resolvedPresetCol;
+    }
+
+    const fallback = FALLBACK_PRESET_COLUMNS[preset]?.[0];
+    if (fallback) {
+      return fallback;
+    }
+
+    const levelMatch = preset.match(/^by_level_(\d+)$/);
+    if (levelMatch) {
+      const level = Number(levelMatch[1]);
+      const levelColumn = datasourceColumns.find((column: any) => {
+        let extra: Record<string, any> = {};
+        if (typeof column.extra === 'string') {
+          try {
+            extra = JSON.parse(column.extra || '{}');
+          } catch {
+            extra = {};
+          }
+        } else {
+          extra = column.extra || {};
+        }
+        return (
+          Number(extra.dhis2_ou_level ?? extra.dhis2OuLevel ?? 0) === level
+        );
+      });
+      if (levelColumn) {
+        return String(levelColumn.column_name || levelColumn.name || '');
+      }
+    }
+  }
+
+  return Array.isArray(fd.groupby) ? fd.groupby[0] : fd.groupby || null;
+}
 
 export default function buildQuery(formData: QueryFormData) {
   const fd = formData as Record<string, any>;
@@ -28,9 +107,7 @@ export default function buildQuery(formData: QueryFormData) {
     // camelCase conversion only happens in ChartProps for transformProps.
 
     // ── Resolve the split column ──
-    const resolvedSplitCol: string | null = fd._resolved_split_col || null;
-    const manualGroupby = Array.isArray(fd.groupby) ? fd.groupby[0] : fd.groupby;
-    const splitCol = resolvedSplitCol || manualGroupby || null;
+    const splitCol = resolveSplitColumn(fd);
 
     // ── Resolve X-axis column ──
     let xAxisCol = Array.isArray(fd.x_axis) ? fd.x_axis[0] : fd.x_axis;
@@ -61,6 +138,7 @@ export default function buildQuery(formData: QueryFormData) {
     if (uniqueColumns.length > 0) {
       query.columns = uniqueColumns;
     }
+    applySmallMultiplesRowLimit(query);
 
     return [query];
   });

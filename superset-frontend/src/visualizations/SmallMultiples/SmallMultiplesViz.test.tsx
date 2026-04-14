@@ -17,6 +17,7 @@
  * under the License.
  */
 import transformProps from './transformProps';
+import buildQuery from './buildQuery';
 import { detectAvailablePresets, resolvePresetColumn } from './dhis2Presets';
 
 const SAMPLE_DATA = [
@@ -93,7 +94,14 @@ describe('SmallMultiples transformProps', () => {
   });
 
   test('supports new chart types', () => {
-    for (const type of ['pie', 'donut', 'scatter', 'heatmap', 'big_number', 'gauge']) {
+    for (const type of [
+      'pie',
+      'donut',
+      'scatter',
+      'heatmap',
+      'big_number',
+      'gauge',
+    ]) {
       const result = transformProps(
         makeChartProps({ formData: { mini_chart_type: type } }),
       );
@@ -144,11 +152,99 @@ describe('SmallMultiples transformProps', () => {
     expect(result.metricColors.length).toBeGreaterThan(0);
   });
 
+  test('shows x-axis labels by default', () => {
+    const result = transformProps(
+      makeChartProps({ formData: { show_x_axis: undefined } }),
+    );
+    expect(result.showXAxis).toBe(true);
+  });
+
+  test('sorts DHIS2 period x-axis values chronologically', () => {
+    const result = transformProps(
+      makeChartProps({
+        data: [
+          { district: 'Kampala', period: '202503', cases: 90 },
+          { district: 'Kampala', period: '202501', cases: 100 },
+          { district: 'Kampala', period: '202502', cases: 120 },
+        ],
+        formData: {
+          x_axis: ['period'],
+        },
+      }),
+    );
+    expect(result.panels[0].xValues).toEqual([
+      'January 2025',
+      'February 2025',
+      'March 2025',
+    ]);
+    expect(result.panels[0].yValues).toEqual([100, 120, 90]);
+  });
+
   test('top N filtering', () => {
     const result = transformProps(
-      makeChartProps({ formData: { top_n: 2, sort_panels: 'alphabetical' } }),
+      makeChartProps({ formData: { top_n: 2, sort_panels: 'latest-value' } }),
     );
     expect(result.panels).toHaveLength(2);
+  });
+
+  test('does not hide alphabetically sorted region panels when top N is set', () => {
+    const result = transformProps(
+      makeChartProps({
+        data: [
+          { region: 'Acholi', period: '202501', cases: 10 },
+          { region: 'Ankole', period: '202501', cases: 20 },
+          { region: 'Bugisu', period: '202501', cases: 30 },
+          { region: 'Central 1', period: '202501', cases: 40 },
+        ],
+        formData: {
+          dhis2_split_preset: 'by_region',
+          groupby: ['should_be_ignored'],
+          x_axis: ['period'],
+          top_n: 1,
+          sort_panels: 'alphabetical',
+        },
+        datasource: {
+          columns: [
+            {
+              column_name: 'region',
+              verbose_name: 'Region',
+              extra: JSON.stringify({
+                dhis2_is_ou_hierarchy: true,
+                dhis2_ou_level: 2,
+              }),
+            },
+            { column_name: 'period', verbose_name: 'Period' },
+          ],
+        },
+      }),
+    );
+
+    expect(result.panels.map(p => p.title)).toEqual([
+      'Acholi',
+      'Ankole',
+      'Bugisu',
+      'Central 1',
+    ]);
+  });
+
+  test('uses metric column fallback when query result key differs from metric label', () => {
+    const result = transformProps(
+      makeChartProps({
+        data: [
+          { district: 'Kampala', month: 'Jan', cases: 12 },
+          { district: 'Kampala', month: 'Feb', cases: 18 },
+        ],
+        formData: {
+          metrics: [
+            {
+              label: 'SUM(cases)',
+              column: { columnName: 'cases' },
+            },
+          ],
+        },
+      }),
+    );
+    expect(result.panels[0].yValues).toEqual([12, 18]);
   });
 });
 
@@ -190,10 +286,23 @@ describe('DHIS2 presets', () => {
   });
 
   test('resolves preset to correct column name', () => {
-    const dataColumns = ['national', 'region', 'district_city', 'period', 'month', 'quarter'];
-    expect(resolvePresetColumn('by_region', DHIS2_COLUMNS, dataColumns)).toBe('region');
-    expect(resolvePresetColumn('by_district', DHIS2_COLUMNS, dataColumns)).toBe('district_city');
-    expect(resolvePresetColumn('by_period_monthly', DHIS2_COLUMNS, dataColumns)).toBe('month');
+    const dataColumns = [
+      'national',
+      'region',
+      'district_city',
+      'period',
+      'month',
+      'quarter',
+    ];
+    expect(resolvePresetColumn('by_region', DHIS2_COLUMNS, dataColumns)).toBe(
+      'region',
+    );
+    expect(resolvePresetColumn('by_district', DHIS2_COLUMNS, dataColumns)).toBe(
+      'district_city',
+    );
+    expect(
+      resolvePresetColumn('by_period_monthly', DHIS2_COLUMNS, dataColumns),
+    ).toBe('month');
   });
 
   test('returns null for custom preset', () => {
@@ -201,7 +310,9 @@ describe('DHIS2 presets', () => {
   });
 
   test('returns null when column not in data', () => {
-    expect(resolvePresetColumn('by_facility', DHIS2_COLUMNS, ['region'])).toBeNull();
+    expect(
+      resolvePresetColumn('by_facility', DHIS2_COLUMNS, ['region']),
+    ).toBeNull();
   });
 
   test('DHIS2 preset splits data via transformProps', () => {
@@ -228,5 +339,28 @@ describe('DHIS2 presets', () => {
     expect(result.panels).toHaveLength(2);
     const titles = result.panels.map(p => p.title).sort();
     expect(titles).toEqual(['Central', 'Western']);
+  });
+
+  test('buildQuery resolves Region preset when hidden control is unavailable', () => {
+    const queryContext = buildQuery({
+      datasource: '1__table',
+      dhis2_split_preset: 'by_region',
+      groupby: ['should_be_ignored'],
+      x_axis: ['period'],
+      metrics: [{ label: 'cases' }],
+    } as any);
+    expect(queryContext.queries[0].columns).toEqual(['region', 'period']);
+  });
+
+  test('buildQuery raises low row limit so all region panels can be returned', () => {
+    const queryContext = buildQuery({
+      datasource: '1__table',
+      dhis2_split_preset: 'by_region',
+      x_axis: ['period'],
+      metrics: [{ label: 'cch precipitation chirps' }],
+      row_limit: 5,
+    } as any);
+
+    expect(queryContext.queries[0].row_limit).toBe(50000);
   });
 });

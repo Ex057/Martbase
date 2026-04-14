@@ -920,6 +920,24 @@ function fixMarkdownStructure(text: string): string {
  * URLs, numbers, and common abbreviations.
  */
 function fixWordSpacing(text: string): string {
+  const targetedRepairs: Array<[RegExp, string]> = [
+    [/\bmalari\s+a\b/gi, 'malaria'],
+    [/\bho\s+sp\s+it\s+al\b/gi, 'hospital'],
+    [/\bper\s+for\s+m\s+an\s+ce\b/gi, 'performance'],
+    [/\bh\s+is\s+t\s+or\s+ical\b/gi, 'historical'],
+    [/\bhistoricalrec\s+or\s+d\b/gi, 'historical record'],
+    [/\bf\s+all\s+en\b/gi, 'fallen'],
+    [/\br\s+is\s+in\s+g\b/gi, 'rising'],
+    [/\bsoar\s+in\s+g\b/gi, 'soaring'],
+    [/\bdecl\s+in\s+e\b/gi, 'decline'],
+    [/\bin\s+cre\s+as\s+e\b/gi, 'increase'],
+    [/\bd\s+at\s+a\b/gi, 'data'],
+    [/\baction\s+able\b/gi, 'actionable'],
+    [/\bgene\s+rate\b/gi, 'generate'],
+    [/\bm\s+is\s+s\s+in\s+g\b/gi, 'missing'],
+    [/\bsupp\s+or\s+t\b/gi, 'support'],
+  ];
+
   // Common English words that the AI joins onto a preceding word.
   // Only words 3+ chars to avoid false positives with short fragments.
   // Sorted longest-first so "through" matches before "the".
@@ -1111,7 +1129,12 @@ function fixWordSpacing(text: string): string {
     return repaired.join('');
   };
 
-  return text
+  let repairedText = text;
+  targetedRepairs.forEach(([pattern, replacement]) => {
+    repairedText = repairedText.replace(pattern, replacement);
+  });
+
+  return repairedText
     .split('\n')
     .map(line => {
       const trimmed = line.trim();
@@ -1391,7 +1414,9 @@ function proofreadInsight(text: string): string {
     .replace(/\\`/g, '`');
   const structured = fixMarkdownStructure(unescaped);
   const clean = sanitizeNonAscii(structured);
-  const tables = fixMarkdownTables(clean);
+  const spaced = fixWordSpacing(clean);
+  const respaced = spaced === clean ? spaced : fixWordSpacing(spaced);
+  const tables = fixMarkdownTables(respaced);
   return tables;
 }
 
@@ -1865,6 +1890,33 @@ type ExportImages = {
   dashboardCharts?: DashboardChartInfo[];
 };
 
+type PptxBorderProps = {
+  type: 'solid' | 'dash' | 'dot' | 'none';
+  pt: number;
+  color: string;
+};
+
+type PptxTableCell = {
+  text: string;
+  options: {
+    fontSize: number;
+    bold: boolean;
+    color: string;
+    fontFace: string;
+    fill?: { color: string };
+    border?: [
+      PptxBorderProps,
+      PptxBorderProps,
+      PptxBorderProps,
+      PptxBorderProps,
+    ];
+    valign: 'top' | 'middle' | 'bottom';
+    margin: number[];
+  };
+};
+
+type PptxTableRow = PptxTableCell[];
+
 async function exportAsPdf(
   messages: ChatMessage[],
   images?: ExportImages,
@@ -1999,26 +2051,967 @@ async function exportAsPdf(
   pdf.save(`ai-insights-${Date.now()}.pdf`);
 }
 
+/**
+ * Export conversation as a professionally formatted .docx file.
+ * Uses dynamic import() so the `docx` package is not bundled into main chunk.
+ *
+ * Professional formatting: 1-inch margins, Calibri body / Calibri Light headings,
+ * 11pt body text, proper heading hierarchy with colour, paragraph spacing matching
+ * the on-screen AI Insight panel, and aspect-ratio-preserving chart images.
+ */
 async function exportAsDocx(
-  _messages: ChatMessage[],
-  _images?: ExportImages,
-  _exportContext?: { mode?: string; context?: Record<string, unknown> },
-  _aiInfo?: { provider?: string; model?: string },
+  messages: ChatMessage[],
+  images?: ExportImages,
+  exportContext?: { mode?: string; context?: Record<string, unknown> },
+  aiInfo?: { provider?: string; model?: string },
 ) {
-  window.alert(
-    t('DOCX export is temporarily disabled in this local build. Use PDF export for now.'),
-  );
+  const [
+    { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle, ShadingType, ImageRun, TabStopType, TabStopPosition, Header: DocxHeader, Footer: DocxFooter, PageNumber, Table, TableRow, TableCell, WidthType },
+    { saveAs },
+  ] = await Promise.all([import('docx'), import('file-saver')]);
+
+  // Typography constants (half-points: 22 = 11pt)
+  const BODY_SIZE = 22;      // 11pt
+  const BODY_FONT = 'Calibri';
+  const HEADING_FONT = 'Calibri Light';
+  const CODE_FONT = 'Consolas';
+  const CODE_SIZE = 20;      // 10pt
+
+  // Spacing (twips: 20 twips = 1pt, 240 twips = 12pt)
+  const SP_PARA_BEFORE = 80;   // 4pt
+  const SP_PARA_AFTER = 80;    // 4pt
+  const SP_H1_BEFORE = 320;    // 16pt
+  const SP_H1_AFTER = 160;     // 8pt
+  const SP_H2_BEFORE = 260;    // 13pt
+  const SP_H2_AFTER = 120;     // 6pt
+  const SP_H3_BEFORE = 200;    // 10pt
+  const SP_H3_AFTER = 80;      // 4pt
+  const SP_LIST_BEFORE = 40;   // 2pt
+  const SP_LIST_AFTER = 40;    // 2pt
+  const SP_SECTION = 300;      // 15pt — between message blocks
+
+  // Usable image width (A4 at 1" margins → ~6.27" ≈ 451pt, in EMU/pixel terms ~595px)
+  const MAX_IMG_W = 580;
+  const MAX_IMG_H = 360;
+
+  /** Parse inline **bold**, *italic*, `code` into TextRun objects. */
+  function parseInline(text: string, baseSz = BODY_SIZE) {
+    const runs: InstanceType<typeof TextRun>[] = [];
+    const regex = /\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|([^*`]+)/g;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(text)) !== null) {
+      if (match[1]) {
+        runs.push(new TextRun({ text: match[1], bold: true, size: baseSz, font: BODY_FONT }));
+      } else if (match[2]) {
+        runs.push(new TextRun({ text: match[2], italics: true, size: baseSz, font: BODY_FONT }));
+      } else if (match[3]) {
+        runs.push(new TextRun({
+          text: match[3], font: CODE_FONT, size: CODE_SIZE,
+          shading: { type: ShadingType.SOLID, color: 'F3F4F6' },
+        }));
+      } else if (match[4]) {
+        runs.push(new TextRun({ text: match[4], size: baseSz, font: BODY_FONT }));
+      }
+    }
+    return runs.length ? runs : [new TextRun({ text, size: baseSz, font: BODY_FONT })];
+  }
+
+  /** Convert markdown text to docx Paragraph objects with professional spacing. */
+  function markdownToDocx(text: string) {
+    const paragraphs: (InstanceType<typeof Paragraph> | InstanceType<typeof Table>)[] = [];
+    const lines = proofreadInsight(text).split('\n');
+    let inCodeBlock = false;
+
+    // Collect table rows to flush as a single Table object
+    let tableRows: string[][] = [];
+    function flushTable() {
+      if (tableRows.length === 0) return;
+      const colCount = Math.max(...tableRows.map(r => r.length));
+      const colWidthPct = Math.floor(100 / Math.max(colCount, 1));
+      const rows = tableRows.map((cells, ri) =>
+        new TableRow({
+          children: Array.from({ length: colCount }, (_, ci) =>
+            new TableCell({
+              children: [new Paragraph({
+                children: ri === 0
+                  ? [new TextRun({ text: cells[ci] || '', bold: true, size: BODY_SIZE - 2, font: BODY_FONT, color: '1F2937' })]
+                  : parseInline(cells[ci] || '', BODY_SIZE - 2),
+                spacing: { before: 20, after: 20 },
+              })],
+              width: { size: colWidthPct, type: WidthType.PERCENTAGE },
+              shading: ri === 0
+                ? { type: ShadingType.SOLID, color: 'E6EAF0' }
+                : ri % 2 === 0
+                  ? { type: ShadingType.SOLID, color: 'F8FAFC' }
+                  : undefined,
+            }),
+          ),
+        }),
+      );
+      paragraphs.push(new Table({
+        rows,
+        width: { size: 100, type: WidthType.PERCENTAGE },
+      }));
+      // Space after table
+      paragraphs.push(new Paragraph({ spacing: { before: 80, after: 80 } }));
+      tableRows = [];
+    }
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('```')) { inCodeBlock = !inCodeBlock; continue; }
+      if (inCodeBlock) {
+        flushTable();
+        paragraphs.push(new Paragraph({
+          children: [new TextRun({ text: line, font: CODE_FONT, size: CODE_SIZE, color: '1E293B' })],
+          shading: { type: ShadingType.SOLID, color: 'F3F4F6' },
+          spacing: { before: 20, after: 20, line: 276 },
+          indent: { left: 200 },
+        }));
+        continue;
+      }
+
+      // Table rows (pipe-delimited)
+      if (trimmed.startsWith('|') && trimmed.includes('|', 1)) {
+        const cells = trimmed.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+        // Skip separator rows
+        if (cells.every(c => /^[-:]+$/.test(c))) continue;
+        tableRows.push(cells);
+        continue;
+      }
+      // Flush accumulated table rows when we leave a table block
+      flushTable();
+
+      if (!trimmed) {
+        paragraphs.push(new Paragraph({ spacing: { before: SP_PARA_BEFORE, after: SP_PARA_AFTER } }));
+        continue;
+      }
+
+      // Alert callouts
+      const alertMatch = trimmed.match(/^\[(CRITICAL|WARNING|GOOD|INFO)\]\s*(.*)/);
+      if (alertMatch) {
+        const [, tag, body] = alertMatch;
+        const colors: Record<string, { bg: string; border: string; text: string }> = {
+          CRITICAL: { bg: 'FEF2F2', border: 'DC2626', text: '991B1B' },
+          WARNING:  { bg: 'FFFBEB', border: 'F59E0B', text: '92400E' },
+          GOOD:     { bg: 'F0FDF4', border: '16A34A', text: '166534' },
+          INFO:     { bg: 'EFF6FF', border: '3B82F6', text: '1E40AF' },
+        };
+        const c = colors[tag] || colors.INFO;
+        paragraphs.push(new Paragraph({
+          children: [
+            new TextRun({ text: `${ALERT_TAGS[tag]?.label || tag}  `, bold: true, color: c.border, size: BODY_SIZE, font: BODY_FONT }),
+            ...parseInline(body),
+          ],
+          shading: { type: ShadingType.SOLID, color: c.bg },
+          spacing: { before: 160, after: 160, line: 300 },
+          border: { left: { style: BorderStyle.SINGLE, size: 18, color: c.border, space: 8 } },
+          indent: { left: 240 },
+        }));
+        continue;
+      }
+
+      // Headings
+      const h1 = trimmed.match(/^# (.+)/);
+      if (h1) {
+        paragraphs.push(new Paragraph({
+          children: [new TextRun({ text: h1[1], bold: true, size: 32, color: '1976D2', font: HEADING_FONT })],
+          heading: HeadingLevel.HEADING_1,
+          spacing: { before: SP_H1_BEFORE, after: SP_H1_AFTER, line: 276 },
+          border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'C8D4E4', space: 4 } },
+        }));
+        continue;
+      }
+      const h2 = trimmed.match(/^## (.+)/);
+      if (h2) {
+        paragraphs.push(new Paragraph({
+          children: [new TextRun({ text: h2[1], bold: true, size: 26, color: '1976D2', font: HEADING_FONT })],
+          heading: HeadingLevel.HEADING_2,
+          spacing: { before: SP_H2_BEFORE, after: SP_H2_AFTER, line: 276 },
+        }));
+        continue;
+      }
+      const h3 = trimmed.match(/^### (.+)/);
+      if (h3) {
+        paragraphs.push(new Paragraph({
+          children: [new TextRun({ text: h3[1], bold: true, size: 24, color: '374151', font: HEADING_FONT })],
+          heading: HeadingLevel.HEADING_3,
+          spacing: { before: SP_H3_BEFORE, after: SP_H3_AFTER, line: 276 },
+        }));
+        continue;
+      }
+
+      // Bullet list
+      const bullet = trimmed.match(/^[\s]*[-*]\s+(.+)/);
+      if (bullet) {
+        paragraphs.push(new Paragraph({
+          children: parseInline(bullet[1]),
+          bullet: { level: 0 },
+          spacing: { before: SP_LIST_BEFORE, after: SP_LIST_AFTER, line: 276 },
+        }));
+        continue;
+      }
+
+      // Numbered list
+      const num = trimmed.match(/^[\s]*(\d+)[.)]\s+(.+)/);
+      if (num) {
+        paragraphs.push(new Paragraph({
+          children: [
+            new TextRun({ text: `${num[1]}. `, bold: true, size: BODY_SIZE, font: BODY_FONT }),
+            ...parseInline(num[2]),
+          ],
+          spacing: { before: SP_LIST_BEFORE, after: SP_LIST_AFTER, line: 276 },
+          indent: { left: 360 },
+        }));
+        continue;
+      }
+
+      // Horizontal rule
+      if (/^---+$/.test(trimmed)) {
+        paragraphs.push(new Paragraph({
+          border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'D0D8E4' } },
+          spacing: { before: 160, after: 160 },
+        }));
+        continue;
+      }
+
+      // Normal paragraph
+      paragraphs.push(new Paragraph({
+        children: parseInline(trimmed),
+        spacing: { before: SP_PARA_BEFORE, after: SP_PARA_AFTER, line: 300 },
+      }));
+    }
+    flushTable(); // flush any trailing table
+    return paragraphs;
+  }
+
+  /** Data-URL → Uint8Array for ImageRun. */
+  function dataUrlToUint8Array(dataUrl: string): Uint8Array {
+    const base64 = dataUrl.split(',')[1];
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  /** Create an ImageRun preserving aspect ratio within max bounds. */
+  async function makeImageRun(dataUrl: string, maxW = MAX_IMG_W, maxH = MAX_IMG_H) {
+    const dim = await getImageDimensions(dataUrl);
+    const fit = fitImage(dim.width, dim.height, maxW, maxH);
+    return new ImageRun({
+      data: dataUrlToUint8Array(dataUrl),
+      transformation: { width: Math.round(fit.width), height: Math.round(fit.height) },
+      type: 'png',
+    });
+  }
+
+  // ── Build document content ──
+  const brand = getBrandInfo();
+  const brandTitle = buildExportTitle(brand, exportContext);
+  const children: (InstanceType<typeof Paragraph> | InstanceType<typeof Table>)[] = [];
+
+  // Title — use dynamic brand + dashboard/chart name
+  children.push(new Paragraph({
+    children: [new TextRun({ text: brandTitle, bold: true, size: 44, color: '1976D2', font: HEADING_FONT })],
+    heading: HeadingLevel.TITLE,
+    alignment: AlignmentType.LEFT,
+    spacing: { after: 60 },
+  }));
+  children.push(new Paragraph({
+    border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: '1976D2', space: 2 } },
+    spacing: { after: 120 },
+  }));
+  children.push(new Paragraph({
+    children: [
+      new TextRun({ text: `Generated: ${new Date().toLocaleString()}`, size: 18, color: '9CA3AF', italics: true, font: BODY_FONT }),
+    ],
+    spacing: { after: SP_SECTION },
+  }));
+
+  // Chart preview (single chart mode)
+  if (images?.chartPreviewUrl) {
+    try {
+      const imgRun = await makeImageRun(images.chartPreviewUrl);
+      children.push(new Paragraph({
+        children: [imgRun],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 240 },
+      }));
+    } catch { /* skip */ }
+  }
+
+  /** Match a ## heading to a dashboard chart. */
+  function matchChartDocx(sectionTitle: string | undefined) {
+    if (!sectionTitle || !images?.dashboardCharts) return undefined;
+    const lower = sectionTitle.toLowerCase();
+    return images.dashboardCharts.find(c =>
+      lower.includes(c.sliceName.toLowerCase()) ||
+      c.sliceName.toLowerCase().includes(lower),
+    );
+  }
+
+  // ── Render only assistant content — no user messages or role labels ──
+  const assistantMsgs = messages.filter(m => m.role === 'assistant');
+  const hasDashboardImages =
+    images?.dashboardChartImages &&
+    images?.dashboardCharts &&
+    Object.keys(images.dashboardChartImages || {}).length > 0;
+
+  for (const msg of assistantMsgs) {
+    if (hasDashboardImages) {
+      const sections = msg.content.split(/(?=^## )/m);
+      for (const section of sections) {
+        const headingMatch = section.match(/^## (.+)/m);
+        const matched = matchChartDocx(headingMatch?.[1]?.trim());
+        if (matched && images.dashboardChartImages![matched.chartId]) {
+          try {
+            const imgRun = await makeImageRun(images.dashboardChartImages![matched.chartId], MAX_IMG_W, 280);
+            children.push(new Paragraph({
+              children: [imgRun],
+              alignment: AlignmentType.CENTER,
+              spacing: { before: SP_SECTION, after: 120 },
+            }));
+          } catch { /* skip */ }
+        }
+        children.push(...markdownToDocx(section));
+      }
+    } else {
+      children.push(...markdownToDocx(msg.content));
+    }
+  }
+
+  const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: { font: BODY_FONT, size: BODY_SIZE },
+          paragraph: { spacing: { line: 276 } },
+        },
+      },
+    },
+    sections: [{
+      properties: {
+        page: {
+          margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
+        },
+      },
+      headers: {
+        default: new DocxHeader({
+          children: [new Paragraph({
+            children: [new TextRun({ text: brandTitle, size: 16, color: 'B0B8C8', italics: true, font: BODY_FONT })],
+            alignment: AlignmentType.RIGHT,
+          })],
+        }),
+      },
+      footers: {
+        default: new DocxFooter({
+          children: [new Paragraph({
+            children: [
+              new TextRun({ text: aiInfo?.provider ? `AI Insights \u2014 ${aiInfo.provider}${aiInfo.model ? ` / ${aiInfo.model}` : ''}` : 'AI Insights', size: 16, color: '9CA3AF', font: BODY_FONT }),
+              new TextRun({ text: '\t', size: 16 }),
+              new TextRun({ text: '\t', size: 16 }),
+              new TextRun({ children: [PageNumber.CURRENT], size: 16, color: '9CA3AF', font: BODY_FONT }),
+              new TextRun({ text: ' / ', size: 16, color: '9CA3AF', font: BODY_FONT }),
+              new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 16, color: '9CA3AF', font: BODY_FONT }),
+            ],
+            tabStops: [
+              { type: TabStopType.CENTER, position: TabStopPosition.MAX / 2 },
+              { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
+            ],
+            border: { top: { style: BorderStyle.SINGLE, size: 2, color: 'D0D8E4', space: 4 } },
+          })],
+        }),
+      },
+      children,
+    }],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  saveAs(blob, `ai-insights-${Date.now()}.docx`);
 }
 
+/**
+ * Export conversation as a professionally designed .pptx file.
+ * Uses dynamic import() to avoid bundling pptxgenjs into the main chunk.
+ *
+ * Professional design: branded title slide with accent bar, consistent
+ * slide master (header strip + footer), proper typography hierarchy,
+ * aspect-ratio-preserving chart images, and readable content layout.
+ */
 async function exportAsPptx(
-  _messages: ChatMessage[],
-  _images?: ExportImages,
-  _exportContext?: { mode?: string; context?: Record<string, unknown> },
-  _aiInfo?: { provider?: string; model?: string },
+  messages: ChatMessage[],
+  images?: ExportImages,
+  exportContext?: { mode?: string; context?: Record<string, unknown> },
+  aiInfo?: { provider?: string; model?: string },
 ) {
-  window.alert(
-    t('PPTX export is temporarily disabled in this local build. Use PDF export for now.'),
-  );
+  const PptxGenJSModule = await import('pptxgenjs');
+  const PptxGenJS =
+    (PptxGenJSModule.default || PptxGenJSModule) as new () => any;
+
+  const pptx = new PptxGenJS();
+  pptx.layout = 'LAYOUT_WIDE'; // 13.33" × 7.5"
+  const pptxBrand = getBrandInfo();
+  pptx.author = pptxBrand.text || pptxBrand.name;
+  pptx.title = pptxBrand.text || pptxBrand.name;
+  pptx.subject = 'Executive Insights Presentation';
+
+  // ── Design constants ──
+  const brandInfo = getBrandInfo();
+  const brandTitle = buildExportTitle(brandInfo, exportContext);
+  const BRAND = '1976D2';
+  const BRAND_DARK = '0D47A1';
+  const DARK = '1F2937';
+  const GRAY = '6B7280';
+  const LIGHT_BG = 'F8FAFC';
+  const FONT = 'Calibri';
+  const SLIDE_W = 13.33;
+  const SLIDE_H = 7.5;
+  const CONTENT_X = 0.7;
+  const CONTENT_Y = 1.15;
+  const CONTENT_W = SLIDE_W - 1.4;
+  const CONTENT_H = SLIDE_H - 1.95;
+
+  // Alert colours for PPTX
+  const PPTX_ALERT: Record<string, { label: string; color: string; bg: string }> = {
+    CRITICAL: { label: 'Critical', color: 'DC2626', bg: 'FEF2F2' },
+    WARNING:  { label: 'Warning',  color: 'D97706', bg: 'FFFBEB' },
+    GOOD:     { label: 'Good',     color: '16A34A', bg: 'F0FDF4' },
+    INFO:     { label: 'Info',     color: '3B82F6', bg: 'EFF6FF' },
+  };
+
+  /** Apply the professional master layout to a content slide. */
+  function applyMaster(slide: any, title: string, slideNum?: string) {
+    // Top accent bar
+    slide.addShape('rect', {
+      x: 0, y: 0, w: SLIDE_W, h: 0.08,
+      fill: { color: BRAND },
+    });
+    // Header background (taller to fit 24pt title)
+    slide.addShape('rect', {
+      x: 0, y: 0.08, w: SLIDE_W, h: 0.82,
+      fill: { color: LIGHT_BG },
+    });
+    // Header divider line
+    slide.addShape('line', {
+      x: 0, y: 0.9, w: SLIDE_W, h: 0,
+      line: { color: 'D0D8E4', width: 0.5 },
+    });
+    // Slide title in header — insight-led titles (6×6 rule: visible from back of room)
+    slide.addText(title, {
+      x: 0.6, y: 0.12, w: 11.5, h: 0.6,
+      fontSize: 24, bold: true, color: BRAND, fontFace: FONT,
+    });
+    // Footer separator
+    slide.addShape('line', {
+      x: 0.5, y: SLIDE_H - 0.5, w: SLIDE_W - 1, h: 0,
+      line: { color: 'D0D8E4', width: 0.5 },
+    });
+    // Footer text
+    const pptxFooter = aiInfo?.provider
+      ? `${brandTitle} — AI Insights — ${aiInfo.provider}${aiInfo.model ? ` / ${aiInfo.model}` : ''}`
+      : `${brandTitle} — AI Insights`;
+    slide.addText(pptxFooter, {
+      x: 0.6, y: SLIDE_H - 0.45, w: 8, h: 0.3,
+      fontSize: 8, color: GRAY, fontFace: FONT,
+    });
+    if (slideNum) {
+      slide.addText(slideNum, {
+        x: SLIDE_W - 1.5, y: SLIDE_H - 0.45, w: 1, h: 0.3,
+        fontSize: 8, color: GRAY, fontFace: FONT, align: 'right',
+      });
+    }
+  }
+
+  /** Fit chart image into a pptx slide preserving aspect ratio, centered. */
+  async function addChartSlide(
+    dataUrl: string,
+    title: string,
+    slideIdx: number,
+  ) {
+    try {
+      const slide = pptx.addSlide();
+      applyMaster(slide, title, `${slideIdx}`);
+      const dim = await getImageDimensions(dataUrl);
+      const maxW = SLIDE_W - 1.4;
+      const maxH = SLIDE_H - 2.0;
+      const fit = fitImage(dim.width, dim.height, maxW * 96, maxH * 96);
+      const wIn = fit.width / 96;
+      const hIn = fit.height / 96;
+      const xOff = (SLIDE_W - wIn) / 2;
+      const yOff = 1.0 + (maxH - hIn) / 2;
+      slide.addImage({ data: dataUrl, x: xOff, y: yOff, w: wIn, h: hIn });
+    } catch { /* skip */ }
+  }
+
+  /** Parse inline markdown **bold**, *italic*, `code` into pptxgenjs text objects. */
+  function parseInlinePptx(
+    text: string,
+    baseFontSize: number,
+    baseColor: string,
+  ): Array<{ text: string; options: Record<string, unknown> }> {
+    const segments: Array<{ text: string; options: Record<string, unknown> }> = [];
+    const regex = /\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|([^*`]+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(text)) !== null) {
+      if (m[1]) {
+        segments.push({ text: m[1], options: { fontSize: baseFontSize, bold: true, italic: true, color: baseColor, fontFace: FONT } });
+      } else if (m[2]) {
+        segments.push({ text: m[2], options: { fontSize: baseFontSize, bold: true, color: baseColor, fontFace: FONT } });
+      } else if (m[3]) {
+        segments.push({ text: m[3], options: { fontSize: baseFontSize, italic: true, color: baseColor, fontFace: FONT } });
+      } else if (m[4]) {
+        segments.push({ text: m[4], options: { fontSize: baseFontSize - 1, color: '374151', fontFace: 'Consolas' } });
+      } else if (m[5]) {
+        segments.push({ text: m[5], options: { fontSize: baseFontSize, color: baseColor, fontFace: FONT } });
+      }
+    }
+    if (!segments.length) segments.push({ text, options: { fontSize: baseFontSize, color: baseColor, fontFace: FONT } });
+    return segments;
+  }
+
+  /** Parse markdown into structured slide content blocks. */
+  type SlideBlock =
+    | { type: 'text'; parts: Array<{ text: string; options: Record<string, unknown> }> }
+    | { type: 'table'; rows: string[][] };
+
+  function markdownToSlideBlocks(text: string, skipFirstH2 = false): SlideBlock[] {
+    const blocks: SlideBlock[] = [];
+    const lines = proofreadInsight(text).split('\n');
+    let currentParts: Array<{ text: string; options: Record<string, unknown> }> = [];
+    let tableRows: string[][] = [];
+    let inCodeBlock = false;
+    let skippedFirstH2 = false;
+
+    function flushParts() {
+      if (currentParts.length) {
+        blocks.push({ type: 'text', parts: [...currentParts] });
+        currentParts = [];
+      }
+    }
+    function flushTable() {
+      if (tableRows.length) {
+        blocks.push({ type: 'table', rows: [...tableRows] });
+        tableRows = [];
+      }
+    }
+
+    for (let li = 0; li < lines.length; li++) {
+      const trimmed = lines[li].trim();
+
+      // Code blocks — render as monospace text
+      if (trimmed.startsWith('```')) { inCodeBlock = !inCodeBlock; continue; }
+      if (inCodeBlock) {
+        currentParts.push({ text: `${trimmed}\n`, options: { fontSize: 11, color: '374151', fontFace: 'Consolas' } });
+        continue;
+      }
+
+      // Table rows
+      if (trimmed.startsWith('|') && trimmed.includes('|', 1)) {
+        const cells = trimmed.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+        if (cells.every(c => /^[-:]+$/.test(c))) continue;
+        flushParts();
+        tableRows.push(cells);
+        continue;
+      }
+      if (tableRows.length) { flushTable(); }
+
+      if (!trimmed) {
+        currentParts.push({ text: '\n', options: { fontSize: 8 } });
+        continue;
+      }
+
+      // Alert callouts — with multi-line body support
+      const alertMatch = trimmed.match(/^\[(CRITICAL|WARNING|GOOD|INFO)\]\s*(.*)/);
+      if (alertMatch) {
+        const [, tag, sameLine] = alertMatch;
+        const bodyParts: string[] = [];
+        if (sameLine.trim()) bodyParts.push(sameLine.trim());
+        while (li + 1 < lines.length) {
+          const nextTrimmed = lines[li + 1].trim();
+          if (!nextTrimmed || /^\[(CRITICAL|WARNING|GOOD|INFO)\]/.test(nextTrimmed) || /^#{1,3} /.test(nextTrimmed)) break;
+          bodyParts.push(nextTrimmed);
+          li++;
+        }
+        const body = bodyParts.join(' ');
+        const a = PPTX_ALERT[tag] || PPTX_ALERT.INFO;
+        currentParts.push({ text: '\n', options: { fontSize: 8 } });
+        currentParts.push({ text: ` ${a.label} `, options: { fontSize: 18, bold: true, color: 'FFFFFF', highlight: a.color, fontFace: FONT } });
+        currentParts.push(...parseInlinePptx(`  ${body}\n`, 20, DARK));
+        continue;
+      }
+
+      // Headings
+      const h1 = trimmed.match(/^# (.+)/);
+      if (h1) {
+        currentParts.push({ text: '\n', options: { fontSize: 8 } });
+        currentParts.push({ text: `${h1[1]}\n`, options: { fontSize: 24, bold: true, color: BRAND, fontFace: FONT } });
+        continue;
+      }
+      const h2 = trimmed.match(/^## (.+)/);
+      if (h2) {
+        // Skip the first H2 — it's already rendered as the slide header by applyMaster
+        if (skipFirstH2 && !skippedFirstH2) {
+          skippedFirstH2 = true;
+          continue;
+        }
+        currentParts.push({ text: '\n', options: { fontSize: 8 } });
+        currentParts.push({ text: `${h2[1]}\n`, options: { fontSize: 28, bold: true, color: BRAND, fontFace: FONT } });
+        continue;
+      }
+      const h3 = trimmed.match(/^### (.+)/);
+      if (h3) {
+        currentParts.push({ text: '\n', options: { fontSize: 8 } });
+        currentParts.push({ text: `${h3[1]}\n`, options: { fontSize: 24, bold: true, color: DARK, fontFace: FONT } });
+        continue;
+      }
+
+      // Bullet list — preserve bold/italic (6×6 rule: 20pt for readability)
+      const bullet = trimmed.match(/^[-*]\s+(.+)/);
+      if (bullet) {
+        currentParts.push({ text: '   \u2022  ', options: { fontSize: 20, color: DARK, fontFace: FONT } });
+        currentParts.push(...parseInlinePptx(bullet[1], 20, DARK));
+        currentParts.push({ text: '\n', options: { fontSize: 20 } });
+        continue;
+      }
+
+      // Numbered list
+      const num = trimmed.match(/^(\d+)[.)]\s+(.+)/);
+      if (num) {
+        currentParts.push({ text: `   ${num[1]}.  `, options: { fontSize: 20, bold: true, color: DARK, fontFace: FONT } });
+        currentParts.push(...parseInlinePptx(num[2], 20, DARK));
+        currentParts.push({ text: '\n', options: { fontSize: 20 } });
+        continue;
+      }
+
+      // Horizontal rule
+      if (/^---+$/.test(trimmed)) {
+        currentParts.push({ text: '\n', options: { fontSize: 8 } });
+        continue;
+      }
+
+      // Normal paragraph — preserve bold/italic (6×6 rule: 20pt)
+      currentParts.push(...parseInlinePptx(trimmed, 20, DARK));
+      currentParts.push({ text: '\n', options: { fontSize: 20 } });
+    }
+    flushParts();
+    flushTable();
+    return blocks;
+  }
+
+  /** Render slide blocks onto slides, creating new slides as needed.
+   *  Tables get their own slide. Text blocks are chunked to fit. */
+  function renderBlocksToSlides(blocks: SlideBlock[], label: string) {
+    // 6×6 rule: max ~6 content items per slide for readability
+    const TEXT_PARTS_PER_SLIDE = 12;
+
+    for (const block of blocks) {
+      if (block.type === 'table') {
+        // Render table on its own slide
+        slideCount += 1;
+        const slide = pptx.addSlide();
+        applyMaster(slide, label, `${slideCount}`);
+        const colCount = Math.max(...block.rows.map(r => r.length));
+        const colW = CONTENT_W / Math.max(colCount, 1);
+        const BORDER_STYLE: PptxBorderProps = {
+          type: 'solid' as const,
+          pt: 0.5,
+          color: 'D0D8E4',
+        };
+        const CELL_BORDER: [
+          PptxBorderProps,
+          PptxBorderProps,
+          PptxBorderProps,
+          PptxBorderProps,
+        ] = [
+          BORDER_STYLE,
+          BORDER_STYLE,
+          BORDER_STYLE,
+          BORDER_STYLE,
+        ];
+        const tblRows: PptxTableRow[] = block.rows.map((cells, ri) =>
+          Array.from({ length: colCount }, (_, ci): PptxTableCell => ({
+            text: (cells[ci] || '')
+              .replace(/\*\*(.+?)\*\*/g, '$1')
+              .replace(/\*(.+?)\*/g, '$1'),
+            options: {
+              fontSize: ri === 0 ? 16 : 14,
+              bold: ri === 0,
+              color: DARK,
+              fontFace: FONT,
+              fill: ri === 0 ? { color: 'E6EAF0' } : ri % 2 === 0 ? { color: 'F8FAFC' } : undefined,
+              border: CELL_BORDER,
+              valign: 'middle' as const,
+              margin: [3, 6, 3, 6],
+            },
+          })),
+        );
+        slide.addTable(tblRows, {
+          x: CONTENT_X,
+          y: CONTENT_Y,
+          w: CONTENT_W,
+          colW: Array(colCount).fill(colW),
+          rowH: 0.35,
+          autoPage: false,
+        });
+        continue;
+      }
+
+      // Text blocks — chunk into slides
+      const parts = block.parts;
+      for (let j = 0; j < parts.length; j += TEXT_PARTS_PER_SLIDE) {
+        const chunk = parts.slice(j, j + TEXT_PARTS_PER_SLIDE);
+        slideCount += 1;
+        const slide = pptx.addSlide();
+        const title = j === 0 ? label : `${label} (cont.)`;
+        applyMaster(slide, title, `${slideCount}`);
+        slide.addText(chunk as any, {
+          x: CONTENT_X, y: CONTENT_Y, w: CONTENT_W, h: CONTENT_H,
+          fontSize: 20, color: DARK, fontFace: FONT,
+          valign: 'top', lineSpacingMultiple: 1.3,
+          paraSpaceAfter: 6,
+        });
+      }
+    }
+  }
+
+  // ── Slide counter ──
+  let slideCount = 0;
+
+  // ── TITLE SLIDE ──
+  const titleSlide = pptx.addSlide();
+  slideCount += 1;
+
+  // Full-bleed background
+  titleSlide.addShape('rect', {
+    x: 0, y: 0, w: SLIDE_W, h: SLIDE_H,
+    fill: { color: 'FFFFFF' },
+  });
+  // Left accent column
+  titleSlide.addShape('rect', {
+    x: 0, y: 0, w: 0.5, h: SLIDE_H,
+    fill: { color: BRAND },
+  });
+  // Top accent bar
+  titleSlide.addShape('rect', {
+    x: 0, y: 0, w: SLIDE_W, h: 0.12,
+    fill: { color: BRAND },
+  });
+  // Bottom accent bar
+  titleSlide.addShape('rect', {
+    x: 0, y: SLIDE_H - 0.12, w: SLIDE_W, h: 0.12,
+    fill: { color: BRAND_DARK },
+  });
+  // Decorative background box
+  titleSlide.addShape('rect', {
+    x: 0.5, y: 1.8, w: 8, h: 3.5,
+    fill: { color: LIGHT_BG },
+    rectRadius: 0.1,
+  });
+
+  // Brand title on title slide; extract first H1 as subtitle
+  const allAssistant = messages.filter(m => m.role === 'assistant');
+  const firstContent = allAssistant[0]?.content || '';
+  const titleMatch = firstContent.match(/^# (.+)/m);
+  const subtitle = titleMatch?.[1]?.trim() || 'Data-Driven Analysis & Recommendations';
+
+  titleSlide.addText(brandTitle, {
+    x: 1.2, y: 2.2, w: 8, h: 1.2,
+    fontSize: 36, bold: true, color: BRAND_DARK, fontFace: FONT,
+    lineSpacingMultiple: 1.1,
+  });
+  titleSlide.addText(subtitle, {
+    x: 1.2, y: 3.3, w: 7, h: 0.5,
+    fontSize: 16, color: GRAY, fontFace: FONT,
+  });
+  titleSlide.addShape('line', {
+    x: 1.2, y: 4.0, w: 3, h: 0,
+    line: { color: BRAND, width: 2 },
+  });
+  titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), {
+    x: 1.2, y: 4.3, w: 5, h: 0.4,
+    fontSize: 13, color: GRAY, fontFace: FONT,
+  });
+
+  // ── Chart preview slide (single chart mode) ──
+  if (images?.chartPreviewUrl) {
+    slideCount += 1;
+    await addChartSlide(images.chartPreviewUrl, 'Chart Analyzed', slideCount);
+  }
+
+  /** Match a ## heading text to a dashboard chart. */
+  function matchChartPptx(sectionTitle: string | undefined) {
+    if (!sectionTitle || !images?.dashboardCharts) return undefined;
+    const lower = sectionTitle.toLowerCase();
+    return images.dashboardCharts.find(c =>
+      lower.includes(c.sliceName.toLowerCase()) ||
+      c.sliceName.toLowerCase().includes(lower),
+    );
+  }
+
+  // ── Section divider slide — visual separator between major sections ──
+  function addSectionDivider(title: string, subtitle: string, accentColor: string) {
+    slideCount += 1;
+    const slide = pptx.addSlide();
+    // Full background
+    slide.addShape('rect', {
+      x: 0, y: 0, w: SLIDE_W, h: SLIDE_H,
+      fill: { color: 'FFFFFF' },
+    });
+    // Left accent strip
+    slide.addShape('rect', {
+      x: 0, y: 0, w: 0.15, h: SLIDE_H,
+      fill: { color: accentColor },
+    });
+    // Large decorative circle (top-right)
+    slide.addShape('ellipse', {
+      x: SLIDE_W - 3.5, y: -1.5, w: 5, h: 5,
+      fill: { color: accentColor, type: 'solid' },
+      line: { color: accentColor, width: 0 },
+    });
+    // Smaller accent circle (bottom-left)
+    slide.addShape('ellipse', {
+      x: -1, y: SLIDE_H - 2, w: 3, h: 3,
+      fill: { color: LIGHT_BG, type: 'solid' },
+      line: { color: 'E0E4EB', width: 1 },
+    });
+    // Section number / decorative bar
+    slide.addShape('rect', {
+      x: 1.2, y: 2.8, w: 2.5, h: 0.06,
+      fill: { color: accentColor },
+    });
+    // Section title
+    slide.addText(title, {
+      x: 1.2, y: 3.0, w: 9, h: 1.2,
+      fontSize: 36, bold: true, color: DARK, fontFace: FONT,
+    });
+    // Subtitle
+    slide.addText(subtitle, {
+      x: 1.2, y: 4.1, w: 8, h: 0.6,
+      fontSize: 20, color: GRAY, fontFace: FONT,
+    });
+    // Footer
+    const dividerFooter = aiInfo?.provider
+      ? `${brandTitle} — AI Insights — ${aiInfo.provider}${aiInfo.model ? ` / ${aiInfo.model}` : ''}`
+      : `${brandTitle} — AI Insights`;
+    slide.addText(dividerFooter, {
+      x: 0.6, y: SLIDE_H - 0.45, w: 8, h: 0.3,
+      fontSize: 8, color: GRAY, fontFace: FONT,
+    });
+  }
+
+  /** Add a visual KPI summary slide with colored stat boxes (dashboard overview). */
+  function addDashboardOverviewSlide(charts: { sliceName: string; chartId: number }[]) {
+    slideCount += 1;
+    const slide = pptx.addSlide();
+    applyMaster(slide, 'Dashboard Overview', `${slideCount}`);
+    const count = Math.min(charts.length, 8);
+    const cols = count <= 4 ? count : Math.ceil(count / 2);
+    const rows = count <= 4 ? 1 : 2;
+    const boxW = Math.min(2.8, (CONTENT_W - (cols - 1) * 0.3) / cols);
+    const boxH = 1.4;
+    const startX = CONTENT_X + (CONTENT_W - (cols * boxW + (cols - 1) * 0.3)) / 2;
+    const startY = CONTENT_Y + 0.5;
+    const chartColors = ['1976D2', 'E53935', '43A047', 'FB8C00', '8E24AA', '00ACC1', 'D81B60', '3949AB'];
+    for (let i = 0; i < count; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const cx = startX + col * (boxW + 0.3);
+      const cy = startY + row * (boxH + 0.4);
+      const color = chartColors[i % chartColors.length];
+      // Card background
+      slide.addShape('roundRect', {
+        x: cx, y: cy, w: boxW, h: boxH,
+        fill: { color: 'FFFFFF' },
+        shadow: { type: 'outer', blur: 3, offset: 1, color: '00000015' },
+        line: { color: 'E0E4EB', width: 0.5 },
+        rectRadius: 0.08,
+      });
+      // Color accent bar at top of card
+      slide.addShape('rect', {
+        x: cx, y: cy, w: boxW, h: 0.06,
+        fill: { color },
+      });
+      // Chart name
+      slide.addText(charts[i].sliceName, {
+        x: cx + 0.15, y: cy + 0.2, w: boxW - 0.3, h: 1.0,
+        fontSize: 14, color: DARK, fontFace: FONT,
+        valign: 'middle',
+        wrap: true,
+      });
+    }
+    // Subtitle text
+    slide.addText(`${charts.length} charts analyzed in this dashboard`, {
+      x: CONTENT_X, y: startY + rows * (boxH + 0.4) + 0.3, w: CONTENT_W, h: 0.4,
+      fontSize: 16, color: GRAY, fontFace: FONT, align: 'center',
+    });
+  }
+
+  // ── Content slides — one key message per section ──
+  const hasDashboardImages =
+    images?.dashboardChartImages &&
+    images?.dashboardCharts &&
+    Object.keys(images.dashboardChartImages).length > 0;
+
+  // Dashboard mode: add overview slide with chart cards
+  if (images?.dashboardCharts && images.dashboardCharts.length > 0) {
+    addDashboardOverviewSlide(images.dashboardCharts);
+  }
+
+  // Track which major sections we've seen for divider slides
+  const sectionDividers: Record<string, boolean> = {};
+
+  for (let idx = 0; idx < allAssistant.length; idx++) {
+    const msg = allAssistant[idx];
+
+    // Split by ## sections — each becomes its own slide group
+    // This ensures one key message per slide (executive presentation rule)
+    const sections = msg.content.split(/(?=^## )/m);
+
+    for (const section of sections) {
+      const headingMatch = section.match(/^## (.+)/m);
+      const sectionTitle = headingMatch?.[1]?.trim();
+
+      // Insert visual section divider for major structure sections
+      if (sectionTitle) {
+        const titleLower = sectionTitle.toLowerCase();
+        if (titleLower.includes('executive summary') && !sectionDividers.exec) {
+          sectionDividers.exec = true;
+          addSectionDivider('Executive Summary', 'Key findings and strategic overview', BRAND);
+        } else if ((titleLower.includes('detailed analysis') || titleLower.includes('chart by chart')) && !sectionDividers.detail) {
+          sectionDividers.detail = true;
+          addSectionDivider('Detailed Analysis', 'Chart-by-chart breakdown with key insights', '43A047');
+        } else if ((titleLower.includes('recommendation') || titleLower.includes('action')) && !sectionDividers.action) {
+          sectionDividers.action = true;
+          addSectionDivider('Action Recommendations', 'Prioritized next steps based on the analysis', 'E53935');
+        }
+      }
+
+      // Dashboard mode: insert chart image slide before matching section
+      if (hasDashboardImages && sectionTitle) {
+        const matched = matchChartPptx(sectionTitle);
+        if (matched && images.dashboardChartImages![matched.chartId]) {
+          slideCount += 1;
+          await addChartSlide(
+            images.dashboardChartImages![matched.chartId],
+            matched.sliceName,
+            slideCount,
+          );
+        }
+      }
+
+      // Convert section markdown to structured blocks (text + tables)
+      // skipFirstH2=true: the ## heading is already used as slide header by applyMaster
+      const blocks = markdownToSlideBlocks(section, !!sectionTitle);
+      if (blocks.length > 0) {
+        renderBlocksToSlides(
+          blocks,
+          sectionTitle || `Insight ${idx + 1}`,
+        );
+      }
+    }
+  }
+
+  pptx.writeFile({ fileName: `ai-insights-${Date.now()}.pptx` });
 }
 
 /* ── Component ───────────────────────────────────────── */
