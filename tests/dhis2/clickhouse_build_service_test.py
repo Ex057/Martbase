@@ -201,6 +201,40 @@ def test_generate_serving_sql_manifest_build_version_sentinel():
     assert f"toUInt8({_MANIFEST_BUILD_VERSION})" in sql
 
 
+def test_generate_serving_sql_uses_arraysum_for_ou_level_depth():
+    engine = MagicMock()
+    engine.get_superset_sql_table_ref.return_value = "`staging`.`ds_1`"
+
+    manifest = {
+        "columns": [
+            {"column_name": "ou_level", "type": "INTEGER"},
+            {"column_name": "ou_region", "type": "VARCHAR"},
+            {"column_name": "ou_district", "type": "VARCHAR"},
+        ],
+        "dimension_column_names": [],
+        "ou_level_column_name": "ou_level",
+    }
+
+    sql = _generate_serving_sql(
+        MagicMock(),
+        engine,
+        manifest,
+        "`serving`.`tmp_ou`",
+        {"ou_region", "ou_district"},
+        "",
+        set(),
+        "",
+        set(),
+        "",
+        set(),
+    )
+
+    assert "arraySum([" in sql
+    assert "toUInt8(isNotNull(ou_map.`ou_district`))" in sql
+    assert "toUInt8(isNotNull(ou_map.`ou_region`))" in sql
+    assert " + " not in sql.split("AS `ou_level`")[0]
+
+
 def test_build_specialized_marts_groups_by_all_manifest_dimensions():
     engine = MagicMock()
     engine._serving_database = "dhis2_serving"

@@ -617,8 +617,14 @@ def _generate_serving_sql(
             # Non-null hierarchy entries correspond to the ancestors that were
             # populated, so counting them gives the correct level depth.
             if ou_map_table and ou_cols:
-                level_exprs = [f"isNotNull(ou_map.`{c}`)" for c in sorted(ou_cols)]
-                expr = f"({' + '.join(level_exprs)})" if level_exprs else "s.ou_level"
+                level_exprs = [
+                    f"toUInt8(isNotNull(ou_map.`{c}`))" for c in sorted(ou_cols)
+                ]
+                expr = (
+                    f"arraySum([{', '.join(level_exprs)}])"
+                    if level_exprs
+                    else "s.ou_level"
+                )
             else:
                 expr = "s.ou_level"
         elif col_name == manifest.get("coc_uid_column_name"):

@@ -152,6 +152,28 @@ interface DatabaseActionResult {
   errors: Array<Record<string, unknown>>;
 }
 
+interface RuntimeServiceInfo {
+  name: 'backend' | 'celery';
+  label: string;
+  running: boolean;
+  pid?: number | null;
+  pid_file?: string;
+  restart_available: boolean;
+  worker_running?: boolean;
+  worker_pid?: number | null;
+  worker_pid_file?: string;
+  beat_running?: boolean;
+  beat_pid?: number | null;
+  beat_pid_file?: string;
+}
+
+interface RuntimeServiceStatus {
+  services: {
+    backend: RuntimeServiceInfo;
+    celery: RuntimeServiceInfo;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Styled
 // ---------------------------------------------------------------------------
@@ -403,6 +425,13 @@ function ExplorerTab({ settings, onRefreshSettings }: ExplorerTabProps) {
   const [sqlLabDbId, setSqlLabDbId] = useState<number | null>(null);
   const [actionLoadingKey, setActionLoadingKey] = useState<string | null>(null);
   const [maintenanceAction, setMaintenanceAction] = useState<string | null>(null);
+  const [runtimeServices, setRuntimeServices] = useState<RuntimeServiceStatus | null>(
+    null,
+  );
+  const [runtimeLoading, setRuntimeLoading] = useState(false);
+  const [restartingService, setRestartingService] = useState<
+    'backend' | 'celery' | null
+  >(null);
   const sqlLabLoaded = useRef(false);
 
   // Migration from superset_db
@@ -458,6 +487,22 @@ function ExplorerTab({ settings, onRefreshSettings }: ExplorerTabProps) {
     }
   }, []);
 
+  const loadRuntimeServices = useCallback(async () => {
+    setRuntimeLoading(true);
+    try {
+      const resp = await SupersetClient.get({
+        endpoint: '/api/v1/local-staging/runtime-services',
+      });
+      setRuntimeServices(resp.json.result as RuntimeServiceStatus);
+    } catch (err) {
+      addDangerToast(
+        getErrorMessage(err, t('Failed to load runtime service status')),
+      );
+    } finally {
+      setRuntimeLoading(false);
+    }
+  }, [addDangerToast]);
+
   const handleMigrate = useCallback(async (datasetIds?: number[]) => {
     setMigrating(true);
     setMigrationResults([]);
@@ -485,7 +530,8 @@ function ExplorerTab({ settings, onRefreshSettings }: ExplorerTabProps) {
     void loadTables();
     void loadSqlLabState();
     void loadMigratable();
-  }, [loadTables, loadSqlLabState, loadMigratable]);
+    void loadRuntimeServices();
+  }, [loadTables, loadSqlLabState, loadMigratable, loadRuntimeServices]);
 
   const handleRunQuery = useCallback(async () => {
     if (!sql.trim()) return;
@@ -596,6 +642,30 @@ function ExplorerTab({ settings, onRefreshSettings }: ExplorerTabProps) {
       setSqlLabSaving(false);
     }
   }, [addDangerToast]);
+
+  const handleRestartService = useCallback(async (service: 'backend' | 'celery') => {
+    setRestartingService(service);
+    try {
+      const resp = await SupersetClient.post({
+        endpoint: '/api/v1/local-staging/runtime-services/restart',
+        jsonPayload: { service },
+      });
+      const result = resp.json.result as { message?: string };
+      addSuccessToast(
+        result.message ||
+          (service === 'backend'
+            ? t('Restart queued for web server')
+            : t('Restart queued for Celery')),
+      );
+      window.setTimeout(() => {
+        void loadRuntimeServices();
+      }, 3000);
+    } catch (err) {
+      addDangerToast(getErrorMessage(err, t('Failed to restart service')));
+    } finally {
+      setRestartingService(null);
+    }
+  }, [addDangerToast, addSuccessToast, loadRuntimeServices]);
 
   const tableColumns = [
     { title: t('Table'), dataIndex: 'name', key: 'name',
@@ -721,6 +791,8 @@ function ExplorerTab({ settings, onRefreshSettings }: ExplorerTabProps) {
     0,
   );
   const currentStatus = settings?.engine_health_status || {};
+  const backendService = runtimeServices?.services.backend;
+  const celeryService = runtimeServices?.services.celery;
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -793,6 +865,105 @@ function ExplorerTab({ settings, onRefreshSettings }: ExplorerTabProps) {
                   ))}
                 </Space>
               ) : null}
+            </Space>
+          </SectionCard>
+
+          <SectionCard
+            title={
+              <Space>
+                <SettingOutlined />
+                {t('Runtime controls')}
+              </Space>
+            }
+            extra={
+              <Button
+                size="small"
+                icon={<ReloadOutlined spin={runtimeLoading} />}
+                loading={runtimeLoading}
+                onClick={() => void loadRuntimeServices()}
+              >
+                {t('Refresh')}
+              </Button>
+            }
+          >
+            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+              <Text type="secondary">
+                {t(
+                  'Restart the web server or Celery background processors without leaving the staging workspace.',
+                )}
+              </Text>
+              <Descriptions bordered column={1} size="small">
+                <Descriptions.Item label={t('Web server')}>
+                  <Space wrap>
+                    <Tag color={backendService?.running ? 'success' : 'error'}>
+                      {backendService?.running ? t('Running') : t('Stopped')}
+                    </Tag>
+                    {backendService?.pid ? (
+                      <Text code>{t('PID %s', backendService.pid)}</Text>
+                    ) : null}
+                    {!backendService?.restart_available ? (
+                      <Text type="secondary">
+                        {t('Restart command not configured')}
+                      </Text>
+                    ) : null}
+                  </Space>
+                </Descriptions.Item>
+                <Descriptions.Item label={t('Celery worker + beat')}>
+                  <Space wrap>
+                    <Tag color={celeryService?.worker_running ? 'success' : 'error'}>
+                      {celeryService?.worker_running
+                        ? t('Worker running')
+                        : t('Worker stopped')}
+                    </Tag>
+                    <Tag color={celeryService?.beat_running ? 'success' : 'warning'}>
+                      {celeryService?.beat_running
+                        ? t('Beat running')
+                        : t('Beat stopped')}
+                    </Tag>
+                    {celeryService?.worker_pid ? (
+                      <Text code>{t('Worker PID %s', celeryService.worker_pid)}</Text>
+                    ) : null}
+                    {celeryService?.beat_pid ? (
+                      <Text code>{t('Beat PID %s', celeryService.beat_pid)}</Text>
+                    ) : null}
+                    {!celeryService?.restart_available ? (
+                      <Text type="secondary">
+                        {t('Restart command not configured')}
+                      </Text>
+                    ) : null}
+                  </Space>
+                </Descriptions.Item>
+              </Descriptions>
+              <Space wrap>
+                <Popconfirm
+                  title={t('Restart the web server now?')}
+                  okText={t('Restart')}
+                  onConfirm={() => void handleRestartService('backend')}
+                  disabled={!backendService?.restart_available}
+                >
+                  <Button
+                    icon={<ReloadOutlined />}
+                    loading={restartingService === 'backend'}
+                    disabled={!backendService?.restart_available}
+                  >
+                    {t('Restart web server')}
+                  </Button>
+                </Popconfirm>
+                <Popconfirm
+                  title={t('Restart Celery worker and beat now?')}
+                  okText={t('Restart')}
+                  onConfirm={() => void handleRestartService('celery')}
+                  disabled={!celeryService?.restart_available}
+                >
+                  <Button
+                    icon={<ReloadOutlined />}
+                    loading={restartingService === 'celery'}
+                    disabled={!celeryService?.restart_available}
+                  >
+                    {t('Restart Celery')}
+                  </Button>
+                </Popconfirm>
+              </Space>
             </Space>
           </SectionCard>
 

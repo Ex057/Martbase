@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import os
+import shlex
 import subprocess
 import sys
 from typing import Any
@@ -24,6 +26,7 @@ ENGINE_DEPENDENCIES: dict[str, list[dict[str, str]]] = {
 
 MANAGED_STAGING_PREFIX = "ds_"
 MANAGED_SERVING_PREFIX = "sv_"
+_RESTART_DELAY_SECONDS = 1.0
 
 
 def classify_table_name(table_name: str) -> dict[str, Any]:
@@ -141,4 +144,128 @@ def install_engine_dependencies(engine_name: str) -> dict[str, Any]:
             else f"Dependency installation failed for {engine_name}"
         ),
         "dependency_status": dependency_status,
+    }
+
+
+def _project_root() -> str:
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+
+def _read_running_pid(pid_file: str) -> int | None:
+    try:
+        with open(pid_file) as handle:
+            pid = int(handle.read().strip())
+        os.kill(pid, 0)
+        return pid
+    except (FileNotFoundError, ValueError, ProcessLookupError, PermissionError):
+        return None
+
+
+def _service_pid_paths() -> dict[str, dict[str, str]]:
+    project_root = _project_root()
+    return {
+        "backend": {
+            "pid_file": os.environ.get(
+                "LOCAL_STAGING_BACKEND_PID_FILE",
+                os.path.join(project_root, "superset_backend.pid"),
+            ),
+        },
+        "celery": {
+            "worker_pid_file": os.environ.get(
+                "LOCAL_STAGING_CELERY_WORKER_PID_FILE",
+                os.path.join(project_root, "celery_worker.pid"),
+            ),
+            "beat_pid_file": os.environ.get(
+                "LOCAL_STAGING_CELERY_BEAT_PID_FILE",
+                os.path.join(project_root, "celery_beat.pid"),
+            ),
+        },
+    }
+
+
+def _default_restart_commands() -> dict[str, str]:
+    project_root = _project_root()
+    manager_script = os.path.join(project_root, "superset-manager.sh")
+    if not os.path.isfile(manager_script):
+        return {}
+    quoted_script = shlex.quote(manager_script)
+    return {
+        "backend": f"bash {quoted_script} restart",
+        "celery": f"bash {quoted_script} restart-celery",
+    }
+
+
+def _restart_command_for(service_name: str) -> str | None:
+    env_var = f"LOCAL_STAGING_RESTART_{service_name.upper()}_COMMAND"
+    configured = str(os.environ.get(env_var) or "").strip()
+    if configured:
+        return configured
+    return _default_restart_commands().get(service_name)
+
+
+def get_runtime_service_status() -> dict[str, Any]:
+    pid_paths = _service_pid_paths()
+
+    backend_pid = _read_running_pid(pid_paths["backend"]["pid_file"])
+    celery_worker_pid = _read_running_pid(pid_paths["celery"]["worker_pid_file"])
+    celery_beat_pid = _read_running_pid(pid_paths["celery"]["beat_pid_file"])
+
+    return {
+        "services": {
+            "backend": {
+                "name": "backend",
+                "label": "Web server",
+                "running": backend_pid is not None,
+                "pid": backend_pid,
+                "pid_file": pid_paths["backend"]["pid_file"],
+                "restart_available": _restart_command_for("backend") is not None,
+            },
+            "celery": {
+                "name": "celery",
+                "label": "Celery worker + beat",
+                "running": celery_worker_pid is not None or celery_beat_pid is not None,
+                "worker_running": celery_worker_pid is not None,
+                "worker_pid": celery_worker_pid,
+                "worker_pid_file": pid_paths["celery"]["worker_pid_file"],
+                "beat_running": celery_beat_pid is not None,
+                "beat_pid": celery_beat_pid,
+                "beat_pid_file": pid_paths["celery"]["beat_pid_file"],
+                "restart_available": _restart_command_for("celery") is not None,
+            },
+        }
+    }
+
+
+def restart_runtime_service(service_name: str) -> dict[str, Any]:
+    if service_name not in {"backend", "celery"}:
+        raise ValueError(f"Unsupported service: {service_name}")
+
+    command = _restart_command_for(service_name)
+    if not command:
+        raise ValueError(
+            f"No restart command configured for {service_name}. "
+            f"Set LOCAL_STAGING_RESTART_{service_name.upper()}_COMMAND."
+        )
+
+    subprocess.Popen(  # noqa: S603,S607 - trusted admin-configured command
+        [
+            "bash",
+            "-lc",
+            f"sleep {_RESTART_DELAY_SECONDS:g}; {command}",
+        ],
+        cwd=_project_root(),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+    return {
+        "service": service_name,
+        "queued": True,
+        "message": (
+            "Restart queued for web server."
+            if service_name == "backend"
+            else "Restart queued for Celery worker + beat."
+        ),
     }

@@ -41,7 +41,9 @@ from superset import db
 from superset.local_staging.admin_tools import (
     classify_table_name,
     get_dependency_status,
+    get_runtime_service_status,
     install_engine_dependencies,
+    restart_runtime_service,
 )
 from superset.local_staging.engine_factory import (
     get_active_staging_engine,
@@ -129,6 +131,13 @@ class DependencyInstallSchema(Schema):
     engine = fields.Str(
         required=True,
         validate=validate.OneOf([ENGINE_SUPERSET_DB, ENGINE_DUCKDB, ENGINE_CLICKHOUSE]),
+    )
+
+
+class RuntimeServiceRestartSchema(Schema):
+    service = fields.Str(
+        required=True,
+        validate=validate.OneOf(["backend", "celery"]),
     )
 
 
@@ -523,6 +532,36 @@ class LocalStagingRestApi(BaseSupersetApi):
             return self.response_400(message=str(err.messages))
         except Exception as ex:  # pylint: disable=broad-except
             logger.exception("Dependency installation failed")
+            return self.response_500(message=str(ex))
+
+    @expose("/runtime-services", methods=["GET"])
+    @protect()
+    @safe
+    def get_runtime_services(self) -> Any:
+        try:
+            return self.response(200, result=get_runtime_service_status())
+        except Exception as ex:  # pylint: disable=broad-except
+            logger.exception("Failed to load runtime service status")
+            return self.response_500(message=str(ex))
+
+    @expose("/runtime-services/restart", methods=["POST"])
+    @protect()
+    @safe
+    @permission_name("write")
+    def restart_runtime_services(self) -> Any:
+        try:
+            body = request.json or {}
+            payload = RuntimeServiceRestartSchema().load(body)
+        except ValidationError as err:
+            return self.response_400(message=str(err.messages))
+
+        try:
+            result = restart_runtime_service(payload["service"])
+            return self.response(202, result=result)
+        except ValueError as ex:
+            return self.response_400(message=str(ex))
+        except Exception as ex:  # pylint: disable=broad-except
+            logger.exception("Failed to restart runtime service")
             return self.response_500(message=str(ex))
 
     @expose("/table-action", methods=["POST"])
