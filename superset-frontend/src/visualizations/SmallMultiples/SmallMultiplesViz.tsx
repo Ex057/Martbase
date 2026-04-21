@@ -72,11 +72,45 @@ const PanelCard = styled.div<PanelCardProps>`
   flex-direction: column;
 `;
 
+const PanelHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 4px;
+`;
+
+const PanelIcon = styled.div<{ $size: number }>`
+  width: ${({ $size }) => $size}px;
+  height: ${({ $size }) => $size}px;
+  border-radius: 8px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--pro-navy);
+  font-size: ${({ $size }) => Math.max(10, Math.round($size * 0.46))}px;
+  font-weight: 700;
+`;
+
+const PanelIconImage = styled.img`
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+`;
+
+const PanelTitleGroup = styled.div`
+  min-width: 0;
+  flex: 1 1 auto;
+`;
+
 const PanelTitle = styled.div`
   font-size: 11px;
   font-weight: 600;
   color: var(--pro-text-secondary);
-  margin-bottom: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -270,9 +304,14 @@ export default function SmallMultiplesViz(props: SmallMultiplesChartProps) {
     databaseId,
     boundaryLevel,
     chartId,
+    dashboardId,
     fixedPanelHeight,
     schemeColors,
     linearColors,
+    showPanelIcon,
+    panelIconUrl,
+    panelIconText,
+    panelIconSize,
   } = props;
 
   const yFormatter = useMemo(
@@ -297,6 +336,7 @@ export default function SmallMultiplesViz(props: SmallMultiplesChartProps) {
     useDHIS2 ? databaseId : undefined,
     useDHIS2 ? effectiveBoundaryLevel : undefined,
     chartId,
+    dashboardId,
   );
 
   // Build a name-lookup from DHIS2 boundary features
@@ -450,6 +490,10 @@ export default function SmallMultiplesViz(props: SmallMultiplesChartProps) {
   const isBigNumber = miniChartType === 'big_number';
   const isMiniMap = miniChartType === 'mini_map';
   const activePanels = isMiniMap ? enrichedPanels : panels;
+  const effectivePanelIconSize = Math.max(Number(panelIconSize) || 28, 16);
+  const shouldShowPanelIcon = Boolean(
+    showPanelIcon && (panelIconUrl || panelIconText),
+  );
 
   const renderPanelContent = (panel: PanelData) => {
     if (isBigNumber) {
@@ -514,9 +558,24 @@ export default function SmallMultiplesViz(props: SmallMultiplesChartProps) {
               $padding={panelPadding}
               $borderRadius={panelBorderRadius}
             >
-              {showPanelTitle && <PanelTitle>{panel.title}</PanelTitle>}
-              {showPanelSubtitle && (
-                <PanelSubtitle>{getSubtitle(panel)}</PanelSubtitle>
+              {(showPanelTitle || showPanelSubtitle || shouldShowPanelIcon) && (
+                <PanelHeader>
+                  {shouldShowPanelIcon && (
+                    <PanelIcon $size={effectivePanelIconSize}>
+                      {panelIconUrl ? (
+                        <PanelIconImage src={panelIconUrl} alt="" />
+                      ) : (
+                        panelIconText
+                      )}
+                    </PanelIcon>
+                  )}
+                  <PanelTitleGroup>
+                    {showPanelTitle && <PanelTitle>{panel.title}</PanelTitle>}
+                    {showPanelSubtitle && (
+                      <PanelSubtitle>{getSubtitle(panel)}</PanelSubtitle>
+                    )}
+                  </PanelTitleGroup>
+                </PanelHeader>
               )}
               {renderPanelContent(panel)}
             </PanelCard>

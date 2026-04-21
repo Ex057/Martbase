@@ -29,12 +29,7 @@ export type Layout =
   | 'compact-kpi'
   | 'summary-row';
 
-export type ValuePosition =
-  | 'above'
-  | 'below'
-  | 'left'
-  | 'right'
-  | 'inline';
+export type ValuePosition = 'above' | 'below' | 'left' | 'right' | 'inline';
 
 export type DensityTier = 'micro' | 'compact' | 'standard' | 'comfortable';
 
@@ -93,6 +88,8 @@ export interface SummaryChartFormData extends QueryFormData {
 
   /* Per-variable config */
   variableConfig?: VariableConfigMap;
+  mediaAssetImages?: Record<string, string>;
+  media_asset_images?: Record<string, string>;
 
   /* Layout */
   layoutMode?: Layout;

@@ -3209,7 +3209,10 @@ class PublicPageRestApi(BaseApi):
 
     def _upsert_page(self, payload: dict[str, Any]) -> Page:
         page_id = payload.get("id")
-        requested_slug = slugify(payload.get("slug") or payload.get("title"), "page")
+        title = (payload.get("title") or "").strip()
+        if not title:
+            raise ValidationError({"title": ["Title is required"]})
+        requested_slug = slugify(payload.get("slug") or title, "page")
 
         page = None
         if page_id:
@@ -3222,7 +3225,11 @@ class PublicPageRestApi(BaseApi):
         if existing_slug is not None and (page is None or existing_slug.id != page.id):
             raise ValidationError({"slug": ["A page with this slug already exists"]})
         if page is None:
-            page = Page(slug=requested_slug, created_by_fk=get_user_id())
+            page = Page(
+                slug=requested_slug,
+                title=title,
+                created_by_fk=get_user_id(),
+            )
             db.session.add(page)
 
         now = _now()
@@ -3258,10 +3265,7 @@ class PublicPageRestApi(BaseApi):
             require_public=require_public_references,
         )
         page.slug = requested_slug
-        title = payload.get("title") or ""
-        if not title.strip():
-            raise ValidationError({"title": ["Title is required"]})
-        page.title = title.strip()
+        page.title = title
         page.subtitle = payload.get("subtitle")
         page.description = payload.get("description")
         page.excerpt = payload.get("excerpt")

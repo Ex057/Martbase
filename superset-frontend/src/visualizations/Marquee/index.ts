@@ -31,6 +31,7 @@ const metadata = new ChartMetadata({
   ),
   category: t('KPI'),
   tags: [
+    t('Health'),
     t('KPI'),
     t('Marquee'),
     t('Ticker'),

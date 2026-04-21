@@ -33,6 +33,7 @@ export default class RankedVarianceChartPlugin extends ChartPlugin {
         thumbnail,
         tags: [
           t('Health'),
+          t('Health'),
           t('Comparison'),
           t('Variance'),
           t('Performance'),

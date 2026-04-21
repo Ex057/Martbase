@@ -74,6 +74,7 @@ import {
 import type {
   PortalAdminPayload,
   PortalBlockDefinition,
+  PortalMediaAsset,
   PortalNavigationItem,
   PortalNavigationMenu,
   PortalPage,
@@ -106,6 +107,33 @@ const TAB_QUERY_PARAM = 'tab';
 const EMPTY_BLOCK_TYPES: PortalBlockDefinition[] = [];
 const EMPTY_REUSABLE_BLOCKS: PortalReusableBlock[] = [];
 const EMPTY_STARTER_PATTERNS: PortalStarterPattern[] = [];
+
+function sanitizePageMediaReferences(
+  page: PortalPage,
+  mediaAssets: PortalMediaAsset[] = [],
+): PortalPage {
+  const assetIds = new Set(mediaAssets.map(asset => asset.id));
+  const featuredImageExists =
+    !page.featured_image_asset_id || assetIds.has(page.featured_image_asset_id);
+  const ogImageExists =
+    !page.og_image_asset_id || assetIds.has(page.og_image_asset_id);
+
+  if (featuredImageExists && ogImageExists) {
+    return page;
+  }
+
+  return {
+    ...page,
+    featured_image_asset_id: featuredImageExists
+      ? page.featured_image_asset_id
+      : null,
+    featured_image_asset: featuredImageExists
+      ? page.featured_image_asset
+      : null,
+    og_image_asset_id: ogImageExists ? page.og_image_asset_id : null,
+    og_image_asset: ogImageExists ? page.og_image_asset : null,
+  };
+}
 
 const SHELL_STYLE: CSSProperties = {
   minHeight: '100vh',
@@ -795,7 +823,7 @@ export default function CMSAdminPage() {
     file: null,
     title: '',
     description: '',
-    visibility: 'private',
+    visibility: 'public',
     alt_text: '',
     caption: '',
   });
@@ -834,7 +862,12 @@ export default function CMSAdminPage() {
         ...(payload.portal_layout.config || {}),
       });
       setDraftPage(
-        payload.current_page ? createDraftPage(payload.current_page) : null,
+        payload.current_page
+          ? sanitizePageMediaReferences(
+              createDraftPage(payload.current_page),
+              payload.media_assets || [],
+            )
+          : null,
       );
       const nextTheme = payload.themes?.[0] || null;
       const nextTemplate = payload.templates?.[0] || null;
@@ -1071,7 +1104,9 @@ export default function CMSAdminPage() {
     try {
       const response = await SupersetClient.post({
         endpoint: '/api/v1/public_page/admin/pages',
-        jsonPayload: normalizeDraftPage(draftPage),
+        jsonPayload: normalizeDraftPage(
+          sanitizePageMediaReferences(draftPage, data?.media_assets || []),
+        ),
       });
       const savedPage = response.json?.result as PortalPage;
       if (isMountedRef.current) {
@@ -1130,7 +1165,10 @@ export default function CMSAdminPage() {
     try {
       const response = await SupersetClient.post({
         endpoint: `/api/v1/public_page/admin/pages/${draftPage.id}/publish`,
-        jsonPayload: buildPublishPagePayload(draftPage!, isPublished),
+        jsonPayload: buildPublishPagePayload(
+          sanitizePageMediaReferences(draftPage!, data?.media_assets || []),
+          isPublished,
+        ),
       });
       const savedPage = response.json?.result as PortalPage;
       await loadBootstrap(savedPage.slug);
@@ -1231,15 +1269,27 @@ export default function CMSAdminPage() {
       if (!response.ok) {
         throw new Error(json?.message || t('Failed to upload asset.'));
       }
+      const uploadedAsset = json?.result as PortalMediaAsset | undefined;
       setAssetDraft({
         file: null,
         title: '',
         description: '',
-        visibility: 'private',
+        visibility: 'public',
         alt_text: '',
         caption: '',
       });
       await loadBootstrap(draftPage?.slug);
+      if (uploadedAsset?.asset_type === 'image') {
+        setDraftPage(previous =>
+          previous && !previous.featured_image_asset_id
+            ? {
+                ...previous,
+                featured_image_asset_id: uploadedAsset.id,
+                featured_image_asset: uploadedAsset,
+              }
+            : previous,
+        );
+      }
       messageApi.success(t('Asset uploaded.'));
     } catch (caughtError) {
       messageApi.error(
@@ -3031,12 +3081,12 @@ export default function CMSAdminPage() {
                       }))
                     }
                     options={[
-                      { value: 'private', label: t('Private') },
+                      { value: 'public', label: t('Public') },
                       {
                         value: 'authenticated',
                         label: t('Authenticated'),
                       },
-                      { value: 'public', label: t('Public') },
+                      { value: 'private', label: t('Private') },
                     ]}
                   />
                 </FieldBlock>

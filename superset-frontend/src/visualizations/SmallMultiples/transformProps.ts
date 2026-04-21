@@ -433,6 +433,17 @@ export default function transformProps(
     linearColors,
     databaseId: resolveDatabaseId(datasource, formData),
     boundaryLevel: fdValue(fd, 'boundaryLevel', 'boundary_level') || undefined,
-    chartId: fd.sliceId ? Number(fd.sliceId) : undefined,
+    showPanelIcon:
+      fdValue<boolean>(fd, 'showPanelIcon', 'show_panel_icon') ?? false,
+    panelIconUrl: fdValue(fd, 'panelIconUrl', 'panel_icon_url') || '',
+    panelIconText: fdValue(fd, 'panelIconText', 'panel_icon_text') || '',
+    panelIconSize:
+      fdValue<number>(fd, 'panelIconSize', 'panel_icon_size') ?? 28,
+    chartId: fdValue<number>(fd, 'sliceId', 'slice_id')
+      ? Number(fdValue<number>(fd, 'sliceId', 'slice_id'))
+      : undefined,
+    dashboardId: fdValue<number>(fd, 'dashboardId', 'dashboard_id')
+      ? Number(fdValue<number>(fd, 'dashboardId', 'dashboard_id'))
+      : undefined,
   };
 }

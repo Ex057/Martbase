@@ -1430,11 +1430,15 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
         },
       });
 
-      updateDataMask(null);
       setSearch('');
       onClearAllComplete?.(formData.nativeFilterId);
     }
-  }, [clearAllTrigger, onClearAllComplete, updateDataMask]);
+  }, [
+    clearAllTrigger,
+    dispatchDataMask,
+    formData.nativeFilterId,
+    onClearAllComplete,
+  ]);
 
   useEffect(() => {
     if (prevExcludeFilterValues.current !== excludeFilterValues) {

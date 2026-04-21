@@ -120,11 +120,10 @@ export default function transformProps(
 
   /* Per-variable config map */
   const varConfig: VariableConfigMap = fd.variableConfig || {};
+  const mediaAssetImages = fd.mediaAssetImages || fd.media_asset_images || {};
 
   /* Global formatters (fallback when per-variable not set) */
-  const globalFmt = getNumberFormatter(
-    fd.globalNumberFormat || 'SMART_NUMBER',
-  );
+  const globalFmt = getNumberFormatter(fd.globalNumberFormat || 'SMART_NUMBER');
   const trendFmt = getNumberFormatter(fd.trendValueFormat || '+,.1%');
   const colorScale = CategoricalColorNamespace.getScale(fd.colorScheme);
 
@@ -132,9 +131,7 @@ export default function transformProps(
   const globalNullText = fd.nullValueText ?? '–';
   const invertSemanticColors = fd.invertSemanticColors ?? false;
   const microVisualType = fd.microVisualType || 'none';
-  const progressMax = fd.progressMax
-    ? parseFloat(String(fd.progressMax))
-    : 0;
+  const progressMax = fd.progressMax ? parseFloat(String(fd.progressMax)) : 0;
   const valueColorMode = fd.valueColorMode || 'threshold';
 
   const thresholdUpper =
@@ -214,9 +211,7 @@ export default function transformProps(
           progressMax > 0
             ? progressMax
             : Math.max(
-                ...metrics.map(
-                  (m: any) => Number(row[getMetricLabel(m)] ?? 0),
-                ),
+                ...metrics.map((m: any) => Number(row[getMetricLabel(m)] ?? 0)),
                 1,
               );
         progressPercent = Math.min(100, (rawValue / maxVal) * 100);
@@ -254,7 +249,7 @@ export default function transformProps(
         cardColor: cfg.cardColor || undefined,
         labelColor: cfg.labelColor || undefined,
         borderColor: cfg.borderColor || undefined,
-        imageUrl: cfg.imageUrl || undefined,
+        imageUrl: cfg.imageUrl || mediaAssetImages[metricLabel] || undefined,
       };
     });
   }

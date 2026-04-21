@@ -31,7 +31,7 @@ const metadata = new ChartMetadata({
   ),
   category: t('Map'),
   tags: [
-    t('DHIS2'),
+    t('Health'),
     t('Map'),
     t('Geo'),
     t('Choropleth'),

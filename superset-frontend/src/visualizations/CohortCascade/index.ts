@@ -33,6 +33,7 @@ export default class CohortCascadeChartPlugin extends ChartPlugin {
         thumbnail,
         tags: [
           t('Health'),
+          t('Health'),
           t('Cascade'),
           t('Funnel'),
           t('Treatment'),

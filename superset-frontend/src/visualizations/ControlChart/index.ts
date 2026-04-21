@@ -33,6 +33,7 @@ export default class ControlChartPlugin extends ChartPlugin {
         thumbnail,
         tags: [
           t('Health'),
+          t('Health'),
           t('Epidemiology'),
           t('Statistical'),
           t('Anomaly'),

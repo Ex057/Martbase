@@ -33,6 +33,7 @@ export default class StockStatusChartPlugin extends ChartPlugin {
         thumbnail,
         tags: [
           t('Health'),
+          t('Health'),
           t('Supply Chain'),
           t('Stock'),
           t('Pipeline'),

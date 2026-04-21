@@ -31,6 +31,7 @@ const metadata = new ChartMetadata({
   ),
   exampleGallery: [{ url: example, urlDark: exampleDark }],
   tags: [
+    t('Health'),
     t('Multi-Variables'),
     t('Comparison'),
     t('Legacy'),

@@ -47,6 +47,7 @@ import {
 } from './types';
 import { DHIS2DataLoader } from './dhis2DataLoader';
 import {
+  clearGeoFeatureCache,
   loadDHIS2GeoFeatures,
   DHIS2GeoJSONFeature,
 } from 'src/utils/dhis2GeoFeatureLoader';
@@ -159,11 +160,16 @@ const MapCanvas = styled.div<{ $backgroundColor?: string }>`
     border: none;
     box-shadow: none;
     font-weight: 500;
+    pointer-events: none;
     text-shadow:
       1px 1px 1px #ffffff,
       -1px -1px 1px #ffffff,
       1px -1px 1px #ffffff,
       -1px 1px 1px #ffffff;
+  }
+
+  .dhis2-map-tooltip-container {
+    pointer-events: none;
   }
 
   .map-loading-overlay {
@@ -192,7 +198,7 @@ const MapCanvas = styled.div<{ $backgroundColor?: string }>`
     z-index: 4;
     font-family: var(--pro-font-family, 'Inter', sans-serif);
     font-size: 13px;
-    box-shadow: var(--pro-shadow-md, 0 4px 12px rgba(0,0,0,0.15));
+    box-shadow: var(--pro-shadow-md, 0 4px 12px rgba(0, 0, 0, 0.15));
   }
 
   .map-zoom-controls {
@@ -278,8 +284,8 @@ const FloatingActionButton = styled.button<{ $active?: boolean }>`
   gap: 8px;
   padding: 6px 10px;
   border-radius: 6px;
-  border: 1px solid ${({ $active }) =>
-    $active ? 'var(--pro-accent)' : 'var(--pro-border)'};
+  border: 1px solid
+    ${({ $active }) => ($active ? 'var(--pro-accent)' : 'var(--pro-border)')};
   background: ${({ $active }) =>
     $active ? 'var(--pro-accent)' : 'var(--pro-bg-card)'};
   color: ${({ $active }) =>
@@ -288,12 +294,14 @@ const FloatingActionButton = styled.button<{ $active?: boolean }>`
   font-size: 11px;
   font-weight: 600;
   box-shadow: var(--pro-shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.06));
-  transition: background 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease;
 
   &:hover {
     background: ${({ $active }) =>
       $active ? 'var(--pro-accent-hover)' : 'var(--pro-bg-canvas)'};
-    box-shadow: var(--pro-shadow-md, 0 4px 12px rgba(0,0,0,0.08));
+    box-shadow: var(--pro-shadow-md, 0 4px 12px rgba(0, 0, 0, 0.08));
   }
 `;
 
@@ -402,7 +410,8 @@ function MapAutoFocus({
     [viewportHeight, viewportWidth],
   );
   const focusSignature = useMemo(
-    () => `${boundaryIdsKey}|${viewportSignature}|${layoutSignature || 'default'}`,
+    () =>
+      `${boundaryIdsKey}|${viewportSignature}|${layoutSignature || 'default'}`,
     [boundaryIdsKey, layoutSignature, viewportSignature],
   );
 
@@ -428,7 +437,9 @@ function MapAutoFocus({
     // Small delay to ensure map is fully initialized
     focusTimeoutRef.current = setTimeout(() => {
       try {
-        if (fitMapToBoundaries(map, boundaries, viewportWidth, viewportHeight)) {
+        if (
+          fitMapToBoundaries(map, boundaries, viewportWidth, viewportHeight)
+        ) {
           // Mark that we've focused on this boundary set + viewport size
           lastFocusSignatureRef.current = focusSignature;
         } else {
@@ -468,6 +479,36 @@ function MapInstanceBridge({
   useEffect(() => {
     onReady(map);
   }, [map, onReady]);
+
+  useEffect(() => {
+    const container = map.getContainer();
+    let animationFrame: number | null = null;
+    const invalidate = () => {
+      if (animationFrame !== null) {
+        cancelAnimationFrame(animationFrame);
+      }
+      animationFrame = requestAnimationFrame(() => {
+        map.invalidateSize({ pan: false });
+        animationFrame = null;
+      });
+    };
+
+    invalidate();
+    const timeout = window.setTimeout(invalidate, 250);
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(invalidate)
+        : null;
+    resizeObserver?.observe(container);
+
+    return () => {
+      window.clearTimeout(timeout);
+      if (animationFrame !== null) {
+        cancelAnimationFrame(animationFrame);
+      }
+      resizeObserver?.disconnect();
+    };
+  }, [map]);
 
   return null;
 }
@@ -511,7 +552,9 @@ function BoundaryMask({
       [-180, 90],
     ];
 
-    const innerRings = boundaries.flatMap(feature => extractOuterRings(feature));
+    const innerRings = boundaries.flatMap(feature =>
+      extractOuterRings(feature),
+    );
     if (innerRings.length === 0) {
       return null;
     }
@@ -646,6 +689,14 @@ interface DynamicGeoJSONProps {
   styleKey: string; // Used to detect when style function changes
 }
 
+type DHIS2GeoJsonLayer = L.Layer & {
+  feature?: BoundaryFeature;
+  getTooltip?: () => L.Tooltip | undefined;
+  unbindTooltip?: () => void;
+};
+
+const labelMarkersByLayer = new WeakMap<L.Layer, L.Marker>();
+
 const DynamicGeoJSON: FC<DynamicGeoJSONProps> = ({
   data,
   style,
@@ -654,31 +705,54 @@ const DynamicGeoJSON: FC<DynamicGeoJSONProps> = ({
 }) => {
   const geoJsonRef = useRef<L.GeoJSON | null>(null);
   const prevStyleKeyRef = useRef<string>(styleKey);
+  const prevStyleRef = useRef(style);
+  const prevOnEachFeatureRef = useRef(onEachFeature);
+
+  const clearLayerBindings = useCallback((layer: DHIS2GeoJsonLayer) => {
+    layer.off();
+    if (layer.getTooltip?.()) {
+      layer.unbindTooltip?.();
+    }
+    labelMarkersByLayer.get(layer)?.remove();
+    labelMarkersByLayer.delete(layer);
+  }, []);
 
   // Update styles when styleKey changes
   useEffect(() => {
-    if (geoJsonRef.current && prevStyleKeyRef.current !== styleKey) {
+    const styleChanged =
+      prevStyleKeyRef.current !== styleKey || prevStyleRef.current !== style;
+    const bindingsChanged =
+      prevStyleKeyRef.current !== styleKey ||
+      prevOnEachFeatureRef.current !== onEachFeature;
+    if (geoJsonRef.current && (styleChanged || bindingsChanged)) {
       prevStyleKeyRef.current = styleKey;
-      
+      prevStyleRef.current = style;
+      prevOnEachFeatureRef.current = onEachFeature;
+
       // Force style re-application
       geoJsonRef.current.setStyle(style as any);
-      
-      // Also update tooltips and event handlers by re-creating them
-      geoJsonRef.current.eachLayer((layer: any) => {
-        const feature = layer.feature;
-        if (feature && onEachFeature) {
-          // Clear old event handlers
-          layer.off();
-          // Unbind old tooltip
-          if (layer.getTooltip()) {
-            layer.unbindTooltip();
+
+      if (bindingsChanged) {
+        // Also update tooltips and event handlers by re-creating them
+        geoJsonRef.current.eachLayer((layer: DHIS2GeoJsonLayer) => {
+          const { feature } = layer;
+          if (feature && onEachFeature) {
+            clearLayerBindings(layer);
+            onEachFeature(feature, layer);
           }
-          // Re-apply onEachFeature
-          onEachFeature(feature, layer);
-        }
-      });
+        });
+      }
     }
-  }, [styleKey, style, onEachFeature]);
+  }, [clearLayerBindings, styleKey, style, onEachFeature]);
+
+  useEffect(
+    () => () => {
+      geoJsonRef.current?.eachLayer((layer: DHIS2GeoJsonLayer) => {
+        clearLayerBindings(layer);
+      });
+    },
+    [clearLayerBindings],
+  );
 
   return (
     <GeoJSON
@@ -707,7 +781,8 @@ function convertToBoundaryFeatures(
         level: feature.properties.level || 1,
         parentId: feature.properties.parent || '',
         parentName: feature.properties.parentName || '',
-        hasChildrenWithCoordinates: feature.properties.hasCoordinatesDown ?? true,
+        hasChildrenWithCoordinates:
+          feature.properties.hasCoordinatesDown ?? true,
         hasParentWithCoordinates: feature.properties.hasCoordinatesUp ?? true,
       },
       geometry: feature.geometry,
@@ -923,7 +998,8 @@ function resolveFallbackFocusHierarchyColumn(options: {
   requestedChildColumn: string;
   availableColumns: string[];
 }): string | undefined {
-  const { currentOrgUnitColumn, requestedChildColumn, availableColumns } = options;
+  const { currentOrgUnitColumn, requestedChildColumn, availableColumns } =
+    options;
   if (!availableColumns.length) {
     return undefined;
   }
@@ -1014,6 +1090,7 @@ function DHIS2Map({
   compassPosition = 'topright',
   compassStyle = 'north_badge',
   tooltipColumns,
+  hideQuickFilters = false,
   activeFilters = [],
   datasetSql = '',
   isDHIS2Dataset = false,
@@ -1122,36 +1199,30 @@ function DHIS2Map({
 
   const resolvedPrimaryBoundaryLevel = useMemo(
     () =>
-      resolvePrimaryBoundaryLevel(
-        inferredPrimaryBoundaryLevel,
-        boundaryLevels,
-      ),
+      resolvePrimaryBoundaryLevel(inferredPrimaryBoundaryLevel, boundaryLevels),
     [boundaryLevels, inferredPrimaryBoundaryLevel],
   );
 
-  const effectiveBoundaryLevels = useMemo(
-    () => {
-      const configuredLevels = resolveEffectiveBoundaryLevels(
-        inferredPrimaryBoundaryLevel,
-        boundaryLevels,
-      );
-
-      // By default the map should render the thematic OU level only.
-      // Extra configured levels are preserved when the user explicitly keeps
-      // outer boundaries visible.
-      if (!showAllBoundaries) {
-        return [resolvedPrimaryBoundaryLevel];
-      }
-
-      return configuredLevels;
-    },
-    [
-      boundaryLevels,
+  const effectiveBoundaryLevels = useMemo(() => {
+    const configuredLevels = resolveEffectiveBoundaryLevels(
       inferredPrimaryBoundaryLevel,
-      resolvedPrimaryBoundaryLevel,
-      showAllBoundaries,
-    ],
-  );
+      boundaryLevels,
+    );
+
+    // By default the map should render the thematic OU level only.
+    // Extra configured levels are preserved when the user explicitly keeps
+    // outer boundaries visible.
+    if (!showAllBoundaries) {
+      return [resolvedPrimaryBoundaryLevel];
+    }
+
+    return configuredLevels;
+  }, [
+    boundaryLevels,
+    inferredPrimaryBoundaryLevel,
+    resolvedPrimaryBoundaryLevel,
+    showAllBoundaries,
+  ]);
 
   const maxAvailableBoundaryLevel = useMemo(() => {
     const knownLevels = [
@@ -1160,7 +1231,11 @@ function DHIS2Map({
       resolvedPrimaryBoundaryLevel,
     ].filter(value => Number.isFinite(value) && value > 0);
     return knownLevels.length ? Math.max(...knownLevels) : undefined;
-  }, [boundaryLevelLabels, effectiveBoundaryLevels, resolvedPrimaryBoundaryLevel]);
+  }, [
+    boundaryLevelLabels,
+    effectiveBoundaryLevels,
+    resolvedPrimaryBoundaryLevel,
+  ]);
 
   const [boundaries, setBoundaries] = useState<BoundaryFeature[]>([]);
   const [focusedParentBoundaries, setFocusedParentBoundaries] = useState<
@@ -1197,14 +1272,19 @@ function DHIS2Map({
   const [stagedLocalDataLoading, setStagedLocalDataLoading] = useState(false);
   const [showDataPreview, setShowDataPreview] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [localFilters, setLocalFilters] = useState<Record<string, string[]>>({});
+  const [localFilters, setLocalFilters] = useState<Record<string, string[]>>(
+    {},
+  );
   const [interactionEnabled, setInteractionEnabled] = useState(true);
   const [resolvedDatasetSql, setResolvedDatasetSql] = useState(datasetSql);
   const [resolvedIsDHIS2Dataset, setResolvedIsDHIS2Dataset] =
     useState(isDHIS2Dataset);
   const lastLoadedDhis2RequestKeyRef = useRef<string | null>(null);
   const lastLoadedBoundaryRequestKeyRef = useRef<string | null>(null);
-  const boundaryPendingRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastNoMatchBoundaryRefreshKeyRef = useRef<string | null>(null);
+  const boundaryPendingRetryTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   // Track whether we've had a successful databaseId at least once — while it
   // has never been set, we suppress the "no database" error (the datasource
   // may still be loading).
@@ -1227,7 +1307,12 @@ function DHIS2Map({
       Boolean(effectiveStagedDatasetId) ||
       hasStagedLocalServingSql(resolvedDatasetSql) ||
       hasStagedLocalServingSql(datasetSql),
-    [datasetSql, effectiveStagedDatasetId, isStagedLocalDataset, resolvedDatasetSql],
+    [
+      datasetSql,
+      effectiveStagedDatasetId,
+      isStagedLocalDataset,
+      resolvedDatasetSql,
+    ],
   );
   const effectiveDataBoundaryLevel = useMemo(
     () =>
@@ -1238,8 +1323,7 @@ function DHIS2Map({
     [activeFocusedBoundaryRequest, drillState.currentLevel],
   );
   const parentSelectionColumn = useMemo(
-    () =>
-      boundaryLevelColumns?.[resolvedPrimaryBoundaryLevel] || orgUnitColumn,
+    () => boundaryLevelColumns?.[resolvedPrimaryBoundaryLevel] || orgUnitColumn,
     [boundaryLevelColumns, orgUnitColumn, resolvedPrimaryBoundaryLevel],
   );
   const hierarchyColumns = useMemo(
@@ -1288,11 +1372,7 @@ function DHIS2Map({
       (Number.isFinite(prefetchFocusedChildLevel)
         ? `ou_level_${prefetchFocusedChildLevel}`
         : effectiveOrgUnitColumn),
-    [
-      boundaryLevelColumns,
-      effectiveOrgUnitColumn,
-      prefetchFocusedChildLevel,
-    ],
+    [boundaryLevelColumns, effectiveOrgUnitColumn, prefetchFocusedChildLevel],
   );
   const effectiveDataParentId = useMemo(() => {
     if (activeFocusedBoundaryRequest?.parentIds?.length === 1) {
@@ -1602,7 +1682,9 @@ function DHIS2Map({
   const chartDataColumns = useMemo(
     () =>
       Array.from(
-        new Set(chartData.flatMap(row => Object.keys(row || {})).filter(Boolean)),
+        new Set(
+          chartData.flatMap(row => Object.keys(row || {})).filter(Boolean),
+        ),
       ),
     [chartData],
   );
@@ -1830,8 +1912,9 @@ function DHIS2Map({
 
           const result = response.json?.result || {};
           if (page === 1 && Array.isArray(result.columns)) {
-            resolvedColumns = result.columns.filter((value: unknown): value is string =>
-              Boolean(String(value || '').trim()),
+            resolvedColumns = result.columns.filter(
+              (value: unknown): value is string =>
+                Boolean(String(value || '').trim()),
             );
           }
           if (Array.isArray(result.rows)) {
@@ -1851,14 +1934,15 @@ function DHIS2Map({
         }
 
         setStagedLocalData(collectedRows);
-        const finalColumns =
-          resolvedColumns.length
-            ? resolvedColumns
-            : Array.from(
-                new Set(
-                  collectedRows.flatMap(row => Object.keys(row || {})).filter(Boolean),
-                ),
-              );
+        const finalColumns = resolvedColumns.length
+          ? resolvedColumns
+          : Array.from(
+              new Set(
+                collectedRows
+                  .flatMap(row => Object.keys(row || {}))
+                  .filter(Boolean),
+              ),
+            );
         setStagedLocalDataColumns(finalColumns);
         stagedLocalFocusCacheRef.current.set(stagedLocalFocusRequestKey, {
           rows: collectedRows,
@@ -1877,7 +1961,8 @@ function DHIS2Map({
         // If a NEW key's fetch is now in-flight, its ref won't match, so we do
         // NOT clear loading — that fetch's own finally will handle it.
         if (
-          inFlightStagedLocalRequestKeyRef.current === stagedLocalFocusRequestKey
+          inFlightStagedLocalRequestKeyRef.current ===
+          stagedLocalFocusRequestKey
         ) {
           inFlightStagedLocalRequestKeyRef.current = null;
           setStagedLocalDataLoading(false);
@@ -1931,11 +2016,17 @@ function DHIS2Map({
                 .filter(Boolean),
             ),
           ),
-    [shouldUseStagedLocalFocusRows, stagedLocalDataColumns, unfilteredEffectiveData],
+    [
+      shouldUseStagedLocalFocusRows,
+      stagedLocalDataColumns,
+      unfilteredEffectiveData,
+    ],
   );
 
   const quickFilterColumns = useMemo(() => {
-    const resolveAvailableColumn = (requestedColumn?: string): string | undefined => {
+    const resolveAvailableColumn = (
+      requestedColumn?: string,
+    ): string | undefined => {
       if (!requestedColumn) {
         return undefined;
       }
@@ -1947,7 +2038,8 @@ function DHIS2Map({
       const sanitizedRequested = sanitizeDHIS2ColumnName(requestedColumn);
       return unfilteredEffectiveDataColumns.find(
         columnName =>
-          sanitizeDHIS2ColumnName(String(columnName || '')) === sanitizedRequested,
+          sanitizeDHIS2ColumnName(String(columnName || '')) ===
+          sanitizedRequested,
       );
     };
 
@@ -1958,10 +2050,7 @@ function DHIS2Map({
     const metadataPeriodCandidates = datasourceColumns
       .filter(column => {
         const extra = parseColumnExtra(column?.extra);
-        return (
-          extra?.dhis2_is_period === true ||
-          extra?.dhis2IsPeriod === true
-        );
+        return extra?.dhis2_is_period === true || extra?.dhis2IsPeriod === true;
       })
       .map(column => resolveAvailableColumn(String(column?.column_name || '')))
       .filter((columnName): columnName is string => Boolean(columnName));
@@ -2018,7 +2107,9 @@ function DHIS2Map({
         ? stagedLocalDataColumns
         : Array.from(
             new Set(
-              effectiveData.flatMap(row => Object.keys(row || {})).filter(Boolean),
+              effectiveData
+                .flatMap(row => Object.keys(row || {}))
+                .filter(Boolean),
             ),
           ),
     [effectiveData, shouldUseStagedLocalFocusRows, stagedLocalDataColumns],
@@ -2383,7 +2474,6 @@ function DHIS2Map({
     [dataMap],
   );
 
-
   // Determine which color scheme to use based on useLinearColorScheme setting
   const activeColorScheme = useMemo(() => {
     if (useLinearColorScheme) {
@@ -2524,11 +2614,16 @@ function DHIS2Map({
       let selectedParents: BoundaryFeature[] = [];
       let focusedRequest: FocusedBoundaryRequest | null = null;
 
-      if (focusSelectedBoundaryWithChildren && resolvedPrimaryBoundaryLevel > 0) {
+      if (
+        focusSelectedBoundaryWithChildren &&
+        resolvedPrimaryBoundaryLevel > 0
+      ) {
         const parentResult = await loadBoundaryResult([
           resolvedPrimaryBoundaryLevel,
         ]);
-        const parentFeatures = convertToBoundaryFeatures(parentResult.allFeatures);
+        const parentFeatures = convertToBoundaryFeatures(
+          parentResult.allFeatures,
+        );
         focusedRequest = resolveFocusedBoundaryRequest({
           enabled: true,
           currentLevel: resolvedPrimaryBoundaryLevel,
@@ -2552,7 +2647,10 @@ function DHIS2Map({
         setFocusedParentBoundaries([]);
       }
 
-      let result = await loadBoundaryResult(requestedLevels, requestedParentIds);
+      let result = await loadBoundaryResult(
+        requestedLevels,
+        requestedParentIds,
+      );
 
       if (requestedParentIds?.length && result.totalCount === 0) {
         // eslint-disable-next-line no-console
@@ -2746,7 +2844,6 @@ function DHIS2Map({
         parentName: newParentName,
         breadcrumbs: newBreadcrumbs,
       });
-
     },
     [drillState, resolvedPrimaryBoundaryLevel],
   );
@@ -2761,6 +2858,74 @@ function DHIS2Map({
     return ids;
   }, [boundaries, getFeatureValue]);
 
+  useEffect(() => {
+    const hasBoundaryData = boundaries.length > 0;
+    const hasMetricData = dataMap.size > 0 || dataMapByName.size > 0;
+    const hasRows = filteredData.length > 0;
+
+    if (
+      !databaseId ||
+      loading ||
+      !hasBoundaryData ||
+      !hasMetricData ||
+      !hasRows ||
+      selectedBoundaryIds.size > 0
+    ) {
+      return;
+    }
+
+    const noMatchKey = [
+      databaseId,
+      boundaryLevelsKey,
+      sourceInstanceIdsKey,
+      effectiveOrgUnitDataColumn || '',
+      resolvedEffectiveOrgUnitColumn || '',
+      metric || '',
+      Array.from(dataMap.keys()).slice(0, 20).join(','),
+      Array.from(dataMapByName.keys()).slice(0, 20).join(','),
+    ].join('|');
+
+    if (lastNoMatchBoundaryRefreshKeyRef.current === noMatchKey) {
+      setError(
+        t(
+          'Map boundaries loaded, but none matched the dataset org units. Check the selected org unit column, boundary level, and DHIS2 source instance.',
+        ),
+      );
+      return;
+    }
+
+    lastNoMatchBoundaryRefreshKeyRef.current = noMatchKey;
+    setError(
+      t(
+        'Refreshing map boundaries because the cached boundaries did not match the dataset org units.',
+      ),
+    );
+
+    clearGeoFeatureCache(databaseId, 'dhis2map_boundaries')
+      .catch(error => {
+        // eslint-disable-next-line no-console
+        console.warn('[DHIS2Map] Failed to clear boundary cache:', error);
+      })
+      .finally(() => {
+        lastLoadedBoundaryRequestKeyRef.current = null;
+        fetchBoundaries();
+      });
+  }, [
+    boundaries,
+    boundaryLevelsKey,
+    dataMap,
+    dataMapByName,
+    databaseId,
+    effectiveOrgUnitDataColumn,
+    fetchBoundaries,
+    filteredData.length,
+    loading,
+    metric,
+    resolvedEffectiveOrgUnitColumn,
+    selectedBoundaryIds.size,
+    sourceInstanceIdsKey,
+  ]);
+
   const displayBoundaries = useMemo(() => {
     if (boundaries.length === 0) {
       return [];
@@ -2773,11 +2938,7 @@ function DHIS2Map({
     });
 
     return visibleBoundaries;
-  }, [
-    boundaries,
-    selectedBoundaryIds,
-    showAllBoundaries,
-  ]);
+  }, [boundaries, selectedBoundaryIds, showAllBoundaries]);
 
   useEffect(() => {
     const firstFiveBoundaries = displayBoundaries.slice(0, 5).map(boundary => ({
@@ -2875,7 +3036,7 @@ function DHIS2Map({
       const isSelected = selectedFeatureId === feature.id;
 
       // Auto-theme and level border colors only apply to selected/thematic areas.
-        if (isSelectedArea && autoThemeBorders) {
+      if (isSelectedArea && autoThemeBorders) {
         borderColor = darkenColor(fillColor, 0.4);
       } else if (
         isSelectedArea &&
@@ -2884,7 +3045,8 @@ function DHIS2Map({
       ) {
         // Convert level to number (API returns string like '3')
         const rawLevel = feature.properties.level;
-        const level = typeof rawLevel === 'string' ? parseInt(rawLevel, 10) : (rawLevel || 1);
+        const level =
+          typeof rawLevel === 'string' ? parseInt(rawLevel, 10) : rawLevel || 1;
         const levelColor = levelBorderColors.find(l => l.level === level);
 
         if (levelColor) {
@@ -2956,16 +3118,15 @@ function DHIS2Map({
           ${
             tooltipColumns
               ?.map(col => {
-                const row = filteredData.find(
-                  r =>
-                    matchesFeatureOrgUnit(
-                      getRowColumnValue(
-                        r,
-                        effectiveOrgUnitDataColumn,
-                        'dimension',
-                      ),
-                      feature,
+                const row = filteredData.find(r =>
+                  matchesFeatureOrgUnit(
+                    getRowColumnValue(
+                      r,
+                      effectiveOrgUnitDataColumn,
+                      'dimension',
                     ),
+                    feature,
+                  ),
                 );
                 return row
                   ? `<br/>${col}: ${String(
@@ -2979,8 +3140,9 @@ function DHIS2Map({
       `;
 
       layer.bindTooltip(tooltipContent, {
-        sticky: hoveredFeature !== feature.id,
-        permanent: hoveredFeature === feature.id,
+        sticky: true,
+        permanent: false,
+        direction: 'auto',
         className: 'dhis2-map-tooltip-container',
       });
 
@@ -2989,6 +3151,12 @@ function DHIS2Map({
           setHoveredFeature(feature.id);
           if ('openTooltip' in layer) {
             (layer as L.Layer & { openTooltip?: () => void }).openTooltip?.();
+          }
+        },
+        mouseout: () => {
+          setHoveredFeature(null);
+          if ('closeTooltip' in layer) {
+            (layer as L.Layer & { closeTooltip?: () => void }).closeTooltip?.();
           }
         },
       };
@@ -3041,7 +3209,7 @@ function DHIS2Map({
         }
 
         if (labelText && mapInstance) {
-          L.marker(center, {
+          const labelMarker = L.marker(center, {
             icon: L.divIcon({
               className: 'map-label',
               html: `<div style="font-size: ${labelFontSize}px; text-align: center; white-space: nowrap; color: ${
@@ -3049,6 +3217,7 @@ function DHIS2Map({
               };">${labelText}</div>`,
             }),
           }).addTo(mapInstance);
+          labelMarkersByLayer.set(layer, labelMarker);
         }
       }
     },
@@ -3063,10 +3232,10 @@ function DHIS2Map({
       resolvedEffectiveOrgUnitColumn,
       tooltipColumns,
       matchesFeatureOrgUnit,
-      hoveredFeature,
       showLabels,
       labelType,
       labelFontSize,
+      labelTextColor,
       enableDrill,
       mapInstance,
     ],
@@ -3083,211 +3252,218 @@ function DHIS2Map({
         $backgroundColor={chartBackgroundColor}
         onMouseLeave={() => setHoveredFeature(null)}
       >
-      {/* @ts-ignore - React 19 compatibility */}
-      <MapContainer
-        center={[1.3733, 32.2903]}
-        zoom={7}
-        zoomSnap={0.25}
-        zoomDelta={0.25}
-        zoomControl={false}
-        scrollWheelZoom={false}
-        dragging={interactionEnabled}
-        doubleClickZoom={interactionEnabled}
-        boxZoom={interactionEnabled}
-        keyboard={interactionEnabled}
-        touchZoom={interactionEnabled}
-      >
-        <MapInstanceBridge onReady={handleMapInstanceReady} />
-
-      {/* Auto-focus map when boundaries load */}
-      {/* @ts-ignore - React 19 compatibility */}
-      <MapAutoFocus
-        boundaries={displayBoundaries}
-        enabled={!loading}
-        viewportWidth={width}
-        viewportHeight={height}
-        layoutSignature={showFilters ? 'filters-open' : 'filters-closed'}
-      />
-
-      {/* Light basemap focus mask to de-emphasize areas outside boundaries */}
-      {/* @ts-ignore - React 19 compatibility */}
-      <BoundaryMask boundaries={displayBoundaries} enabled={false} />
-
-        {/* Explicit in-map zoom controls */}
         {/* @ts-ignore - React 19 compatibility */}
-        <MapZoomButtons />
-        {displayBoundaries.length > 0 && (
-          <FocusButton boundaries={displayBoundaries} />
-        )}
+        <MapContainer
+          center={[1.3733, 32.2903]}
+          zoom={7}
+          zoomSnap={0.25}
+          zoomDelta={0.25}
+          zoomControl={false}
+          scrollWheelZoom={false}
+          dragging={interactionEnabled}
+          doubleClickZoom={interactionEnabled}
+          boxZoom={interactionEnabled}
+          keyboard={interactionEnabled}
+          touchZoom={interactionEnabled}
+        >
+          <MapInstanceBridge onReady={handleMapInstanceReady} />
 
-        {displayBoundaries.length > 0 && (
-          /* @ts-ignore - React 19 compatibility */
-          focusSelectedBoundaryWithChildren &&
-          focusedParentBoundaries.length > 0 && (
+          {/* Auto-focus map when boundaries load */}
+          {/* @ts-ignore - React 19 compatibility */}
+          <MapAutoFocus
+            boundaries={displayBoundaries}
+            enabled={!loading}
+            viewportWidth={width}
+            viewportHeight={height}
+            layoutSignature={showFilters ? 'filters-open' : 'filters-closed'}
+          />
+
+          {/* Light basemap focus mask to de-emphasize areas outside boundaries */}
+          {/* @ts-ignore - React 19 compatibility */}
+          <BoundaryMask boundaries={displayBoundaries} enabled={false} />
+
+          {/* Explicit in-map zoom controls */}
+          {/* @ts-ignore - React 19 compatibility */}
+          <MapZoomButtons />
+          {displayBoundaries.length > 0 && (
+            <FocusButton boundaries={displayBoundaries} />
+          )}
+
+          {displayBoundaries.length > 0 &&
+            /* @ts-ignore - React 19 compatibility */
+            focusSelectedBoundaryWithChildren &&
+            focusedParentBoundaries.length > 0 && (
+              <DynamicGeoJSON
+                data={
+                  {
+                    type: 'FeatureCollection',
+                    features: focusedParentBoundaries,
+                  } as any
+                }
+                style={getFocusedParentStyle as any}
+                onEachFeature={() => undefined}
+                styleKey={`focus-parents-${focusedParentBoundaries
+                  .map(feature => feature.id)
+                  .sort()
+                  .join(',')}-${strokeWidth}-${JSON.stringify(strokeColor)}`}
+              />
+            )}
+          {displayBoundaries.length > 0 && (
+            /* @ts-ignore - React 19 compatibility */
             <DynamicGeoJSON
               data={
                 {
                   type: 'FeatureCollection',
-                  features: focusedParentBoundaries,
+                  features: displayBoundaries,
                 } as any
               }
-              style={getFocusedParentStyle as any}
-              onEachFeature={() => undefined}
-              styleKey={`focus-parents-${focusedParentBoundaries
-                .map(feature => feature.id)
+              style={getFeatureStyle as any}
+              onEachFeature={onEachFeature as any}
+              styleKey={`levels-${boundaryLevelsKey}-drill-${drillState.currentLevel}-${drillState.parentId}-hover-${hoveredFeature ?? 'none'}-selected-${selectedFeatureId ?? 'none'}-colors-${JSON.stringify(levelBorderColors?.map(lc => lc.color))}-boundaries-${displayBoundaries
+                .map(b => b.id)
                 .sort()
-                .join(',')}-${strokeWidth}-${JSON.stringify(strokeColor)}`}
+                .join(',')}`}
             />
-          )
+          )}
+        </MapContainer>
+
+        {!interactionEnabled && (
+          <div
+            className="map-interaction-overlay"
+            role="button"
+            tabIndex={0}
+            onClick={() => setInteractionEnabled(true)}
+            onKeyDown={event => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                setInteractionEnabled(true);
+              }
+            }}
+          >
+            {t('Click to interact with map')}
+          </div>
         )}
-        {displayBoundaries.length > 0 && (
+
+        {enableDrill && drillState.breadcrumbs.length > 0 && (
           /* @ts-ignore - React 19 compatibility */
-          <DynamicGeoJSON
-            data={
-              { type: 'FeatureCollection', features: displayBoundaries } as any
-            }
-            style={getFeatureStyle as any}
-            onEachFeature={onEachFeature as any}
-            styleKey={`levels-${boundaryLevelsKey}-drill-${drillState.currentLevel}-${drillState.parentId}-hover-${hoveredFeature ?? 'none'}-selected-${selectedFeatureId ?? 'none'}-colors-${JSON.stringify(levelBorderColors?.map(lc => lc.color))}-boundaries-${displayBoundaries.map(b => b.id).sort().join(',')}`}
+          <DrillControls
+            breadcrumbs={drillState.breadcrumbs}
+            onDrillUp={() => handleDrillUp()}
+            onBreadcrumbClick={index => handleDrillUp(index)}
           />
         )}
-      </MapContainer>
 
-      {!interactionEnabled && (
-        <div
-          className="map-interaction-overlay"
-          role="button"
-          tabIndex={0}
-          onClick={() => setInteractionEnabled(true)}
-          onKeyDown={event => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              setInteractionEnabled(true);
-            }
-          }}
-        >
-          {t('Click to interact with map')}
-        </div>
-      )}
+        {showMapLoadingOverlay && (
+          <div className="map-loading-overlay">
+            <Spin size="large" />
+            <span>{t('Loading map data...')}</span>
+          </div>
+        )}
 
-      {enableDrill && drillState.breadcrumbs.length > 0 && (
-        /* @ts-ignore - React 19 compatibility */
-        <DrillControls
-          breadcrumbs={drillState.breadcrumbs}
-          onDrillUp={() => handleDrillUp()}
-          onBreadcrumbClick={index => handleDrillUp(index)}
-        />
-      )}
-
-      {showMapLoadingOverlay && (
-        <div className="map-loading-overlay">
-          <Spin size="large" />
-          <span>{t('Loading map data...')}</span>
-        </div>
-      )}
-
-      {!showMapLoadingOverlay && boundaryLoading && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 12,
-            right: 12,
-            zIndex: 1000,
-            background: 'rgba(255,255,255,0.85)',
-            borderRadius: 6,
-            padding: '4px 10px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            fontSize: 12,
-            pointerEvents: 'none',
-          }}
-        >
-          <Spin size="small" />
-          <span>{t('Loading boundaries…')}</span>
-        </div>
-      )}
-
-      {error && <div className="map-error-message">{error}</div>}
-
-      {/* Show message when no data is available (possibly due to query timeout) */}
-      {!showMapLoadingOverlay && !error && effectiveData.length === 0 && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            background: 'rgba(255, 255, 255, 0.95)',
-            padding: '20px 30px',
-            borderRadius: '8px',
-            boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
-            zIndex: 1000,
-            textAlign: 'center',
-            maxWidth: '400px',
-          }}
-        >
+        {!showMapLoadingOverlay && boundaryLoading && (
           <div
-            style={{ fontSize: '16px', fontWeight: 500, marginBottom: '8px' }}
+            style={{
+              position: 'absolute',
+              bottom: 12,
+              right: 12,
+              zIndex: 1000,
+              background: 'rgba(255,255,255,0.85)',
+              borderRadius: 6,
+              padding: '4px 10px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 12,
+              pointerEvents: 'none',
+            }}
           >
-            {t('No data available')}
+            <Spin size="small" />
+            <span>{t('Loading boundaries…')}</span>
           </div>
-          <div style={{ fontSize: '13px', color: '#666' }}>
-            {t('The query returned no results. This could be due to:')}
-            <ul
-              style={{
-                textAlign: 'left',
-                margin: '10px 0',
-                paddingLeft: '20px',
-              }}
+        )}
+
+        {error && <div className="map-error-message">{error}</div>}
+
+        {/* Show message when no data is available (possibly due to query timeout) */}
+        {!showMapLoadingOverlay && !error && effectiveData.length === 0 && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              background: 'rgba(255, 255, 255, 0.95)',
+              padding: '20px 30px',
+              borderRadius: '8px',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
+              zIndex: 1000,
+              textAlign: 'center',
+              maxWidth: '400px',
+            }}
+          >
+            <div
+              style={{ fontSize: '16px', fontWeight: 500, marginBottom: '8px' }}
             >
-              <li>{t('Query timeout (try reducing date range)')}</li>
-              <li>{t('No data for selected filters')}</li>
-              <li>{t('Missing data in the source system')}</li>
-            </ul>
+              {t('No data available')}
+            </div>
+            <div style={{ fontSize: '13px', color: '#666' }}>
+              {t('The query returned no results. This could be due to:')}
+              <ul
+                style={{
+                  textAlign: 'left',
+                  margin: '10px 0',
+                  paddingLeft: '20px',
+                }}
+              >
+                <li>{t('Query timeout (try reducing date range)')}</li>
+                <li>{t('No data for selected filters')}</li>
+                <li>{t('Missing data in the source system')}</li>
+              </ul>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Legend overlay — floats over the map */}
-      {showLegend && (
-        <LegendPanel
-          colorScale={colorScale}
-          valueRange={valueRange}
-          position={(legendPosition as any) || 'bottomright'}
-          displayType={(legendDisplayType as LegendDisplayType) || 'vertical_list'}
-          classes={legendClasses}
-          metricName={metricDisplayName}
-          noDataColor={legendNoDataColor}
-          levelBorderColors={levelBorderColors}
-          levelLabels={boundaryLevelLabels}
-          showBoundaryLegend={boundaryLevels && boundaryLevels.length > 1}
-          manualBreaks={manualBreaks}
-          manualColors={manualColors}
-          stagedLegendDefinition={effectiveStagedLegendDefinition}
-          legendEntries={computedLegendEntries}
-        />
-      )}
+        {/* Legend overlay — floats over the map */}
+        {showLegend && (
+          <LegendPanel
+            colorScale={colorScale}
+            valueRange={valueRange}
+            position={(legendPosition as any) || 'bottomright'}
+            displayType={
+              (legendDisplayType as LegendDisplayType) || 'vertical_list'
+            }
+            classes={legendClasses}
+            metricName={metricDisplayName}
+            noDataColor={legendNoDataColor}
+            levelBorderColors={levelBorderColors}
+            levelLabels={boundaryLevelLabels}
+            showBoundaryLegend={boundaryLevels && boundaryLevels.length > 1}
+            manualBreaks={manualBreaks}
+            manualColors={manualColors}
+            stagedLegendDefinition={effectiveStagedLegendDefinition}
+            legendEntries={computedLegendEntries}
+          />
+        )}
 
-      {/* Compass overlay */}
-      {compassVisible && (
-        <MapCompass
-          position={(compassPosition as any) || 'topright'}
-          style={(compassStyle as CompassStyle) || 'north_badge'}
-        />
-      )}
+        {/* Compass overlay */}
+        {compassVisible && (
+          <MapCompass
+            position={(compassPosition as any) || 'topright'}
+            style={(compassStyle as CompassStyle) || 'north_badge'}
+          />
+        )}
 
-      {quickFilterColumns.length > 0 && !loading && (
-        <FloatingControls>
-          <FloatingActionButton
-            type="button"
-            $active={showFilters}
-            onClick={() => setShowFilters(!showFilters)}
-            title="Toggle filters panel"
-          >
-            <FilterOutlined /> {t('Quick Filters')}
-          </FloatingActionButton>
-        </FloatingControls>
-      )}
+        {!hideQuickFilters && quickFilterColumns.length > 0 && !loading && (
+          <FloatingControls className="dhis2-map-quick-filters">
+            <FloatingActionButton
+              type="button"
+              $active={showFilters}
+              onClick={() => setShowFilters(!showFilters)}
+              title="Toggle filters panel"
+            >
+              <FilterOutlined /> {t('Quick Filters')}
+            </FloatingActionButton>
+          </FloatingControls>
+        )}
       </MapCanvas>
 
       {dhis2Data && dhis2Data.length > 0 && !loading && (
@@ -3323,8 +3499,8 @@ function DHIS2Map({
         />
       )}
 
-      {showFilters && (
-        <QuickFiltersOverlay>
+      {!hideQuickFilters && showFilters && (
+        <QuickFiltersOverlay className="dhis2-map-quick-filters-panel">
           <FiltersPanel
             data={unfilteredEffectiveData}
             columns={quickFilterColumns}

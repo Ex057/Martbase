@@ -193,8 +193,9 @@ function resolveBestFallbackHierarchyColumn(params: {
       return exactLevelMatch.column;
     }
 
-    return hierarchyCandidates.sort((left, right) => right.level - left.level)[0]
-      .column;
+    return hierarchyCandidates.sort(
+      (left, right) => right.level - left.level,
+    )[0].column;
   }
 
   for (const column of allColumns) {
@@ -416,7 +417,8 @@ function resolveSelectedStagedLegendDefinition(
   selectedLegendColumn?: string,
   stagedLegendSets: StagedLegendSetMetadata[] = [],
 ): DHIS2LegendDefinition | undefined {
-  const availableDefinitions = collectStagedLegendDefinitions(datasourceColumns);
+  const availableDefinitions =
+    collectStagedLegendDefinitions(datasourceColumns);
 
   const cachedLegendSetDefinition = resolveCachedLegendSetDefinition(
     stagedLegendSets,
@@ -566,6 +568,8 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
   const label_font_size =
     formDataAny?.labelFontSize ?? formDataAny?.label_font_size;
   const show_legend = formDataAny?.showLegend ?? formDataAny?.show_legend;
+  const hide_quick_filters =
+    formDataAny?.hideQuickFilters ?? formDataAny?.hide_quick_filters;
   const legend_position =
     formDataAny?.legendPosition || formDataAny?.legend_position;
   const legend_classes =
@@ -588,8 +592,7 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     formDataAny?.compassVisible ?? formDataAny?.compass_visible;
   const compass_position =
     formDataAny?.compassPosition || formDataAny?.compass_position;
-  const compass_style =
-    formDataAny?.compassStyle || formDataAny?.compass_style;
+  const compass_style = formDataAny?.compassStyle || formDataAny?.compass_style;
   // Custom level colors - check both camelCase and snake_case
   const level_1_color = formDataAny?.level1Color || formDataAny?.level_1_color;
   const level_2_color = formDataAny?.level2Color || formDataAny?.level_2_color;
@@ -614,13 +617,19 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     );
 
   const periodColumns = datasourceColumns
-    .filter(c => isPeriodColumn(c) && c.column_name && allColumns.includes(c.column_name))
+    .filter(
+      c =>
+        isPeriodColumn(c) &&
+        c.column_name &&
+        allColumns.includes(c.column_name),
+    )
     .map(c => c.column_name as string);
 
   const extraRaw = datasourceAny?.extra;
   let extraParsed: any;
   try {
-    extraParsed = typeof extraRaw === 'string' ? JSON.parse(extraRaw) : extraRaw;
+    extraParsed =
+      typeof extraRaw === 'string' ? JSON.parse(extraRaw) : extraRaw;
   } catch {
     extraParsed = null;
   }
@@ -638,7 +647,9 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     (formData as any)?.dhis2_staged_local_dataset === true ||
     (formData as any)?.dhis2_staged_local_dataset === 'true' ||
     (formData as any)?.dhis2StagedLocalDataset === true;
-  const rawSourceInstanceIds = Array.isArray(extraParsed?.dhis2_source_instance_ids)
+  const rawSourceInstanceIds = Array.isArray(
+    extraParsed?.dhis2_source_instance_ids,
+  )
     ? extraParsed.dhis2_source_instance_ids
     : Array.isArray(extraParsed?.dhis2SourceInstanceIds)
       ? extraParsed.dhis2SourceInstanceIds
@@ -702,7 +713,9 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     const dhis2ParamsMap = extraParsed?.dhis2_params;
     if (dhis2ParamsMap) {
       const tableName =
-        datasourceAny?.table_name || datasourceAny?.table?.name || datasourceAny?.name;
+        datasourceAny?.table_name ||
+        datasourceAny?.table?.name ||
+        datasourceAny?.name;
       let dhis2Params: string | undefined =
         (tableName && dhis2ParamsMap[tableName]) || undefined;
 
@@ -745,7 +758,8 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
   });
 
   // Convert boundary_levels to array, supporting backward compatibility with boundary_level.
-  const rawBoundaryLevels = boundary_levels ?? (formData as any)?.boundaryLevels;
+  const rawBoundaryLevels =
+    boundary_levels ?? (formData as any)?.boundaryLevels;
   const rawBoundaryLevel = boundary_level ?? (formData as any)?.boundaryLevel;
   const normalizeLevels = (
     levels: number | string | (number | string)[] | undefined,
@@ -837,9 +851,7 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
       [
         metricDisplayLabel,
         metricString,
-        typeof metric === 'string'
-          ? undefined
-          : (metric as any)?.sqlExpression,
+        typeof metric === 'string' ? undefined : (metric as any)?.sqlExpression,
         typeof metric === 'string'
           ? undefined
           : (metric as any)?.column?.verbose_name,
@@ -1008,7 +1020,8 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     const metricCol = datasourceColumns.find(
       c =>
         c.column_name === metricColumn ||
-        (c.column_name && sanitizeDHIS2ColumnName(c.column_name) === metricColumn),
+        (c.column_name &&
+          sanitizeDHIS2ColumnName(c.column_name) === metricColumn),
     );
     const extra = parseColumnExtra(metricCol?.extra);
     if (extra?.dhis2_is_indicator === true) {
@@ -1064,7 +1077,7 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     },
     unselectedAreaBorderWidth: unselected_area_border_width ?? 0.75,
     showLabels: show_labels !== false,
-    labelType: label_type || 'name',
+    labelType: label_type || 'name_value',
     labelFontSize: label_font_size || 12,
     showLegend: show_legend !== false,
     legendPosition: legend_position || 'bottomright',
@@ -1082,6 +1095,7 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     compassPosition: compass_position || 'topright',
     compassStyle: compass_style || 'north_badge',
     tooltipColumns: sanitizedTooltipColumns,
+    hideQuickFilters: hide_quick_filters === true,
     setDataMask: hooks?.setDataMask,
     activeFilters,
     nativeFilters,

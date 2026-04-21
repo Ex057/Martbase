@@ -36,6 +36,7 @@ export default function useDHIS2Boundaries(
   databaseId: number | undefined,
   boundaryLevel: number | undefined,
   chartId?: number,
+  dashboardId?: number,
 ): DHIS2BoundaryResult {
   const [features, setFeatures] = useState<DHIS2GeoJSONFeature[]>([]);
   const [loading, setLoading] = useState(false);
@@ -48,11 +49,11 @@ export default function useDHIS2Boundaries(
       setFeatures([]);
       setLoading(false);
       setError(null);
-      return;
+      return undefined;
     }
 
     const key = `${databaseId}_${boundaryLevel}`;
-    if (key === prevKeyRef.current && features.length > 0) return;
+    if (key === prevKeyRef.current && features.length > 0) return undefined;
     prevKeyRef.current = key;
 
     // Force a fresh API call the first time we see this key in this
@@ -67,6 +68,7 @@ export default function useDHIS2Boundaries(
         const result = await loadDHIS2GeoFeatures({
           databaseId,
           chartId,
+          dashboardId,
           levels: [boundaryLevel],
           endpoint: 'geoJSON',
           cacheKeyPrefix: 'sm_boundaries',
@@ -104,7 +106,7 @@ export default function useDHIS2Boundaries(
     return () => {
       cancelled = true;
     };
-  }, [databaseId, boundaryLevel, chartId]);
+  }, [databaseId, boundaryLevel, chartId, dashboardId]);
 
   return { features, loading, error };
 }

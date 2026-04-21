@@ -442,9 +442,7 @@ test('defaults map charts to professional public presentation without a redundan
   );
 
   expect(
-    screen.getByText(
-      'Facility map:360:map_focus:horizontal_bottom:dhis2_map:public',
-    ),
+    screen.getByText('Facility map:360:map_focus:default:dhis2_map:public'),
   ).toBeInTheDocument();
   expect(
     screen.queryByRole('heading', { name: 'Facility map' }),

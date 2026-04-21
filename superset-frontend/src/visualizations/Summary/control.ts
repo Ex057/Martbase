@@ -49,9 +49,7 @@ const config: ControlPanelConfig = {
             config: {
               ...sharedControls.groupby,
               label: t('Group By'),
-              description: t(
-                'Optional dimension to split metrics into groups',
-              ),
+              description: t('Optional dimension to split metrics into groups'),
               multi: true,
             },
           },
@@ -100,6 +98,23 @@ const config: ControlPanelConfig = {
               label: t('Per-Variable Settings'),
               description: t(
                 'Configure label, subtitle, formatting, colors, and image for each metric variable.',
+              ),
+              default: {},
+              renderTrigger: true,
+              mapStateToProps: (state: ControlPanelState) => ({
+                metrics: state.form_data?.metrics || [],
+              }),
+            },
+          },
+        ],
+        [
+          {
+            name: 'media_asset_images',
+            config: {
+              type: 'SummaryImageAssetsControl',
+              label: t('Uploaded Metric Images'),
+              description: t(
+                'Upload CMS images and assign them to Summary metrics. Public charts should use public image assets.',
               ),
               default: {},
               renderTrigger: true,
@@ -584,10 +599,7 @@ const config: ControlPanelConfig = {
               choices: [
                 ['Inter', 'Inter'],
                 ['Roboto', 'Roboto'],
-                [
-                  'system-ui, -apple-system, sans-serif',
-                  t('System Default'),
-                ],
+                ['system-ui, -apple-system, sans-serif', t('System Default')],
                 [
                   "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
                   t('Monospace'),

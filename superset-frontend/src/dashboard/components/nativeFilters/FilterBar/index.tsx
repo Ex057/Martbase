@@ -396,18 +396,23 @@ const FilterBar: FC<FiltersBarProps> = ({
 
   const handleClearAll = useCallback(() => {
     const newClearAllTriggers = { ...clearAllTriggers };
+    const clearedFilters: Record<string, DataMaskWithId> = {};
+
     filtersInScope.filter(isNativeFilter).forEach(filter => {
       const { id } = filter;
-      if (dataMaskSelected[id]) {
-        setDataMaskSelected(draft => {
-          if (draft[id].filterState?.value !== undefined) {
-            draft[id].filterState!.value = undefined;
-          }
-          draft[id].extraFormData = {};
-        });
-        newClearAllTriggers[id] = true;
-      }
+      clearedFilters[id] = getInitialDataMask(id) as DataMaskWithId;
+      newClearAllTriggers[id] = true;
     });
+
+    if (!isEmpty(clearedFilters)) {
+      setUpdateKey(1);
+      setDataMaskSelected(draft => {
+        Object.assign(draft, clearedFilters);
+      });
+      Object.entries(clearedFilters).forEach(([filterId, dataMask]) => {
+        dispatch(updateDataMask(filterId, dataMask));
+      });
+    }
 
     let hasChartCustomizationsToClear = false;
 

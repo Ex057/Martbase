@@ -1228,6 +1228,120 @@ def list_starter_patterns() -> list[dict[str, Any]]:
             ),
         ],
     }
+    dhis2_public_analytics_pattern = {
+        "id": "dhis2-public-analytics",
+        "slug": "dhis2-public-analytics",
+        "title": "DHIS2 Public Analytics",
+        "description": (
+            "Public landing layout with a background image hero, featured map, "
+            "and summary indicator chart slots."
+        ),
+        "category": "analytics",
+        "blocks": [
+            _starter_pattern_block(
+                "hero",
+                content={
+                    "eyebrow": "DHIS2 analytics",
+                    "title": "National health performance dashboard",
+                    "subtitle": (
+                        "Review the latest programme indicators by geography, "
+                        "period, and service area."
+                    ),
+                    "body": (
+                        "Use this page as the public entry point for map-based "
+                        "insight and high-level indicator summaries."
+                    ),
+                },
+                settings={
+                    "usePageFeaturedImage": True,
+                    "primaryActionLabel": "View dashboards",
+                    "primaryActionUrl": "/superset/public/dashboards/",
+                    "secondaryActionLabel": "Explore indicators",
+                    "secondaryActionUrl": "#summary",
+                },
+                styles={
+                    "padding": "40px",
+                    "minHeight": "520px",
+                    "backgroundColor": "transparent",
+                    "backgroundPosition": "center",
+                    "backgroundSize": "cover",
+                    "borderColor": "transparent",
+                    "borderWidth": "0px",
+                    "borderRadius": "0px",
+                    "boxShadow": "none",
+                },
+                children=[
+                    _starter_pattern_block(
+                        "chart",
+                        content={
+                            "title": "Geographic performance",
+                            "caption": "Select the saved DHIS2 Map chart for this slot.",
+                        },
+                        settings={
+                            "height": 360,
+                            "show_header": False,
+                            "surface_preset": "default",
+                        },
+                        styles={
+                            "padding": "0px",
+                            "backgroundColor": "transparent",
+                            "borderColor": "transparent",
+                            "borderWidth": "0px",
+                            "boxShadow": "none",
+                        },
+                    ),
+                ],
+            ),
+            _starter_pattern_block(
+                "section",
+                content={
+                    "title": "Key programme indicators",
+                    "subtitle": (
+                        "Replace these chart placeholders with your Summary, "
+                        "Small Multiples, or other DHIS2-tagged charts."
+                    ),
+                },
+                settings={"anchor": "summary", "columns": 2},
+                styles={"padding": "12px 0 0"},
+                children=[
+                    _starter_pattern_block(
+                        "chart",
+                        content={
+                            "title": "Summary indicators",
+                            "caption": "Select the saved Summary chart for KPI cards.",
+                        },
+                        settings={
+                            "height": 340,
+                            "show_header": False,
+                            "surface_preset": "default",
+                        },
+                        styles={
+                            "padding": "10px",
+                            "backgroundColor": "#ffffff",
+                            "borderColor": "#e2e8f0",
+                        },
+                    ),
+                    _starter_pattern_block(
+                        "chart",
+                        content={
+                            "title": "Programme comparison",
+                            "caption": "Select Small Multiples or another comparison chart.",
+                        },
+                        settings={
+                            "height": 340,
+                            "show_header": False,
+                            "surface_preset": "default",
+                        },
+                        styles={
+                            "padding": "10px",
+                            "backgroundColor": "#ffffff",
+                            "borderColor": "#e2e8f0",
+                        },
+                    ),
+                ],
+            ),
+        ],
+    }
     two_column_pattern = {
         "id": "two-column-briefing",
         "slug": "two-column-briefing",
@@ -1283,5 +1397,6 @@ def list_starter_patterns() -> list[dict[str, Any]]:
         cta_pattern,
         faq_pattern,
         chart_showcase_pattern,
+        dhis2_public_analytics_pattern,
         two_column_pattern,
     ]

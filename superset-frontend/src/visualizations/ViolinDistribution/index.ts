@@ -33,6 +33,7 @@ export default class ViolinDistributionChartPlugin extends ChartPlugin {
         thumbnail,
         tags: [
           t('Health'),
+          t('Health'),
           t('Distribution'),
           t('Statistical'),
           t('Data Quality'),

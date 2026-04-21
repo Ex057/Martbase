@@ -33,6 +33,7 @@ export default class AgeSexPyramidChartPlugin extends ChartPlugin {
         thumbnail,
         tags: [
           t('Health'),
+          t('Health'),
           t('Demographics'),
           t('Population'),
           t('Pyramid'),

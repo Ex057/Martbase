@@ -42,7 +42,7 @@ export default class SmallMultiplesChartPlugin extends ChartPlugin {
           t('Comparison'),
           t('Trellis'),
           t('Multi-series'),
-          t('DHIS2'),
+          t('Health'),
           t('KPI'),
           t('Gauge'),
           t('Map'),

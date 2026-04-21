@@ -163,6 +163,7 @@ export interface DHIS2MapProps {
   legendReverseColors?: boolean;
   legendNoDataColor?: { r: number; g: number; b: number; a: number };
   tooltipColumns: string[];
+  hideQuickFilters?: boolean;
   onDrillDown?: (orgUnitId: string, orgUnitName: string) => void;
   setDataMask?: (dataMask: any) => void;
   activeFilters?: Array<{

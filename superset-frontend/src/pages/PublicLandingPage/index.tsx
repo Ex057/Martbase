@@ -43,6 +43,7 @@ import {
 } from 'antd';
 import { useHistory, useLocation } from 'react-router-dom';
 import logoImage from 'src/assets/images/loog.jpg';
+import DashboardPage from 'src/dashboard/containers/DashboardPage';
 import {
   createDraftPage,
   createEmptyComponent,
@@ -53,7 +54,6 @@ import {
 } from './portalUtils';
 import { ensurePageBlocks } from './blockUtils';
 import { groupBlocksBySlot, RenderBlockTree } from './BlockRenderer';
-import DashboardPage from 'src/dashboard/containers/DashboardPage';
 import type {
   PortalDashboardSummary,
   PortalPage,
@@ -154,7 +154,6 @@ const BrandTitle = styled.span`
   letter-spacing: -0.02em;
 `;
 
-
 const NavButton = styled.button<{ $active?: boolean }>`
   border: 0;
   border-radius: var(--portal-radius-md, 8px);
@@ -162,7 +161,9 @@ const NavButton = styled.button<{ $active?: boolean }>`
   background: ${({ $active }) =>
     $active ? 'var(--portal-nav-active-bg)' : 'transparent'};
   color: ${({ $active }) =>
-    $active ? 'var(--portal-nav-active-text, #ffffff)' : 'rgba(255, 255, 255, 0.85)'};
+    $active
+      ? 'var(--portal-nav-active-text, #ffffff)'
+      : 'rgba(255, 255, 255, 0.85)'};
   font-weight: ${({ $active }) => ($active ? 700 : 500)};
   font-size: 13px;
   cursor: pointer;
@@ -175,7 +176,6 @@ const NavButton = styled.button<{ $active?: boolean }>`
     color: #ffffff;
   }
 `;
-
 
 const DashboardPickerLabel = styled.span`
   font-size: 13px;
@@ -213,7 +213,7 @@ const DashboardPickerWrapper = styled.div`
   }
 
   .ant-select-focused .ant-select-selector {
-    border-color: var(--portal-accent, #4DA3FF) !important;
+    border-color: var(--portal-accent, #4da3ff) !important;
     box-shadow: 0 0 0 2px rgba(77, 163, 255, 0.25) !important;
   }
 
@@ -273,13 +273,12 @@ const PageContentShell = styled.div<{ $dashboardMode?: boolean }>`
   flex: 1 0 auto;
 `;
 
-const Main = styled.main<{ $maxWidth: string }>`
+const Main = styled.main<{ $maxWidth: string; $padding: string }>`
   width: 100%;
   max-width: ${({ $maxWidth }) => $maxWidth};
   margin: 0 auto;
-  padding: 28px 24px 72px;
+  padding: ${({ $padding }) => $padding};
 `;
-
 
 const SectionNote = styled.span`
   color: var(--portal-muted);
@@ -310,8 +309,6 @@ const CardBody = styled.div`
   font-size: 15px;
   line-height: 1.75;
 `;
-
-
 
 /* ── Dashboard full-view layout (when a dashboard is selected) ── */
 
@@ -426,7 +423,6 @@ function getStoredTheme(): VisualMode {
   const theme = window.localStorage.getItem(PORTAL_THEME_STORAGE_KEY);
   return theme === 'dark' ? 'dark' : 'light';
 }
-
 
 function buildPortalSearch({
   pageSlug,
@@ -544,6 +540,34 @@ function buildEditableSections(
 
 function joinClassNames(...values: Array<string | undefined | null | false>) {
   return values.filter(Boolean).join(' ');
+}
+
+function normalizeOpacity(value?: unknown): number {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 1;
+  }
+  return Math.max(0, Math.min(1, numeric));
+}
+
+function pageBackgroundImageStyle(page?: PortalPage | null): CSSProperties {
+  if (
+    !page?.settings?.useFeaturedImageAsBackground ||
+    !page.featured_image_url
+  ) {
+    return {};
+  }
+  const imageOpacity = normalizeOpacity(
+    page.settings.pageBackgroundImageOpacity,
+  );
+  const overlayAlpha = Math.max(0, Math.min(1, 1 - imageOpacity));
+  return {
+    backgroundImage: `linear-gradient(rgba(255, 255, 255, ${overlayAlpha}), rgba(255, 255, 255, ${overlayAlpha})), url("${page.featured_image_url.replace(/"/g, '\\"')}")`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
+    backgroundAttachment: 'fixed',
+  };
 }
 
 function emptyDraftPage(displayOrder: number): PortalPage {
@@ -790,7 +814,6 @@ export default function PublicLandingPage() {
       buildPortalSearch({ pageSlug: pageSlug || currentPage?.slug }),
     );
   }
-
 
   async function saveLayout() {
     if (!currentPage) {
@@ -1141,21 +1164,13 @@ export default function PublicLandingPage() {
     '--portal-muted': visualMode === 'dark' ? '#94a3b8' : '#6B7280',
     '--portal-muted-strong': visualMode === 'dark' ? '#cbd5e1' : '#4B5563',
     '--portal-border':
-      visualMode === 'dark'
-        ? 'rgba(148, 163, 184, 0.18)'
-        : '#E5EAF0',
+      visualMode === 'dark' ? 'rgba(148, 163, 184, 0.18)' : '#E5EAF0',
     '--portal-border-strong':
-      visualMode === 'dark'
-        ? 'rgba(148, 163, 184, 0.26)'
-        : '#CBD5E1',
+      visualMode === 'dark' ? 'rgba(148, 163, 184, 0.26)' : '#CBD5E1',
     '--portal-header-bg':
-      visualMode === 'dark'
-        ? 'rgba(10, 25, 41, 0.92)'
-        : '#0D3B66',
+      visualMode === 'dark' ? 'rgba(10, 25, 41, 0.92)' : '#0D3B66',
     '--portal-footer-bg':
-      visualMode === 'dark'
-        ? 'rgba(10, 25, 41, 0.95)'
-        : '#0D3B66',
+      visualMode === 'dark' ? 'rgba(10, 25, 41, 0.95)' : '#0D3B66',
     '--portal-nav-hover-bg':
       visualMode === 'dark'
         ? 'rgba(148, 163, 184, 0.12)'
@@ -1179,7 +1194,14 @@ export default function PublicLandingPage() {
       ? { '--portal-secondary': themeColors.secondary }
       : {}),
     ...(themeColors.surface ? { '--portal-surface': themeColors.surface } : {}),
+    ...pageBackgroundImageStyle(currentPage),
   } as CSSProperties;
+  const pagePadding =
+    currentPage?.settings?.pagePadding === undefined ||
+    currentPage?.settings?.pagePadding === null ||
+    String(currentPage?.settings?.pagePadding).trim() === ''
+      ? '28px 24px 72px'
+      : String(currentPage.settings.pagePadding);
 
   const footerItems = [
     ...(data?.navigation.footer.flatMap(menu => menu.items) || []),
@@ -1306,85 +1328,72 @@ export default function PublicLandingPage() {
         {currentPage && selectedDashboard ? (
           renderSelectedDashboardView(selectedDashboard)
         ) : (
-        <Main $maxWidth={contentMaxWidth}>
-          {error && (
-            <Alert
-              style={{ marginBottom: 20 }}
-              type="error"
-              showIcon
-              message={error}
-              action={
-                <Button size="small" onClick={() => reloadPortal(pageSlug)}>
-                  {t('Retry')}
-                </Button>
-              }
-            />
-          )}
+          <Main $maxWidth={contentMaxWidth} $padding={pagePadding}>
+            {error && (
+              <Alert
+                style={{ marginBottom: 20 }}
+                type="error"
+                showIcon
+                message={error}
+                action={
+                  <Button size="small" onClick={() => reloadPortal(pageSlug)}>
+                    {t('Retry')}
+                  </Button>
+                }
+              />
+            )}
 
-          {loading && !data ? (
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'center',
-                padding: '96px 0',
-              }}
-            >
-              <Spin size="large" />
-            </div>
-          ) : currentPage ? (
-            pageBlocks.length ? (
-              <>
-                <RenderBlockTree
-                  blocks={renderedRegions.header}
-                  charts={data?.available_charts || []}
-                  dashboards={data?.dashboards || []}
-                  page={currentPage}
-                  navigation={data?.navigation}
-                  highlights={data?.indicator_highlights || []}
-                  onNavigate={navigateToPath}
-                  onOpenDashboard={navigateToPublicDashboard}
-                />
-                <RenderBlockTree
-                  blocks={renderedRegions.hero}
-                  charts={data?.available_charts || []}
-                  dashboards={data?.dashboards || []}
-                  page={currentPage}
-                  navigation={data?.navigation}
-                  highlights={data?.indicator_highlights || []}
-                  onNavigate={navigateToPath}
-                  onOpenDashboard={navigateToPublicDashboard}
-                />
-                {renderedRegions.content.length ||
-                renderedRegions.sidebar.length ? (
-                  <div
-                    className="cms-template-content-shell"
-                    style={
-                      hasSidebar
-                        ? {
-                            display: 'grid',
-                            gridTemplateColumns: `minmax(0, 1fr) ${sidebarWidth}`,
-                            gap: contentShellGap,
-                            alignItems: 'start',
-                          }
-                        : undefined
-                    }
-                  >
-                    <div>
-                      <RenderBlockTree
-                        blocks={renderedRegions.content}
-                        charts={data?.available_charts || []}
-                        dashboards={data?.dashboards || []}
-                        page={currentPage}
-                        navigation={data?.navigation}
-                        highlights={data?.indicator_highlights || []}
-                        onNavigate={navigateToPath}
-                        onOpenDashboard={navigateToPublicDashboard}
-                      />
-                    </div>
-                    {hasSidebar ? (
-                      <aside>
+            {loading && !data ? (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  padding: '96px 0',
+                }}
+              >
+                <Spin size="large" />
+              </div>
+            ) : currentPage ? (
+              pageBlocks.length ? (
+                <>
+                  <RenderBlockTree
+                    blocks={renderedRegions.header}
+                    charts={data?.available_charts || []}
+                    dashboards={data?.dashboards || []}
+                    page={currentPage}
+                    navigation={data?.navigation}
+                    highlights={data?.indicator_highlights || []}
+                    onNavigate={navigateToPath}
+                    onOpenDashboard={navigateToPublicDashboard}
+                  />
+                  <RenderBlockTree
+                    blocks={renderedRegions.hero}
+                    charts={data?.available_charts || []}
+                    dashboards={data?.dashboards || []}
+                    page={currentPage}
+                    navigation={data?.navigation}
+                    highlights={data?.indicator_highlights || []}
+                    onNavigate={navigateToPath}
+                    onOpenDashboard={navigateToPublicDashboard}
+                  />
+                  {renderedRegions.content.length ||
+                  renderedRegions.sidebar.length ? (
+                    <div
+                      className="cms-template-content-shell"
+                      style={
+                        hasSidebar
+                          ? {
+                              display: 'grid',
+                              gridTemplateColumns: `minmax(0, 1fr) ${sidebarWidth}`,
+                              gap: contentShellGap,
+                              alignItems: 'start',
+                            }
+                          : undefined
+                      }
+                    >
+                      <div>
                         <RenderBlockTree
-                          blocks={renderedRegions.sidebar}
+                          blocks={renderedRegions.content}
                           charts={data?.available_charts || []}
                           dashboards={data?.dashboards || []}
                           page={currentPage}
@@ -1393,52 +1402,65 @@ export default function PublicLandingPage() {
                           onNavigate={navigateToPath}
                           onOpenDashboard={navigateToPublicDashboard}
                         />
-                      </aside>
-                    ) : null}
-                  </div>
-                ) : null}
-                <RenderBlockTree
-                  blocks={renderedRegions.cta}
-                  charts={data?.available_charts || []}
-                  dashboards={data?.dashboards || []}
-                  page={currentPage}
-                  navigation={data?.navigation}
-                  highlights={data?.indicator_highlights || []}
-                  onNavigate={navigateToPath}
-                  onOpenDashboard={navigateToPublicDashboard}
-                />
-                <RenderBlockTree
-                  blocks={renderedRegions.footer}
-                  charts={data?.available_charts || []}
-                  dashboards={data?.dashboards || []}
-                  page={currentPage}
-                  navigation={data?.navigation}
-                  highlights={data?.indicator_highlights || []}
-                  onNavigate={navigateToPath}
-                  onOpenDashboard={navigateToPublicDashboard}
-                />
-              </>
+                      </div>
+                      {hasSidebar ? (
+                        <aside>
+                          <RenderBlockTree
+                            blocks={renderedRegions.sidebar}
+                            charts={data?.available_charts || []}
+                            dashboards={data?.dashboards || []}
+                            page={currentPage}
+                            navigation={data?.navigation}
+                            highlights={data?.indicator_highlights || []}
+                            onNavigate={navigateToPath}
+                            onOpenDashboard={navigateToPublicDashboard}
+                          />
+                        </aside>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <RenderBlockTree
+                    blocks={renderedRegions.cta}
+                    charts={data?.available_charts || []}
+                    dashboards={data?.dashboards || []}
+                    page={currentPage}
+                    navigation={data?.navigation}
+                    highlights={data?.indicator_highlights || []}
+                    onNavigate={navigateToPath}
+                    onOpenDashboard={navigateToPublicDashboard}
+                  />
+                  <RenderBlockTree
+                    blocks={renderedRegions.footer}
+                    charts={data?.available_charts || []}
+                    dashboards={data?.dashboards || []}
+                    page={currentPage}
+                    navigation={data?.navigation}
+                    highlights={data?.indicator_highlights || []}
+                    onNavigate={navigateToPath}
+                    onOpenDashboard={navigateToPublicDashboard}
+                  />
+                </>
+              ) : (
+                <SurfaceCard>
+                  <CardTitle>{currentPage.title}</CardTitle>
+                  <CardBody>
+                    {currentPage.description ||
+                      data?.portal_layout.config.emptyPageMessage ||
+                      t('This page does not have any visible blocks yet.')}
+                  </CardBody>
+                </SurfaceCard>
+              )
             ) : (
               <SurfaceCard>
-                <CardTitle>{currentPage.title}</CardTitle>
-                <CardBody>
-                  {currentPage.description ||
-                    data?.portal_layout.config.emptyPageMessage ||
-                    t('This page does not have any visible blocks yet.')}
-                </CardBody>
+                <Empty
+                  description={
+                    data?.portal_layout.config.noPublicPageMessage ||
+                    t('No public page is available.')
+                  }
+                />
               </SurfaceCard>
-            )
-          ) : (
-            <SurfaceCard>
-              <Empty
-                description={
-                  data?.portal_layout.config.noPublicPageMessage ||
-                  t('No public page is available.')
-                }
-              />
-            </SurfaceCard>
-          )}
-        </Main>
+            )}
+          </Main>
         )}
       </PageContentShell>
 

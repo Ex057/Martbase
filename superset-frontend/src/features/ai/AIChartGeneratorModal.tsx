@@ -739,7 +739,9 @@ export default function AIChartGeneratorModal({ show, onHide, onChartsCreated }:
 
             <OptionsRow>
               <DatasetSelectorWrapper>
-                <span className="dataset-label">{t('Dataset (optional)')}</span>
+                <span className="dataset-label">
+                  {t('Dataset (recommended)')}
+                </span>
                 <AsyncSelect
                   ariaLabel={t('Dataset')}
                   name="ai-chart-dataset"
@@ -755,7 +757,9 @@ export default function AIChartGeneratorModal({ show, onHide, onChartsCreated }:
                   disabled={!aiEnabled}
                 />
                 <span className="dataset-hint">
-                  {t('Leave empty to let AI automatically select the best dataset(s)')}
+                  {t(
+                    'Select the dataset you want the charts to use. Auto-detect is available, but selecting a dataset gives more reliable results.',
+                  )}
                 </span>
               </DatasetSelectorWrapper>
 
@@ -775,12 +779,16 @@ export default function AIChartGeneratorModal({ show, onHide, onChartsCreated }:
               </OptionGroup>
             </OptionsRow>
 
-            {!selectedDataset && martDatasetCount != null && martDatasetCount > 0 && (
-              <AutoDetectBanner>
-                <span className="count">{martDatasetCount}</span>
-                {t(' MART dataset(s) available. AI will automatically select the best dataset(s).')}
-              </AutoDetectBanner>
-            )}
+            {!selectedDataset &&
+              martDatasetCount != null &&
+              martDatasetCount > 0 && (
+                <AutoDetectBanner>
+                  <span className="count">{martDatasetCount}</span>
+                  {t(
+                    ' MART dataset(s) available. AI will automatically select from non-empty datasets, but choosing one above is recommended.',
+                  )}
+                </AutoDetectBanner>
+              )}
 
             {martDatasetCount === 0 && (
               <Alert

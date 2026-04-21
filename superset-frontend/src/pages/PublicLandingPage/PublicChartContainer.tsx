@@ -163,9 +163,11 @@ export function buildPublicChartEmbedUrl(
   {
     legendPreset = 'default',
     accessMode = 'public',
+    formDataOverrides = {},
   }: {
     legendPreset?: ChartLegendPreset;
     accessMode?: ChartEmbedAccessMode;
+    formDataOverrides?: Record<string, unknown>;
   } = {},
 ) {
   if (!url) {
@@ -174,7 +176,8 @@ export function buildPublicChartEmbedUrl(
   const urlObject = new URL(url, getBaseOrigin());
   urlObject.pathname = normalizeChartPath(urlObject.pathname, accessMode);
   const legendOverrides = buildLegendOverrides(legendPreset);
-  if (!Object.keys(legendOverrides).length) {
+  const hasFormDataOverrides = Object.keys(formDataOverrides).length > 0;
+  if (!Object.keys(legendOverrides).length && !hasFormDataOverrides) {
     return serializeRelativeUrl(urlObject);
   }
 
@@ -199,6 +202,7 @@ export function buildPublicChartEmbedUrl(
     JSON.stringify({
       ...formData,
       ...legendOverrides,
+      ...formDataOverrides,
     }),
   );
   return serializeRelativeUrl(urlObject);
@@ -274,11 +278,20 @@ function buildEmbeddedChartCss(
         .mapboxgl-map,
         .mapboxgl-canvas-container,
         .mapboxgl-canvas,
-        canvas,
-        svg {
+        canvas {
           width: 100% !important;
           height: 100% !important;
           max-width: 100% !important;
+        }
+        .leaflet-container svg,
+        .leaflet-overlay-pane svg {
+          width: auto !important;
+          height: auto !important;
+          max-width: none !important;
+        }
+        .dhis2-map-quick-filters,
+        .dhis2-map-quick-filters-panel {
+          display: none !important;
         }
       `
         : ''
@@ -321,6 +334,7 @@ type PublicChartContainerProps = {
   legendPreset?: ChartLegendPreset;
   vizType?: string;
   accessMode?: ChartEmbedAccessMode;
+  formDataOverrides?: Record<string, unknown>;
 };
 
 export default function PublicChartContainer({
@@ -332,12 +346,18 @@ export default function PublicChartContainer({
   legendPreset = 'default',
   vizType,
   accessMode = 'public',
+  formDataOverrides,
 }: PublicChartContainerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const resolvedUrl = useMemo(
-    () => buildPublicChartEmbedUrl(url, { legendPreset, accessMode }),
-    [accessMode, legendPreset, url],
+    () =>
+      buildPublicChartEmbedUrl(url, {
+        legendPreset,
+        accessMode,
+        formDataOverrides,
+      }),
+    [accessMode, formDataOverrides, legendPreset, url],
   );
   const resolvedHeight = resolveFrameHeight(height, surfacePreset);
 

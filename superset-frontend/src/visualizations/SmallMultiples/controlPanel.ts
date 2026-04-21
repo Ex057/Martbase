@@ -33,6 +33,39 @@ import { getDatasourceBoundaryLevels } from '../DHIS2Map/boundaryLevels';
 const categoricalSchemeRegistry = getCategoricalSchemeRegistry();
 const sequentialSchemeRegistry = getSequentialSchemeRegistry();
 
+function parseColumnExtra(extra: unknown): Record<string, any> | undefined {
+  if (!extra) {
+    return undefined;
+  }
+  if (typeof extra === 'string') {
+    try {
+      return JSON.parse(extra);
+    } catch {
+      return undefined;
+    }
+  }
+  if (typeof extra === 'object') {
+    return extra as Record<string, any>;
+  }
+  return undefined;
+}
+
+function getDhis2SourceDatabaseId(datasource: any): number | undefined {
+  const extra = parseColumnExtra(datasource?.extra);
+  const sourceDatabaseId = Number(
+    extra?.dhis2_source_database_id ??
+      extra?.source_database_id ??
+      extra?.dhis2SourceDatabaseId ??
+      datasource?.database?.id ??
+      datasource?.database_id ??
+      NaN,
+  );
+  if (Number.isFinite(sourceDatabaseId) && sourceDatabaseId > 0) {
+    return sourceDatabaseId;
+  }
+  return undefined;
+}
+
 const config: ControlPanelConfig = {
   controlPanelSections: [
     {
@@ -64,6 +97,18 @@ const config: ControlPanelConfig = {
                 return { choices };
               },
               renderTrigger: false,
+            },
+          },
+        ],
+        [
+          {
+            name: 'dhis2_source_database_id',
+            config: {
+              type: 'HiddenControl',
+              hidden: true,
+              mapStateToProps: (state: any) => ({
+                value: getDhis2SourceDatabaseId(state.datasource),
+              }),
             },
           },
         ],
@@ -228,6 +273,63 @@ const config: ControlPanelConfig = {
               max: 800,
               step: 10,
               renderTrigger: true,
+            },
+          },
+        ],
+        [
+          {
+            name: 'show_panel_icon',
+            config: {
+              type: 'CheckboxControl',
+              label: t('Show Panel Icon'),
+              description: t(
+                'Show an image URL or short icon text in each panel header.',
+              ),
+              default: false,
+              renderTrigger: true,
+            },
+          },
+          {
+            name: 'panel_icon_size',
+            config: {
+              type: 'SliderControl',
+              label: t('Icon Size'),
+              default: 28,
+              min: 16,
+              max: 64,
+              step: 2,
+              renderTrigger: true,
+              visibility: ({ controls }: any) =>
+                Boolean(controls?.show_panel_icon?.value),
+            },
+          },
+        ],
+        [
+          {
+            name: 'panel_icon_url',
+            config: {
+              type: 'TextControl',
+              label: t('Panel Icon Image URL'),
+              description: t(
+                'Optional image used as the icon on every small multiple panel.',
+              ),
+              renderTrigger: true,
+              visibility: ({ controls }: any) =>
+                Boolean(controls?.show_panel_icon?.value),
+            },
+          },
+          {
+            name: 'panel_icon_text',
+            config: {
+              type: 'TextControl',
+              label: t('Panel Icon Text'),
+              description: t(
+                'Fallback short text or symbol when no icon image URL is set.',
+              ),
+              default: '',
+              renderTrigger: true,
+              visibility: ({ controls }: any) =>
+                Boolean(controls?.show_panel_icon?.value),
             },
           },
         ],

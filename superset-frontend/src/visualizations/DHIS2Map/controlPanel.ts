@@ -79,7 +79,6 @@ function getLegendSetsCacheKey(databaseId?: number | string): string | null {
 export function readCachedLegendSetEnvelope(
   databaseId?: number | string,
 ): CachedLegendSetEnvelope | null {
-
   if (typeof window === 'undefined') {
     return null;
   }
@@ -157,7 +156,9 @@ function getStagedLegendChoices(
   legendSets: StagedLegendSet[] = [],
 ) {
   const seenValues = new Set<string>();
-  const choices: Array<[string, string]> = [['__metric__', t('Selected metric legend')]];
+  const choices: Array<[string, string]> = [
+    ['__metric__', t('Selected metric legend')],
+  ];
 
   const pushChoice = (value: string | null | undefined, label: string) => {
     if (!value || !label || seenValues.has(value)) {
@@ -174,7 +175,10 @@ function getStagedLegendChoices(
     }
     const extra = parseColumnExtra(column.extra);
     const legendDefinition = extra?.dhis2_legend ?? extra?.dhis2Legend;
-    if (!Array.isArray(legendDefinition?.items) || !legendDefinition.items.length) {
+    if (
+      !Array.isArray(legendDefinition?.items) ||
+      !legendDefinition.items.length
+    ) {
       return;
     }
 
@@ -187,7 +191,10 @@ function getStagedLegendChoices(
 
   legendSets.forEach(legendSet => {
     const legendDefinition = legendSet.legendDefinition;
-    if (!Array.isArray(legendDefinition?.items) || !legendDefinition.items.length) {
+    if (
+      !Array.isArray(legendDefinition?.items) ||
+      !legendDefinition.items.length
+    ) {
       return;
     }
     const selectionValue = getLegendSetSelectionValue(legendSet);
@@ -198,10 +205,7 @@ function getStagedLegendChoices(
         legendSet.id ||
         '',
     ).trim();
-    pushChoice(
-      selectionValue,
-      `${legendLabel} (${t('DHIS2 legend set')})`,
-    );
+    pushChoice(selectionValue, `${legendLabel} (${t('DHIS2 legend set')})`);
   });
 
   return choices;
@@ -224,8 +228,8 @@ const config: ControlPanelConfig = {
               hidden: true,
               mapStateToProps: (state: any) => ({
                 value: String(
-                  parseColumnExtra(state.datasource?.extra)?.dhis2_staged_local ===
-                    true,
+                  parseColumnExtra(state.datasource?.extra)
+                    ?.dhis2_staged_local === true,
                 ),
               }),
             },
@@ -280,13 +284,18 @@ const config: ControlPanelConfig = {
             config: {
               type: 'SelectControl',
               label: t('Organisation Unit Column'),
-              description: t('Column containing org unit identifiers (shows only columns with OU tags)'),
+              description: t(
+                'Column containing org unit identifiers (shows only columns with OU tags)',
+              ),
               mapStateToProps: (state: any) => ({
                 choices:
                   state.datasource?.columns
                     ?.filter((col: any) => {
                       const extra = parseColumnExtra(col.extra);
-                      return extra?.dhis2_is_ou_hierarchy === true || extra?.dhis2IsOuHierarchy === true;
+                      return (
+                        extra?.dhis2_is_ou_hierarchy === true ||
+                        extra?.dhis2IsOuHierarchy === true
+                      );
                     })
                     .map((col: any) => [
                       col.column_name,
@@ -344,7 +353,7 @@ const config: ControlPanelConfig = {
               default: true,
               description: t(
                 'Filter out rows where the selected OrgUnit hierarchy column has no value. ' +
-                'This prevents higher-level aggregation rows from appearing at the wrong map grain.',
+                  'This prevents higher-level aggregation rows from appearing at the wrong map grain.',
               ),
             },
           },
@@ -561,9 +570,7 @@ const config: ControlPanelConfig = {
             config: {
               type: 'ColorPickerControl',
               label: t('Level 5 Border Color'),
-              description: t(
-                'Border color for level 5 boundaries',
-              ),
+              description: t('Border color for level 5 boundaries'),
               default: { r: 255, g: 193, b: 7, a: 1 },
               renderTrigger: true,
               visibility: ({ form_data }: any) => {
@@ -712,7 +719,9 @@ const config: ControlPanelConfig = {
               clearable: false,
               renderTrigger: true,
               mapStateToProps: (state: any) => {
-                const datasourceColumns = Array.isArray(state.datasource?.columns)
+                const datasourceColumns = Array.isArray(
+                  state.datasource?.columns,
+                )
                   ? state.datasource.columns
                   : [];
                 const databaseId = getDhis2SourceDatabaseId(state.datasource);
@@ -938,7 +947,9 @@ const config: ControlPanelConfig = {
             config: {
               type: 'ColorPickerControl',
               label: t('Unselected Area Fill'),
-              description: t('Fill color for boundaries outside the selected area'),
+              description: t(
+                'Fill color for boundaries outside the selected area',
+              ),
               default: { r: 241, g: 245, b: 249, a: 1 },
               renderTrigger: true,
               visibility: ({ controls }: any) =>
@@ -951,7 +962,9 @@ const config: ControlPanelConfig = {
             config: {
               type: 'SliderControl',
               label: t('Unselected Fill Opacity'),
-              description: t('Opacity for boundaries outside the selected area'),
+              description: t(
+                'Opacity for boundaries outside the selected area',
+              ),
               default: 0.45,
               min: 0,
               max: 1,
@@ -969,7 +982,9 @@ const config: ControlPanelConfig = {
             config: {
               type: 'ColorPickerControl',
               label: t('Unselected Area Border'),
-              description: t('Border color for boundaries outside the selected area'),
+              description: t(
+                'Border color for boundaries outside the selected area',
+              ),
               default: { r: 148, g: 163, b: 184, a: 1 },
               renderTrigger: true,
               visibility: ({ controls }: any) =>
@@ -982,7 +997,9 @@ const config: ControlPanelConfig = {
             config: {
               type: 'SliderControl',
               label: t('Unselected Border Width'),
-              description: t('Border width for boundaries outside the selected area'),
+              description: t(
+                'Border width for boundaries outside the selected area',
+              ),
               default: 0.75,
               min: 0,
               max: 4,
@@ -1017,7 +1034,7 @@ const config: ControlPanelConfig = {
             config: {
               type: 'SelectControl',
               label: t('Label Content'),
-              default: 'name',
+              default: 'name_value',
               choices: [
                 ['name', t('Name Only')],
                 ['value', t('Value Only')],

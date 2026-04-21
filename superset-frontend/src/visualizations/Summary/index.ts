@@ -32,6 +32,7 @@ export default class SummaryChartPlugin extends ChartPlugin {
         ),
         thumbnail,
         tags: [
+          t('Health'),
           t('KPI'),
           t('Health'),
           t('Summary'),

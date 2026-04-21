@@ -53,7 +53,10 @@ function getSmallMultiplesRowLimit(fd: Record<string, any>) {
 }
 
 function applySmallMultiplesRowLimit(query: Record<string, any>) {
-  query.row_limit = getSmallMultiplesRowLimit(query);
+  return {
+    ...query,
+    row_limit: getSmallMultiplesRowLimit(query),
+  };
 }
 
 function resolveSplitColumn(fd: Record<string, any>): string | null {
@@ -117,7 +120,7 @@ export default function buildQuery(formData: QueryFormData) {
     extras: getSmallMultiplesExtras(originalFd),
     row_limit: safeRowLimit,
     rowLimit: safeRowLimit,
-  } as QueryFormData;
+  } as unknown as QueryFormData;
   const fd = normalizedFormData as Record<string, any>;
 
   return buildQueryContext(normalizedFormData, baseQueryObject => {
@@ -159,8 +162,8 @@ export default function buildQuery(formData: QueryFormData) {
     if (uniqueColumns.length > 0) {
       query.columns = uniqueColumns;
     }
-    applySmallMultiplesRowLimit(query);
+    const queryWithRowLimit = applySmallMultiplesRowLimit(query);
 
-    return [query];
+    return [queryWithRowLimit];
   });
 }

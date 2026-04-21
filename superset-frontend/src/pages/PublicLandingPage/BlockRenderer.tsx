@@ -41,8 +41,8 @@ import type {
 const Section = styled.section`
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  margin-bottom: 28px;
+  gap: 12px;
+  margin-bottom: 18px;
 `;
 
 const SectionHeader = styled.div`
@@ -81,7 +81,7 @@ const Grid = styled.div<{ $columns?: number }>`
     ${({ $columns = 1 }) => $columns},
     minmax(0, 1fr)
   );
-  gap: 18px;
+  gap: 12px;
 
   @media (max-width: 960px) {
     grid-template-columns: 1fr;
@@ -91,7 +91,7 @@ const Grid = styled.div<{ $columns?: number }>`
 const BlockGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 18px;
+  gap: 12px;
 
   @media (max-width: 960px) {
     grid-template-columns: 1fr;
@@ -726,6 +726,63 @@ const CalloutCard = styled.div<{ $tone?: string }>`
             : '#1d4ed8'};
 `;
 
+function cssBackgroundImage(value?: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (/^(url\(|linear-gradient\(|radial-gradient\()/i.test(trimmed)) {
+    return trimmed;
+  }
+  return `url("${trimmed.replace(/"/g, '\\"')}")`;
+}
+
+function normalizeOpacity(value?: unknown): number | undefined {
+  if (value === null || value === undefined || value === '') {
+    return undefined;
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return undefined;
+  }
+  return Math.max(0, Math.min(1, numeric));
+}
+
+function applyBackgroundImageOpacity(
+  backgroundImage?: string,
+  opacity?: unknown,
+): string | undefined {
+  if (!backgroundImage) {
+    return undefined;
+  }
+  const normalizedOpacity = normalizeOpacity(opacity);
+  if (normalizedOpacity === undefined || normalizedOpacity >= 0.99) {
+    return backgroundImage;
+  }
+  const overlayAlpha = Math.max(0, Math.min(1, 1 - normalizedOpacity));
+  return `linear-gradient(rgba(255, 255, 255, ${overlayAlpha}), rgba(255, 255, 255, ${overlayAlpha})), ${backgroundImage}`;
+}
+
+function backgroundAssetUrl(
+  block: PortalPageBlock,
+  mediaAssets: PortalMediaAsset[],
+): string | undefined {
+  const assetId =
+    block.settings?.background_asset_ref?.id ||
+    block.settings?.backgroundAssetRef?.id ||
+    block.settings?.background_asset_id ||
+    block.settings?.backgroundAssetId;
+  if (!assetId) {
+    return undefined;
+  }
+  return (
+    mediaAssets.find(asset => asset.id === assetId)?.download_url || undefined
+  );
+}
+
 function normalizeBlockInlineStyles(
   styles?: Record<string, any>,
 ): CSSProperties {
@@ -738,7 +795,8 @@ function normalizeBlockInlineStyles(
     ) {
       return;
     }
-    (nextStyles as Record<string, any>)[key] = value;
+    (nextStyles as Record<string, any>)[key] =
+      key === 'backgroundImage' ? cssBackgroundImage(value) : value;
   });
   if (
     (nextStyles.borderColor || nextStyles.borderWidth) &&
@@ -752,11 +810,42 @@ function normalizeBlockInlineStyles(
   return nextStyles;
 }
 
-function blockStyle(block: PortalPageBlock): CSSProperties {
-  return {
+function blockStyle(
+  block: PortalPageBlock,
+  mediaAssets: PortalMediaAsset[] = [],
+  page?: PortalPage | null,
+): CSSProperties {
+  const normalizedStyles = normalizeBlockInlineStyles(block.styles);
+  const assetBackgroundImage = cssBackgroundImage(
+    backgroundAssetUrl(block, mediaAssets),
+  );
+  const settingsBackgroundImage = cssBackgroundImage(
+    block.settings?.backgroundImageUrl || block.settings?.background_image_url,
+  );
+  const pageFeaturedBackgroundImage = block.settings?.usePageFeaturedImage
+    ? cssBackgroundImage(page?.featured_image_url)
+    : undefined;
+  const backgroundImage =
+    normalizedStyles.backgroundImage ||
+    assetBackgroundImage ||
+    settingsBackgroundImage ||
+    pageFeaturedBackgroundImage;
+  const backgroundImageWithOpacity = applyBackgroundImageOpacity(
+    backgroundImage,
+    block.settings?.backgroundImageOpacity ??
+      block.settings?.background_image_opacity,
+  );
+  const nextStyle: CSSProperties = {
     ...((block.rendering?.inline_style || {}) as CSSProperties),
-    ...normalizeBlockInlineStyles(block.styles),
+    ...normalizedStyles,
+    backgroundImage: backgroundImageWithOpacity,
   };
+  if (backgroundImageWithOpacity) {
+    nextStyle.backgroundSize = nextStyle.backgroundSize || 'cover';
+    nextStyle.backgroundPosition = nextStyle.backgroundPosition || 'center';
+    nextStyle.backgroundRepeat = nextStyle.backgroundRepeat || 'no-repeat';
+  }
+  return nextStyle;
 }
 
 function blockClassName(block: PortalPageBlock) {
@@ -1659,7 +1748,7 @@ export function RenderBlockTree({
     if (block.status === 'hidden') {
       return null;
     }
-    const style = blockStyle(block);
+    const style = blockStyle(block, mediaAssets, page);
     const className = blockClassName(block);
     const title = block.content?.title;
     const subtitle = block.content?.subtitle;
@@ -2446,12 +2535,7 @@ export function RenderBlockTree({
           block.settings?.legend_preset === 'hidden'
             ? block.settings?.legend_preset
             : 'default';
-        const legendPreset =
-          explicitLegendPreset !== 'default'
-            ? explicitLegendPreset
-            : chartIsMapLike
-              ? 'horizontal_bottom'
-              : 'default';
+        const legendPreset = explicitLegendPreset;
         const borderlessContainer = surfacePreset !== 'default';
         const headerTitleText = meaningfulTextValue(title, titleHtml);
         const headerCaptionText = meaningfulTextValue(
@@ -2540,7 +2624,6 @@ export function RenderBlockTree({
                   />
                 </div>
                 {onOpenDashboard ? (
-
                   <Button
                     type="link"
                     style={{ paddingInline: 0 }}

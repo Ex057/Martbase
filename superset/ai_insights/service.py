@@ -21,6 +21,7 @@ from superset.ai_insights.config import (
 from superset.ai_insights.providers import AIProviderError, ProviderRegistry, StreamChunk
 from superset.ai_insights.sql import (
     AISQLValidationError,
+    _resolve_dataset_table_ref,
     build_mart_schema_context,
     ensure_mart_only_sql,
     is_mart_table,
@@ -5945,6 +5946,204 @@ def _build_chart_configs_python(
     return charts[:num_charts]
 
 
+_ALT_VIZ_LABELS: dict[str, str] = {
+    "big_number_total": "Big Number",
+    "big_number": "Big Number with Trend",
+    "comparison_kpi": "Comparison KPI Card",
+    "summary": "Summary",
+    "marquee_kpi": "Marquee KPI",
+    "slideshow": "Slideshow",
+    "echarts_timeseries_bar": "Bar Chart",
+    "echarts_timeseries_line": "Line Chart",
+    "echarts_timeseries": "Time Series",
+    "echarts_area": "Area Chart",
+    "mixed_timeseries": "Mixed Time Series",
+    "pie": "Pie Chart",
+    "treemap_v2": "Treemap",
+    "table": "Table",
+    "pivot_table_v2": "Pivot Table",
+    "dhis2_map": "DHIS2 Map",
+    "small_multiples": "Small Multiples",
+    "ranked_variance": "Ranked Variance",
+    "control_chart": "Control Chart",
+    "heatmap_v2": "Heatmap",
+    "violin_distribution": "Violin Distribution",
+    "stock_status": "Stock Status / Pipeline",
+    "cohort_cascade": "Cohort Cascade",
+    "age_sex_pyramid": "Age-Sex Pyramid",
+}
+
+
+def _alt_label(viz_type: str) -> str:
+    return _ALT_VIZ_LABELS.get(viz_type, viz_type.replace("_", " ").title())
+
+
+def _default_alt_viz_types(
+    viz_type: str,
+    params: dict[str, Any],
+) -> list[dict[str, str]]:
+    """Return useful fallback alternatives for the AI chart review step."""
+    groupby = params.get("groupby") or params.get("columns") or []
+    if not isinstance(groupby, list):
+        groupby = [groupby]
+    groupby_text = " ".join(str(v).lower() for v in groupby)
+    has_ou = any(
+        token in groupby_text
+        for token in (
+            "org",
+            "organisation",
+            "organization",
+            "ou",
+            "district",
+            "region",
+            "facility",
+        )
+    )
+    has_time = bool(params.get("x_axis") or params.get("granularity_sqla")) or any(
+        "period" in str(v).lower()
+        or "date" in str(v).lower()
+        or "month" in str(v).lower()
+        for v in groupby
+    )
+
+    candidates: list[tuple[str, str]] = []
+    if viz_type in {
+        "big_number_total",
+        "big_number",
+        "summary",
+        "comparison_kpi",
+        "marquee_kpi",
+    }:
+        candidates.extend(
+            [
+                ("summary", "Best for a compact multi-indicator overview."),
+                (
+                    "comparison_kpi",
+                    "Better when comparing against a target or previous period.",
+                ),
+                ("marquee_kpi", "Good for headline indicators on public dashboards."),
+                ("big_number_total", "Simple single-value KPI display."),
+            ]
+        )
+    if (
+        viz_type in {"echarts_timeseries_bar", "pie", "treemap_v2", "ranked_variance"}
+        or groupby
+    ):
+        candidates.extend(
+            [
+                (
+                    "echarts_timeseries_bar",
+                    "Best for comparing categories or organisation units.",
+                ),
+                (
+                    "ranked_variance",
+                    "Useful for ranking entities against targets or expected performance.",
+                ),
+                ("pie", "Useful for proportional share when there are few categories."),
+                ("table", "Best when users need exact values."),
+            ]
+        )
+    if viz_type in {
+        "echarts_timeseries_line",
+        "echarts_timeseries",
+        "echarts_area",
+        "mixed_timeseries",
+    } or has_time:
+        candidates.extend(
+            [
+                ("echarts_timeseries_line", "Best for showing trends over time."),
+                ("echarts_area", "Shows trend and volume over time."),
+                (
+                    "small_multiples",
+                    "Good for comparing the same trend across many groups.",
+                ),
+                (
+                    "control_chart",
+                    "Useful for detecting unusual changes or epidemic signals.",
+                ),
+            ]
+        )
+    if viz_type in {"dhis2_map", "vital_maps"} or has_ou:
+        candidates.extend(
+            [
+                (
+                    "dhis2_map",
+                    "Best for DHIS2 organisation unit boundaries and drill-down.",
+                ),
+                (
+                    "small_multiples",
+                    "Good for comparing many organisation units side by side.",
+                ),
+                ("ranked_variance", "Ranks organisation units by performance."),
+                ("table", "Shows the same data in a precise tabular view."),
+            ]
+        )
+    if viz_type in {"table", "pivot_table_v2", "heatmap_v2"}:
+        candidates.extend(
+            [
+                ("table", "Best for detailed row-level review."),
+                ("pivot_table_v2", "Best for grouped cross-tabulation."),
+                ("heatmap_v2", "Shows patterns across two dimensions."),
+                ("summary", "Summarizes the important indicators more compactly."),
+            ]
+        )
+
+    candidates.insert(0, (viz_type, "Recommended chart type."))
+    seen: set[str] = set()
+    result: list[dict[str, str]] = []
+    for candidate, reason in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        result.append({
+            "viz_type": candidate,
+            "label": _alt_label(candidate),
+            "reason": reason,
+        })
+        if len(result) >= 5:
+            break
+    return result
+
+
+def _dataset_prompt_score(dataset_context: dict[str, Any], prompt: str) -> int:
+    """Score datasets so auto-detect prefers relevant, non-empty MART datasets."""
+    prompt_terms = {
+        term
+        for term in re.findall(r"[a-zA-Z0-9_]{3,}", prompt.lower())
+        if term
+        not in {
+            "chart",
+            "charts",
+            "show",
+            "create",
+            "with",
+            "and",
+            "the",
+            "for",
+            "data",
+        }
+    }
+    searchable = " ".join(
+        [
+            str(dataset_context.get("table_name") or ""),
+            str(dataset_context.get("description") or ""),
+            " ".join(
+                str(c.get("name") or "")
+                for c in dataset_context.get("columns") or []
+            ),
+        ]
+    ).lower()
+    score = sum(3 for term in prompt_terms if term in searchable)
+    row_count = dataset_context.get("row_count")
+    if isinstance(row_count, int) and row_count > 0:
+        score += 20
+    if dataset_context.get("sample_rows"):
+        score += 10
+    if str(dataset_context.get("dataset_role") or "").upper() == "MART":
+        score += 3
+    return score
+
+
 class AIInsightService:
     def __init__(self) -> None:
         self.registry = ProviderRegistry()
@@ -6551,7 +6750,14 @@ class AIInsightService:
             security_manager.raise_for_access(datasource=dataset)
             if not is_mart_table(dataset):
                 raise AIInsightError("AI chart generation requires a MART dataset", 400)
-            datasets_context.append(self._build_dataset_context(dataset))
+            dataset_context = self._build_dataset_context(dataset)
+            if dataset_context.get("row_count") == 0:
+                raise AIInsightError(
+                    "The selected dataset has no rows. Sync or refresh the dataset "
+                    "before using AI chart generation.",
+                    400,
+                )
+            datasets_context.append(dataset_context)
             valid_dataset_ids.add(dataset_id)
         else:
             # Auto-discover all MART datasets
@@ -6561,10 +6767,45 @@ class AIInsightService:
                 raise AIInsightError(
                     "No MART datasets found. Create MART datasets first.", 404
                 )
-            # Limit to 15 datasets for context window
-            for ds in mart_datasets[:15]:
-                datasets_context.append(self._build_dataset_context(ds))
-                valid_dataset_ids.add(ds.id)
+            scored_contexts: list[tuple[int, dict[str, Any]]] = []
+            for ds in mart_datasets:
+                try:
+                    security_manager.raise_for_access(datasource=ds)
+                    context = self._build_dataset_context(ds)
+                except Exception:  # pylint: disable=broad-except
+                    logger.debug(
+                        "Skipping inaccessible MART dataset id=%s during AI auto-detect",
+                        getattr(ds, "id", None),
+                        exc_info=True,
+                    )
+                    continue
+                if context.get("row_count") == 0:
+                    logger.info(
+                        "Skipping empty MART dataset id=%s during AI chart auto-detect",
+                        getattr(ds, "id", None),
+                    )
+                    continue
+                scored_contexts.append((_dataset_prompt_score(context, prompt), context))
+
+            if not scored_contexts:
+                raise AIInsightError(
+                    "No non-empty MART datasets found. Sync or refresh a MART "
+                    "dataset before using AI chart generation.",
+                    404,
+                )
+
+            # Limit to the best 15 datasets for the model context window.
+            for _, context in sorted(
+                scored_contexts,
+                key=lambda item: (
+                    item[0],
+                    int(item[1].get("row_count") or 0),
+                    str(item[1].get("table_name") or ""),
+                ),
+                reverse=True,
+            )[:15]:
+                datasets_context.append(context)
+                valid_dataset_ids.add(int(context["dataset_id"]))
 
         if not datasets_context:
             raise AIInsightError("No datasets available for chart generation", 400)
@@ -6774,9 +7015,16 @@ class AIInsightService:
             if not primary_in_alts:
                 alt_viz_types.insert(0, {
                     "viz_type": viz,
-                    "label": viz.replace("_", " ").title(),
+                    "label": _alt_label(viz),
                     "reason": "Recommended by AI",
                 })
+            if len(alt_viz_types) < 4:
+                for fallback_alt in _default_alt_viz_types(viz, params):
+                    if any(a["viz_type"] == fallback_alt["viz_type"] for a in alt_viz_types):
+                        continue
+                    alt_viz_types.append(fallback_alt)
+                    if len(alt_viz_types) >= 5:
+                        break
 
             validated.append({
                 "slice_name": name,
@@ -6805,6 +7053,7 @@ class AIInsightService:
     @staticmethod
     def _build_dataset_context(dataset: Any) -> dict[str, Any]:
         """Build schema context for a single MART dataset."""
+        resolved_schema, resolved_table = _resolve_dataset_table_ref(dataset)
         columns_info = []
         for col in (dataset.columns or [])[:30]:
             col_info: dict[str, Any] = {
@@ -6824,24 +7073,52 @@ class AIInsightService:
             })
 
         sample_rows: list[dict[str, Any]] = []
+        row_count: int | None = None
         try:
             df = dataset.database.get_df(
-                f"SELECT * FROM {dataset.table_name} LIMIT 5",
-                schema=dataset.schema,
+                f"SELECT * FROM {resolved_table} LIMIT 5",
+                schema=resolved_schema,
             )
             sample_rows = df.to_dict(orient="records")[:5]
         except Exception:  # pylint: disable=broad-except
-            pass
+            logger.debug(
+                "Unable to sample MART dataset id=%s table=%s schema=%s",
+                getattr(dataset, "id", None),
+                resolved_table,
+                resolved_schema,
+                exc_info=True,
+            )
+        try:
+            count_df = dataset.database.get_df(
+                f"SELECT COUNT(*) AS row_count FROM {resolved_table}",
+                schema=resolved_schema,
+            )
+            count_rows = count_df.to_dict(orient="records")
+            if count_rows:
+                row_count = int(count_rows[0].get("row_count") or 0)
+        except Exception:  # pylint: disable=broad-except
+            if sample_rows:
+                row_count = len(sample_rows)
+            logger.debug(
+                "Unable to count MART dataset id=%s table=%s schema=%s",
+                getattr(dataset, "id", None),
+                resolved_table,
+                resolved_schema,
+                exc_info=True,
+            )
 
         return {
             "dataset_id": dataset.id,
             "table_name": dataset.table_name,
-            "schema": dataset.schema,
+            "resolved_table": resolved_table,
+            "schema": resolved_schema,
             "description": (dataset.description or "")[:200],
             "database_backend": dataset.database.backend,
+            "dataset_role": getattr(dataset, "dataset_role", None),
             "columns": columns_info,
             "metrics": metrics_info,
             "sample_rows": sample_rows,
+            "row_count": row_count,
         }
 
     def save_generated_charts(

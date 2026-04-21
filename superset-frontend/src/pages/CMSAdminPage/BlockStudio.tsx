@@ -444,6 +444,19 @@ const OVERFLOW_OPTIONS = [
   { value: 'scroll', label: t('Scroll') },
 ] as const;
 
+const BACKGROUND_SIZE_OPTIONS = [
+  { value: 'cover', label: t('Cover') },
+  { value: 'contain', label: t('Contain') },
+  { value: 'auto', label: t('Auto') },
+] as const;
+
+const BACKGROUND_REPEAT_OPTIONS = [
+  { value: 'no-repeat', label: t('No Repeat') },
+  { value: 'repeat', label: t('Repeat') },
+  { value: 'repeat-x', label: t('Repeat Horizontally') },
+  { value: 'repeat-y', label: t('Repeat Vertically') },
+] as const;
+
 const CHART_SURFACE_OPTIONS = [
   { value: 'default', label: t('Default Card') },
   { value: 'borderless', label: t('Borderless') },
@@ -2032,6 +2045,59 @@ export default function BlockStudio({
                 placeholder={t('24px')}
                 onChange={event =>
                   updatePageSettings({ contentAreaGap: event.target.value })
+                }
+              />
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t('Page Padding')}</FieldLabel>
+              <Input
+                disabled={isPublishedPage}
+                value={String(draftPage.settings?.pagePadding || '')}
+                placeholder={t('0, 28px 24px 72px')}
+                onChange={event =>
+                  updatePageSettings({ pagePadding: event.target.value })
+                }
+              />
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>
+                {t('Use Featured Image as Page Background')}
+              </FieldLabel>
+              <Switch
+                disabled={isPublishedPage}
+                checked={Boolean(
+                  draftPage.settings?.useFeaturedImageAsBackground,
+                )}
+                onChange={checked =>
+                  updatePageSettings({
+                    useFeaturedImageAsBackground: checked || undefined,
+                  })
+                }
+              />
+              <TinyMeta>
+                {t(
+                  'Uses the selected featured image as a full-page background behind all blocks.',
+                )}
+              </TinyMeta>
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t('Page Background Image Opacity')}</FieldLabel>
+              <InputNumber
+                disabled={isPublishedPage}
+                style={{ width: '100%' }}
+                min={0}
+                max={1}
+                step={0.05}
+                value={
+                  draftPage.settings?.pageBackgroundImageOpacity === undefined
+                    ? 1
+                    : Number(draftPage.settings?.pageBackgroundImageOpacity)
+                }
+                onChange={value =>
+                  updatePageSettings({
+                    pageBackgroundImageOpacity:
+                      value === null ? undefined : Number(value),
+                  })
                 }
               />
             </FieldBlock>
@@ -3689,6 +3755,90 @@ export default function BlockStudio({
               />
             </FieldBlock>
             <FieldBlock>
+              <FieldLabel>{t('Background Image Asset')}</FieldLabel>
+              <Select
+                disabled={isPublishedPage}
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                value={
+                  selectedBlock.settings?.background_asset_ref?.id ||
+                  selectedBlock.settings?.backgroundAssetRef?.id ||
+                  undefined
+                }
+                options={mediaOptions.filter(option => {
+                  const asset = mediaAssets.find(
+                    item => item.id === option.value,
+                  );
+                  return asset?.asset_type === 'image';
+                })}
+                onChange={value =>
+                  updateSelectedBlockSettings({
+                    background_asset_ref: value ? { id: value } : null,
+                  })
+                }
+              />
+              <TinyMeta>
+                {t(
+                  'Use this for hero and section backgrounds, including public dashboard landing pages.',
+                )}
+              </TinyMeta>
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t('Use Page Featured Image')}</FieldLabel>
+              <Switch
+                disabled={isPublishedPage}
+                checked={Boolean(selectedBlock.settings?.usePageFeaturedImage)}
+                onChange={checked =>
+                  updateSelectedBlockSettings({
+                    usePageFeaturedImage: checked || undefined,
+                  })
+                }
+              />
+              <TinyMeta>
+                {t(
+                  'Uses the page featured image as this block background when no block background image is selected.',
+                )}
+              </TinyMeta>
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t('Background Image URL')}</FieldLabel>
+              <Input
+                disabled={isPublishedPage}
+                value={String(selectedBlock.styles?.backgroundImage || '')}
+                placeholder={t('https://.../background.jpg')}
+                onChange={event =>
+                  updateSelectedBlockStyles({
+                    backgroundImage: event.target.value,
+                  })
+                }
+              />
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t('Background Image Opacity')}</FieldLabel>
+              <InputNumber
+                disabled={isPublishedPage}
+                style={{ width: '100%' }}
+                min={0}
+                max={1}
+                step={0.05}
+                value={
+                  selectedBlock.settings?.backgroundImageOpacity === undefined
+                    ? 1
+                    : Number(selectedBlock.settings?.backgroundImageOpacity)
+                }
+                onChange={value =>
+                  updateSelectedBlockSettings({
+                    backgroundImageOpacity:
+                      value === null ? undefined : Number(value),
+                  })
+                }
+              />
+              <TinyMeta>
+                {t('Lower values make the background image fainter.')}
+              </TinyMeta>
+            </FieldBlock>
+            <FieldBlock>
               <FieldLabel>{t('Text Color')}</FieldLabel>
               <Input
                 disabled={isPublishedPage}
@@ -3696,6 +3846,51 @@ export default function BlockStudio({
                 placeholder={t('#0f172a')}
                 onChange={event =>
                   updateSelectedBlockStyles({ color: event.target.value })
+                }
+              />
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t('Background Size')}</FieldLabel>
+              <Select
+                disabled={isPublishedPage}
+                value={selectedBlock.styles?.backgroundSize || 'cover'}
+                options={BACKGROUND_SIZE_OPTIONS.map(option => ({
+                  value: option.value,
+                  label: option.label,
+                }))}
+                onChange={value =>
+                  updateSelectedBlockStyles({
+                    backgroundSize: value === 'cover' ? undefined : value,
+                  })
+                }
+              />
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t('Background Position')}</FieldLabel>
+              <Input
+                disabled={isPublishedPage}
+                value={String(selectedBlock.styles?.backgroundPosition || '')}
+                placeholder={t('center center')}
+                onChange={event =>
+                  updateSelectedBlockStyles({
+                    backgroundPosition: event.target.value,
+                  })
+                }
+              />
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t('Background Repeat')}</FieldLabel>
+              <Select
+                disabled={isPublishedPage}
+                value={selectedBlock.styles?.backgroundRepeat || 'no-repeat'}
+                options={BACKGROUND_REPEAT_OPTIONS.map(option => ({
+                  value: option.value,
+                  label: option.label,
+                }))}
+                onChange={value =>
+                  updateSelectedBlockStyles({
+                    backgroundRepeat: value === 'no-repeat' ? undefined : value,
+                  })
                 }
               />
             </FieldBlock>

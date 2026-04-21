@@ -81,6 +81,10 @@ export interface SmallMultiplesFormData extends QueryFormData {
   panelHeight?: number;
   /* Map-specific — "level:columnName" e.g. "3:district_city" */
   boundaryLevel?: string | number;
+  showPanelIcon?: boolean;
+  panelIconUrl?: string;
+  panelIconText?: string;
+  panelIconSize?: number;
 }
 
 export interface PanelSeries {
@@ -144,4 +148,8 @@ export interface SmallMultiplesChartProps {
   boundaryLevel?: string | number;
   chartId?: number;
   dashboardId?: number;
+  showPanelIcon?: boolean;
+  panelIconUrl?: string;
+  panelIconText?: string;
+  panelIconSize?: number;
 }

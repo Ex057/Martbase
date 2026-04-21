@@ -47,6 +47,20 @@ test('buildPublicChartEmbedUrl preserves existing form_data and allows hiding le
   expect(formData.show_legend).toBe(false);
 });
 
+test('buildPublicChartEmbedUrl applies public page form data overrides without changing legend settings', () => {
+  const nextUrl = buildPublicChartEmbedUrl(
+    '/superset/explore/?slice_id=12&standalone=true',
+    { formDataOverrides: { hide_quick_filters: true } },
+  );
+  const formData = JSON.parse(
+    new URL(nextUrl, 'http://localhost').searchParams.get('form_data') || '{}',
+  );
+
+  expect(formData.slice_id).toBe(12);
+  expect(formData.hide_quick_filters).toBe(true);
+  expect(formData.show_legend).toBeUndefined();
+});
+
 test('buildPublicChartEmbedUrl normalizes public chart routes even without legend overrides', () => {
   const nextUrl = buildPublicChartEmbedUrl(
     '/superset/explore/?slice_id=12&standalone=true',

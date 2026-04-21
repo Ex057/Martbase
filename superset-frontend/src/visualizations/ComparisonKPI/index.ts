@@ -32,6 +32,7 @@ export default class ComparisonKPIChartPlugin extends ChartPlugin {
         ),
         thumbnail,
         tags: [
+          t('Health'),
           t('KPI'),
           t('Health'),
           t('Comparison'),

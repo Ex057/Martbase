@@ -421,4 +421,23 @@ describe('DHIS2 presets', () => {
       queryContext.form_data.extras.dhis2_terminal_hierarchy_filtering,
     ).toBe(false);
   });
+
+  test('uses persisted DHIS2 source database id in public chart form data', () => {
+    const result = transformProps(
+      makeChartProps({
+        formData: {
+          mini_chart_type: 'mini_map',
+          dhis2_source_database_id: 9,
+          slice_id: 91,
+          dashboard_id: 7,
+          boundary_level: '3:district_city',
+        },
+        datasource: { columns: DHIS2_COLUMNS },
+      }),
+    );
+
+    expect(result.databaseId).toBe(9);
+    expect(result.chartId).toBe(91);
+    expect(result.dashboardId).toBe(7);
+  });
 });
