@@ -17,7 +17,12 @@
  * under the License.
  */
 
-import { buildPublicChartEmbedUrl, isMapLikeViz } from './PublicChartContainer';
+import { render, screen } from 'spec/helpers/testing-library';
+import PublicChartContainer, {
+  buildPublicChartEmbedUrl,
+  buildEmbeddedChartCss,
+  isMapLikeViz,
+} from './PublicChartContainer';
 
 test('buildPublicChartEmbedUrl applies horizontal legend overrides for embedded public charts', () => {
   const nextUrl = buildPublicChartEmbedUrl(
@@ -86,4 +91,33 @@ test('isMapLikeViz detects map-style charts used by public pages', () => {
   expect(isMapLikeViz('dhis2_map')).toBe(true);
   expect(isMapLikeViz('mapbox')).toBe(true);
   expect(isMapLikeViz('line')).toBe(false);
+});
+
+test('PublicChartContainer respects explicit map_focus heights', () => {
+  render(
+    <PublicChartContainer
+      title="Facility map"
+      url="/superset/explore/?slice_id=12&standalone=true"
+      height={320}
+      surfacePreset="map_focus"
+      vizType="dhis2_map"
+    />,
+    { useTheme: true },
+  );
+
+  const frame = screen.getByTitle('Facility map');
+  const frameShell = frame.parentElement;
+
+  expect(frameShell).toHaveStyle({
+    height: '320px',
+    minHeight: '320px',
+  });
+});
+
+test('buildEmbeddedChartCss hides DHIS2 quick filters on public map embeds', () => {
+  const css = buildEmbeddedChartCss('map_focus', 'dhis2_map');
+
+  expect(css).toContain('.dhis2-map-quick-filters');
+  expect(css).toContain('.dhis2-map-quick-filters-panel');
+  expect(css).toContain('display: none !important;');
 });

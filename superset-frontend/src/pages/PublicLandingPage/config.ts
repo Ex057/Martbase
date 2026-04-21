@@ -136,11 +136,43 @@ export interface PublicPageFooterConfig {
   }>;
 }
 
+export interface PublicPageThemeConfig {
+  /** Base surface color for elevated portal areas */
+  surfaceColor?: string;
+  /** Shared card and panel background */
+  cardBackground?: string;
+  /** Shared card border color */
+  cardBorderColor?: string;
+  /** Stronger border color for cases that still need contrast */
+  strongBorderColor?: string;
+  /** Hero background surface when no image is present */
+  heroBackground?: string;
+  /** Medium radius token */
+  radiusMd?: string;
+  /** Large radius token */
+  radiusLg?: string;
+  /** Default spacing between blocks */
+  blockGap?: string;
+  /** Default spacing between grouped sections */
+  sectionGap?: string;
+  /** Shared card padding */
+  cardPadding?: string;
+  /** Hero padding */
+  heroPadding?: string;
+  /** Shared card shadow */
+  shadowCard?: string;
+  /** Optional backdrop-filter for translucent surfaces */
+  surfaceBackdropFilter?: string;
+  /** RGB tuple for hero overlay composition */
+  heroOverlayRgb?: string;
+}
+
 export interface PublicPageLayoutConfig {
   navbar: PublicPageNavbarConfig;
   sidebar: PublicPageSidebarConfig;
   content: PublicPageContentConfig;
   footer: PublicPageFooterConfig;
+  theme?: PublicPageThemeConfig;
   /** Custom CSS to inject */
   customCss?: string;
 }
@@ -208,6 +240,23 @@ export const DEFAULT_PUBLIC_PAGE_CONFIG: PublicPageLayoutConfig = {
       { text: 'Contact', url: '#' },
     ],
   },
+  theme: {
+    surfaceColor: '#ffffff',
+    cardBackground: 'rgba(255, 255, 255, 0.82)',
+    cardBorderColor: 'rgba(255, 255, 255, 0.02)',
+    strongBorderColor: 'rgba(148, 163, 184, 0.1)',
+    heroBackground:
+      'linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(248, 250, 252, 0.78))',
+    radiusMd: '12px',
+    radiusLg: '18px',
+    blockGap: '10px',
+    sectionGap: '8px',
+    cardPadding: '18px',
+    heroPadding: '32px',
+    shadowCard: '0 14px 36px rgba(15, 23, 42, 0.08)',
+    surfaceBackdropFilter: 'saturate(140%) blur(12px)',
+    heroOverlayRgb: '255, 255, 255',
+  },
 };
 
 /**
@@ -244,6 +293,10 @@ export function mergeConfig(
     footer: {
       ...DEFAULT_PUBLIC_PAGE_CONFIG.footer,
       ...userConfig.footer,
+    },
+    theme: {
+      ...DEFAULT_PUBLIC_PAGE_CONFIG.theme,
+      ...userConfig.theme,
     },
     customCss: userConfig.customCss,
   };

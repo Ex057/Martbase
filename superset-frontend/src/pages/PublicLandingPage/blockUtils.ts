@@ -143,6 +143,72 @@ function normalizeRowMinHeight(value: any) {
   return Math.round(parsed);
 }
 
+function meaningfulString(value: unknown) {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function normalizeBlockPersistenceSettings(
+  settings: Record<string, any> = {},
+  styles: Record<string, any> = {},
+) {
+  const nextSettings = { ...settings };
+  const backgroundImageUrl =
+    meaningfulString(nextSettings.backgroundImageUrl) ||
+    meaningfulString(nextSettings.background_image_url) ||
+    meaningfulString(styles.backgroundImage);
+  if (backgroundImageUrl) {
+    nextSettings.backgroundImageUrl = backgroundImageUrl;
+    nextSettings.background_image_url = backgroundImageUrl;
+  }
+
+  const backgroundOpacity =
+    nextSettings.backgroundImageOpacity ??
+    nextSettings.background_image_opacity;
+  if (backgroundOpacity !== undefined && backgroundOpacity !== null) {
+    nextSettings.backgroundImageOpacity = backgroundOpacity;
+    nextSettings.background_image_opacity = backgroundOpacity;
+  }
+
+  const backgroundAssetId =
+    nextSettings.background_asset_ref?.id ||
+    nextSettings.backgroundAssetRef?.id ||
+    nextSettings.background_asset_id ||
+    nextSettings.backgroundAssetId;
+  if (backgroundAssetId) {
+    nextSettings.background_asset_ref = { id: backgroundAssetId };
+    nextSettings.backgroundAssetRef = { id: backgroundAssetId };
+    nextSettings.background_asset_id = backgroundAssetId;
+    nextSettings.backgroundAssetId = backgroundAssetId;
+  }
+
+  const backgroundSize =
+    meaningfulString(nextSettings.backgroundSize) ||
+    meaningfulString(styles.backgroundSize);
+  if (backgroundSize) {
+    nextSettings.backgroundSize = backgroundSize;
+  }
+
+  const backgroundPosition =
+    meaningfulString(nextSettings.backgroundPosition) ||
+    meaningfulString(styles.backgroundPosition);
+  if (backgroundPosition) {
+    nextSettings.backgroundPosition = backgroundPosition;
+  }
+
+  const backgroundRepeat =
+    meaningfulString(nextSettings.backgroundRepeat) ||
+    meaningfulString(styles.backgroundRepeat);
+  if (backgroundRepeat) {
+    nextSettings.backgroundRepeat = backgroundRepeat;
+  }
+
+  return nextSettings;
+}
+
 function createGridTemplateColumns(
   columnCount: number,
   slot = 'content',
@@ -322,8 +388,8 @@ export function createEmptyBlock(blockType = 'paragraph'): PortalPageBlock {
       base.settings = {
         ...base.settings,
         columnCount: 2,
-        gap: 24,
-        rowMinHeight: 240,
+        gap: 12,
+        rowMinHeight: 220,
       };
       base.children = [createEmptyBlock('column'), createEmptyBlock('column')];
       break;
@@ -1060,7 +1126,10 @@ export function normalizeBlocks(blocks: PortalPageBlock[]): PortalPageBlock[] {
     schema_version: block.schema_version || 1,
     style_bundle_id: block.style_bundle_id ?? block.style_bundle?.id ?? null,
     content: { ...(block.content || {}) },
-    settings: { ...(block.settings || {}) },
+    settings: normalizeBlockPersistenceSettings(
+      block.settings || {},
+      block.styles || {},
+    ),
     styles: { ...(block.styles || {}) },
     metadata: { ...(block.metadata || {}) },
     children: normalizeBlocks(block.children || []),

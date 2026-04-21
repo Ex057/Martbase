@@ -1800,6 +1800,22 @@ class PublicPageRestApi(BaseApi):
                 return int(image_ref["id"])
         return None
 
+    def _block_background_asset_reference(
+        self,
+        block_settings: dict[str, Any],
+    ) -> int | None:
+        for candidate in (
+            block_settings.get("background_asset_ref"),
+            block_settings.get("backgroundAssetRef"),
+        ):
+            if isinstance(candidate, dict) and candidate.get("id") is not None:
+                return int(candidate["id"])
+        direct_value = (
+            block_settings.get("background_asset_id")
+            or block_settings.get("backgroundAssetId")
+        )
+        return int(direct_value) if direct_value is not None else None
+
     def _serialize_block(
         self,
         block: PageBlock | dict[str, Any],
@@ -1935,6 +1951,46 @@ class PublicPageRestApi(BaseApi):
                 settings = {
                     **settings,
                     "render_error": "Asset is unavailable for public rendering",
+                }
+
+        background_asset_id = self._block_background_asset_reference(settings)
+        if background_asset_id is not None:
+            background_asset = (
+                db.session.query(MediaAsset)
+                .filter(MediaAsset.id == background_asset_id)
+                .one_or_none()
+            )
+            if (
+                background_asset is not None
+                and background_asset.status == "active"
+                and (
+                    not public_context
+                    or self._asset_is_publicly_viewable(background_asset)
+                )
+            ):
+                serialized_background_asset = self._serialize_media_asset(
+                    background_asset,
+                    include_admin=not public_context,
+                )
+                if serialized_background_asset:
+                    settings = {
+                        **settings,
+                        "background_asset_ref": {"id": background_asset.id},
+                        "backgroundAssetRef": {"id": background_asset.id},
+                        "background_asset_id": background_asset.id,
+                        "backgroundAssetId": background_asset.id,
+                        "backgroundImageUrl": settings.get("backgroundImageUrl")
+                        or settings.get("background_image_url")
+                        or serialized_background_asset["download_url"],
+                        "background_image_url": settings.get("background_image_url")
+                        or settings.get("backgroundImageUrl")
+                        or serialized_background_asset["download_url"],
+                    }
+            elif public_context:
+                settings = {
+                    **settings,
+                    "backgroundImageUrl": settings.get("backgroundImageUrl") or "",
+                    "background_image_url": settings.get("background_image_url") or "",
                 }
 
         if reusable_block is not None:
@@ -2559,6 +2615,14 @@ class PublicPageRestApi(BaseApi):
             self._validate_asset_reference(
                 asset_id,
                 field_name="asset_ref",
+                require_public=require_public,
+            )
+
+        background_asset_id = self._block_background_asset_reference(settings)
+        if background_asset_id:
+            self._validate_asset_reference(
+                background_asset_id,
+                field_name="background_asset_ref",
                 require_public=require_public,
             )
 

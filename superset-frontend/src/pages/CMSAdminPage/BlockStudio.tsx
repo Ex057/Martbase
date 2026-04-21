@@ -916,12 +916,12 @@ function surfacePresetStyles(preset: string) {
       };
     case 'subtle':
       return {
-        backgroundColor: '#ffffff',
+        backgroundColor: 'rgba(255, 255, 255, 0.82)',
         color: undefined,
-        borderColor: 'rgba(148, 163, 184, 0.18)',
+        borderColor: 'rgba(255, 255, 255, 0.02)',
         borderStyle: 'solid',
         borderWidth: '1px',
-        boxShadow: 'none',
+        boxShadow: '0 14px 36px rgba(15, 23, 42, 0.08)',
       };
     case 'outlined':
       return {
@@ -934,12 +934,12 @@ function surfacePresetStyles(preset: string) {
       };
     case 'elevated':
       return {
-        backgroundColor: '#ffffff',
+        backgroundColor: 'rgba(255, 255, 255, 0.88)',
         color: undefined,
-        borderColor: 'rgba(148, 163, 184, 0.14)',
+        borderColor: 'rgba(255, 255, 255, 0.02)',
         borderStyle: 'solid',
         borderWidth: '1px',
-        boxShadow: '0 18px 42px rgba(15, 23, 42, 0.14)',
+        boxShadow: '0 18px 42px rgba(15, 23, 42, 0.1)',
       };
     case 'inverse':
       return {
@@ -1679,6 +1679,27 @@ export default function BlockStudio({
     pushBlocks(
       updateBlockStyles(blocks, blockKey(selectedBlock), normalizedPatch),
     );
+  }
+
+  function updateSelectedBlockStylesAndSettings(
+    stylePatch: Record<string, any>,
+    settingsPatch: Record<string, any>,
+  ) {
+    if (!selectedBlock || isPublishedPage) {
+      return;
+    }
+    const normalizedStylePatch = Object.fromEntries(
+      Object.entries(stylePatch).map(([key, value]) => [
+        key,
+        normalizedStyleValue(value),
+      ]),
+    );
+    const nextBlocks = updateBlockSettings(
+      updateBlockStyles(blocks, blockKey(selectedBlock), normalizedStylePatch),
+      blockKey(selectedBlock),
+      settingsPatch,
+    );
+    pushBlocks(nextBlocks);
   }
 
   function updateSelectedBlockRichField(field: string, html: string) {
@@ -3100,9 +3121,9 @@ export default function BlockStudio({
               <InputNumber
                 disabled={isPublishedPage}
                 style={{ width: '100%' }}
-                value={Number(selectedBlock.settings?.gap) || 24}
+                value={Number(selectedBlock.settings?.gap) || 12}
                 onChange={value =>
-                  updateSelectedBlockSettings({ gap: Number(value) || 24 })
+                  updateSelectedBlockSettings({ gap: Number(value) || 12 })
                 }
               />
             </FieldBlock>
@@ -3775,6 +3796,9 @@ export default function BlockStudio({
                 onChange={value =>
                   updateSelectedBlockSettings({
                     background_asset_ref: value ? { id: value } : null,
+                    backgroundAssetRef: value ? { id: value } : null,
+                    background_asset_id: value || null,
+                    backgroundAssetId: value || null,
                   })
                 }
               />
@@ -3805,12 +3829,21 @@ export default function BlockStudio({
               <FieldLabel>{t('Background Image URL')}</FieldLabel>
               <Input
                 disabled={isPublishedPage}
-                value={String(selectedBlock.styles?.backgroundImage || '')}
+                value={String(
+                  selectedBlock.settings?.backgroundImageUrl ||
+                    selectedBlock.settings?.background_image_url ||
+                    selectedBlock.styles?.backgroundImage ||
+                    '',
+                )}
                 placeholder={t('https://.../background.jpg')}
                 onChange={event =>
-                  updateSelectedBlockStyles({
-                    backgroundImage: event.target.value,
-                  })
+                  updateSelectedBlockStylesAndSettings(
+                    { backgroundImage: event.target.value },
+                    {
+                      backgroundImageUrl: event.target.value || undefined,
+                      background_image_url: event.target.value || undefined,
+                    },
+                  )
                 }
               />
             </FieldBlock>
@@ -3830,6 +3863,8 @@ export default function BlockStudio({
                 onChange={value =>
                   updateSelectedBlockSettings({
                     backgroundImageOpacity:
+                      value === null ? undefined : Number(value),
+                    background_image_opacity:
                       value === null ? undefined : Number(value),
                   })
                 }
@@ -3853,15 +3888,24 @@ export default function BlockStudio({
               <FieldLabel>{t('Background Size')}</FieldLabel>
               <Select
                 disabled={isPublishedPage}
-                value={selectedBlock.styles?.backgroundSize || 'cover'}
+                value={
+                  selectedBlock.styles?.backgroundSize ||
+                  selectedBlock.settings?.backgroundSize ||
+                  'cover'
+                }
                 options={BACKGROUND_SIZE_OPTIONS.map(option => ({
                   value: option.value,
                   label: option.label,
                 }))}
                 onChange={value =>
-                  updateSelectedBlockStyles({
-                    backgroundSize: value === 'cover' ? undefined : value,
-                  })
+                  updateSelectedBlockStylesAndSettings(
+                    {
+                      backgroundSize: value === 'cover' ? undefined : value,
+                    },
+                    {
+                      backgroundSize: value === 'cover' ? undefined : value,
+                    },
+                  )
                 }
               />
             </FieldBlock>
@@ -3869,12 +3913,21 @@ export default function BlockStudio({
               <FieldLabel>{t('Background Position')}</FieldLabel>
               <Input
                 disabled={isPublishedPage}
-                value={String(selectedBlock.styles?.backgroundPosition || '')}
+                value={String(
+                  selectedBlock.styles?.backgroundPosition ||
+                    selectedBlock.settings?.backgroundPosition ||
+                    '',
+                )}
                 placeholder={t('center center')}
                 onChange={event =>
-                  updateSelectedBlockStyles({
-                    backgroundPosition: event.target.value,
-                  })
+                  updateSelectedBlockStylesAndSettings(
+                    {
+                      backgroundPosition: event.target.value,
+                    },
+                    {
+                      backgroundPosition: event.target.value || undefined,
+                    },
+                  )
                 }
               />
             </FieldBlock>
@@ -3882,15 +3935,26 @@ export default function BlockStudio({
               <FieldLabel>{t('Background Repeat')}</FieldLabel>
               <Select
                 disabled={isPublishedPage}
-                value={selectedBlock.styles?.backgroundRepeat || 'no-repeat'}
+                value={
+                  selectedBlock.styles?.backgroundRepeat ||
+                  selectedBlock.settings?.backgroundRepeat ||
+                  'no-repeat'
+                }
                 options={BACKGROUND_REPEAT_OPTIONS.map(option => ({
                   value: option.value,
                   label: option.label,
                 }))}
                 onChange={value =>
-                  updateSelectedBlockStyles({
-                    backgroundRepeat: value === 'no-repeat' ? undefined : value,
-                  })
+                  updateSelectedBlockStylesAndSettings(
+                    {
+                      backgroundRepeat:
+                        value === 'no-repeat' ? undefined : value,
+                    },
+                    {
+                      backgroundRepeat:
+                        value === 'no-repeat' ? undefined : value,
+                    },
+                  )
                 }
               />
             </FieldBlock>
@@ -3899,7 +3963,7 @@ export default function BlockStudio({
               <Input
                 disabled={isPublishedPage}
                 value={String(selectedBlock.styles?.boxShadow || '')}
-                placeholder={t('0 18px 42px rgba(15, 23, 42, 0.14)')}
+                placeholder={t('0 14px 36px rgba(15, 23, 42, 0.08)')}
                 onChange={event =>
                   updateSelectedBlockStyles({ boxShadow: event.target.value })
                 }
@@ -3912,7 +3976,7 @@ export default function BlockStudio({
               <Input
                 disabled={isPublishedPage}
                 value={String(selectedBlock.styles?.borderColor || '')}
-                placeholder={t('#cbd5e1')}
+                placeholder={t('transparent')}
                 onChange={event =>
                   updateSelectedBlockStyles({
                     borderColor: event.target.value,

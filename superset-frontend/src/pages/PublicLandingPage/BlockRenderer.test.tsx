@@ -704,6 +704,57 @@ test('renders saved rich text formatting for block content and action labels', (
   expect(cardButton.querySelector('em')).not.toBeNull();
 });
 
+test('renders hero background images from saved settings with overlay opacity', () => {
+  render(
+    <RenderBlockTree
+      blocks={[
+        {
+          uid: 'hero_bg',
+          block_type: 'hero',
+          slot: 'content',
+          sort_order: 0,
+          is_container: true,
+          visibility: 'public',
+          status: 'active',
+          schema_version: 1,
+          style_bundle_id: null,
+          content: {
+            title: 'Premium analytics',
+            subtitle: 'Backgrounds should survive publish.',
+          },
+          settings: {
+            background_image_url: 'https://example.com/hero.jpg',
+            background_image_opacity: 0.55,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center top',
+            backgroundRepeat: 'no-repeat',
+          },
+          styles: {},
+          metadata: {},
+          children: [],
+        },
+      ]}
+      charts={[]}
+      dashboards={[]}
+      page={page}
+      navigation={{ header: [], footer: [] }}
+    />,
+    { useTheme: true },
+  );
+
+  const heroTitle = screen.getByRole('heading', { name: 'Premium analytics' });
+  const heroSection = heroTitle.closest('section');
+
+  expect(heroSection).toHaveStyle({
+    backgroundSize: 'cover',
+    backgroundPosition: 'center top',
+    backgroundRepeat: 'no-repeat',
+  });
+  expect(heroSection).toHaveStyle(
+    'background-image: linear-gradient(rgba(var(--portal-hero-overlay-rgb, 255, 255, 255), 0.44999999999999996), rgba(var(--portal-hero-overlay-rgb, 255, 255, 255), 0.44999999999999996)), url("https://example.com/hero.jpg")',
+  );
+});
+
 test('resizes editor blocks by drag and commits the new size settings', () => {
   const onResizeBlock = jest.fn();
 

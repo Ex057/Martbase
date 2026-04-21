@@ -289,11 +289,15 @@ const SurfaceCard = styled.article`
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 22px;
+  padding: var(--portal-card-padding, 22px);
   border-radius: var(--portal-radius-lg, 0);
-  background: var(--portal-surface);
-  border: 1px solid var(--portal-border);
+  background: var(--portal-surface-card, var(--portal-surface));
+  border: 1px solid var(--portal-card-border, var(--portal-border, transparent));
   box-shadow: var(--portal-shadow-card, none);
+  backdrop-filter: var(
+    --portal-surface-backdrop-filter,
+    saturate(140%) blur(10px)
+  );
 `;
 
 const CardTitle = styled.h3`
@@ -656,9 +660,70 @@ export default function PublicLandingPage() {
     data?.portal_layout.config.portalTitle ||
     data?.config.navbar.title.text ||
     t('Public Analytics Portal');
+  const publicThemeConfig = data?.config.theme || {};
   const accentColor = data?.portal_layout.config.accentColor || '#1976D2';
   const secondaryColor = data?.portal_layout.config.secondaryColor || '#4DA3FF';
-  const surfaceColor = data?.portal_layout.config.surfaceColor || '#ffffff';
+  const surfaceColor =
+    data?.portal_layout.config.surfaceColor ||
+    publicThemeConfig.surfaceColor ||
+    '#ffffff';
+  const cardBackground =
+    data?.portal_layout.config.cardBackground ||
+    publicThemeConfig.cardBackground ||
+    surfaceColor;
+  const cardBorderColor =
+    data?.portal_layout.config.cardBorderColor ||
+    publicThemeConfig.cardBorderColor ||
+    'rgba(255, 255, 255, 0.02)';
+  const strongBorderColor =
+    data?.portal_layout.config.strongBorderColor ||
+    publicThemeConfig.strongBorderColor ||
+    cardBorderColor;
+  const heroBackground =
+    data?.portal_layout.config.heroBackground ||
+    publicThemeConfig.heroBackground ||
+    cardBackground;
+  const shadowCard =
+    data?.portal_layout.config.shadowCard ||
+    publicThemeConfig.shadowCard ||
+    '0 14px 36px rgba(15, 23, 42, 0.08)';
+  const radiusMd =
+    data?.portal_layout.config.radiusMd || publicThemeConfig.radiusMd || '12px';
+  const radiusLg =
+    data?.portal_layout.config.radiusLg || publicThemeConfig.radiusLg || '18px';
+  const blockGap =
+    data?.portal_layout.config.blockGap || publicThemeConfig.blockGap || '10px';
+  const sectionGap =
+    data?.portal_layout.config.sectionGap ||
+    publicThemeConfig.sectionGap ||
+    '8px';
+  const cardPadding =
+    data?.portal_layout.config.cardPadding ||
+    publicThemeConfig.cardPadding ||
+    '18px';
+  const heroPadding =
+    data?.portal_layout.config.heroPadding ||
+    publicThemeConfig.heroPadding ||
+    '32px';
+  const surfaceBackdropFilter =
+    data?.portal_layout.config.surfaceBackdropFilter ||
+    publicThemeConfig.surfaceBackdropFilter ||
+    'saturate(140%) blur(12px)';
+  const heroOverlayRgb =
+    data?.portal_layout.config.heroOverlayRgb ||
+    publicThemeConfig.heroOverlayRgb ||
+    '255, 255, 255';
+  const injectedPortalCss = useMemo(
+    () =>
+      [
+        data?.config.customCss,
+        data?.portal_layout.config.customCss,
+        currentPage?.rendering?.css_text,
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+    [data?.config.customCss, data?.portal_layout.config.customCss, currentPage],
+  );
   const logoSrc =
     visualMode === 'dark'
       ? data?.config.navbar.logo.darkSrc ||
@@ -1160,13 +1225,22 @@ export default function PublicLandingPage() {
         ? 'rgba(25, 118, 210, 0.12)'
         : 'rgba(25, 118, 210, 0.08)',
     '--portal-surface': visualMode === 'dark' ? '#132F4C' : surfaceColor,
+    '--portal-surface-card':
+      visualMode === 'dark' ? 'rgba(19, 47, 76, 0.86)' : cardBackground,
     '--portal-text': visualMode === 'dark' ? '#ecf5ff' : '#1A1F2C',
     '--portal-muted': visualMode === 'dark' ? '#94a3b8' : '#6B7280',
     '--portal-muted-strong': visualMode === 'dark' ? '#cbd5e1' : '#4B5563',
     '--portal-border':
-      visualMode === 'dark' ? 'rgba(148, 163, 184, 0.18)' : '#E5EAF0',
+      visualMode === 'dark' ? 'rgba(148, 163, 184, 0.12)' : cardBorderColor,
     '--portal-border-strong':
-      visualMode === 'dark' ? 'rgba(148, 163, 184, 0.26)' : '#CBD5E1',
+      visualMode === 'dark' ? 'rgba(148, 163, 184, 0.18)' : strongBorderColor,
+    '--portal-card-border':
+      visualMode === 'dark' ? 'rgba(148, 163, 184, 0.08)' : cardBorderColor,
+    '--portal-hero-border':
+      visualMode === 'dark' ? 'rgba(148, 163, 184, 0.08)' : cardBorderColor,
+    '--portal-hero-background':
+      visualMode === 'dark' ? 'rgba(19, 47, 76, 0.86)' : heroBackground,
+    '--portal-hero-overlay-rgb': heroOverlayRgb,
     '--portal-header-bg':
       visualMode === 'dark' ? 'rgba(10, 25, 41, 0.92)' : '#0D3B66',
     '--portal-footer-bg':
@@ -1182,10 +1256,16 @@ export default function PublicLandingPage() {
     '--portal-nav-active-text': visualMode === 'dark' ? accentColor : '#ffffff',
     '--portal-header-height': `${portalHeaderHeight}px`,
     '--portal-link': accentColor,
-    '--portal-shadow-card':
-      '0 1px 3px rgba(13,59,102,0.06), 0 1px 2px rgba(13,59,102,0.04)',
-    '--portal-radius-md': '8px',
-    '--portal-radius-lg': '12px',
+    '--portal-shadow-card': shadowCard,
+    '--portal-radius-md': radiusMd,
+    '--portal-radius-lg': radiusLg,
+    '--portal-block-gap': blockGap,
+    '--portal-section-gap': sectionGap,
+    '--portal-card-padding': cardPadding,
+    '--portal-hero-padding': heroPadding,
+    '--portal-hero-padding-mobile': '24px',
+    '--portal-hero-gap': blockGap,
+    '--portal-surface-backdrop-filter': surfaceBackdropFilter,
   } as CSSProperties;
   const pageContentStyle = {
     ...(currentPage?.rendering?.css_variables || {}),
@@ -1321,9 +1401,7 @@ export default function PublicLandingPage() {
         className={joinClassNames(currentPage?.rendering?.scope_class)}
         style={pageContentStyle}
       >
-        {currentPage?.rendering?.css_text ? (
-          <style>{currentPage.rendering.css_text}</style>
-        ) : null}
+        {injectedPortalCss ? <style>{injectedPortalCss}</style> : null}
 
         {currentPage && selectedDashboard ? (
           renderSelectedDashboardView(selectedDashboard)

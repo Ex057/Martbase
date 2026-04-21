@@ -1379,12 +1379,27 @@ export default function CMSAdminPage() {
       jsonPayload: {
         title: portalLayout.title || t('Public Portal'),
         config: {
+          ...portalLayout,
           portalTitle: portalLayout.portalTitle || '',
           portalSubtitle: portalLayout.portalSubtitle || '',
           welcomeBadge: portalLayout.welcomeBadge || '',
           accentColor: portalLayout.accentColor || '',
           secondaryColor: portalLayout.secondaryColor || '',
           surfaceColor: portalLayout.surfaceColor || '',
+          cardBackground: portalLayout.cardBackground || '',
+          cardBorderColor: portalLayout.cardBorderColor || '',
+          strongBorderColor: portalLayout.strongBorderColor || '',
+          heroBackground: portalLayout.heroBackground || '',
+          radiusMd: portalLayout.radiusMd || '',
+          radiusLg: portalLayout.radiusLg || '',
+          blockGap: portalLayout.blockGap || '',
+          sectionGap: portalLayout.sectionGap || '',
+          cardPadding: portalLayout.cardPadding || '',
+          heroPadding: portalLayout.heroPadding || '',
+          shadowCard: portalLayout.shadowCard || '',
+          surfaceBackdropFilter: portalLayout.surfaceBackdropFilter || '',
+          heroOverlayRgb: portalLayout.heroOverlayRgb || '',
+          customCss: portalLayout.customCss || '',
           pageMaxWidth: Number(portalLayout.pageMaxWidth) || 1280,
           showThemeToggle: portalLayout.showThemeToggle !== false,
           lightModeLabel: portalLayout.lightModeLabel || '',
@@ -3503,6 +3518,189 @@ export default function CMSAdminPage() {
                     setPortalLayout(previous => ({
                       ...previous,
                       surfaceColor: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Card Background')}</FieldLabel>
+                <Input
+                  value={portalLayout.cardBackground || ''}
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      cardBackground: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+            </FieldGrid>
+            <FieldGrid>
+              <FieldBlock>
+                <FieldLabel>{t('Card Border Color')}</FieldLabel>
+                <Input
+                  value={portalLayout.cardBorderColor || ''}
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      cardBorderColor: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Hero Background')}</FieldLabel>
+                <Input
+                  value={portalLayout.heroBackground || ''}
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      heroBackground: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+            </FieldGrid>
+            <FieldGrid>
+              <FieldBlock>
+                <FieldLabel>{t('Card Shadow')}</FieldLabel>
+                <Input
+                  value={portalLayout.shadowCard || ''}
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      shadowCard: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Strong Border Color')}</FieldLabel>
+                <Input
+                  value={portalLayout.strongBorderColor || ''}
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      strongBorderColor: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+            </FieldGrid>
+            <FieldGrid>
+              <FieldBlock>
+                <FieldLabel>{t('Card Radius')}</FieldLabel>
+                <Input
+                  value={portalLayout.radiusLg || ''}
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      radiusLg: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Inner Radius')}</FieldLabel>
+                <Input
+                  value={portalLayout.radiusMd || ''}
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      radiusMd: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+            </FieldGrid>
+            <FieldGrid>
+              <FieldBlock>
+                <FieldLabel>{t('Block Gap')}</FieldLabel>
+                <Input
+                  value={portalLayout.blockGap || ''}
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      blockGap: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Section Gap')}</FieldLabel>
+                <Input
+                  value={portalLayout.sectionGap || ''}
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      sectionGap: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+            </FieldGrid>
+            <FieldGrid>
+              <FieldBlock>
+                <FieldLabel>{t('Card Padding')}</FieldLabel>
+                <Input
+                  value={portalLayout.cardPadding || ''}
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      cardPadding: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Hero Padding')}</FieldLabel>
+                <Input
+                  value={portalLayout.heroPadding || ''}
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      heroPadding: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+            </FieldGrid>
+            <FieldGrid>
+              <FieldBlock>
+                <FieldLabel>{t('Backdrop Filter')}</FieldLabel>
+                <Input
+                  value={portalLayout.surfaceBackdropFilter || ''}
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      surfaceBackdropFilter: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Hero Overlay RGB')}</FieldLabel>
+                <Input
+                  value={portalLayout.heroOverlayRgb || ''}
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      heroOverlayRgb: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+            </FieldGrid>
+            <FieldGrid>
+              <FieldBlock>
+                <FieldLabel>{t('Custom CSS')}</FieldLabel>
+                <Input.TextArea
+                  rows={4}
+                  value={portalLayout.customCss || ''}
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      customCss: event.target.value,
                     }))
                   }
                 />

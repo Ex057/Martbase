@@ -23,9 +23,9 @@ import { SafeMarkdown } from '@superset-ui/core/components';
 import { sanitizeHtml, styled, t } from '@superset-ui/core';
 import { Button, Dropdown, Empty, Tag } from 'antd';
 import type { MenuProps } from 'antd';
+import DashboardPage from 'src/dashboard/containers/DashboardPage';
 import RichTextComposer from 'src/pages/CMSAdminPage/RichTextComposer';
 import PublicChartContainer, { isMapLikeViz } from './PublicChartContainer';
-import DashboardPage from 'src/dashboard/containers/DashboardPage';
 import { cloneBlockTree, isContainerBlock } from './blockUtils';
 import type {
   PortalBlockDefinition,
@@ -41,8 +41,8 @@ import type {
 const Section = styled.section`
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 18px;
+  gap: var(--portal-section-gap, 8px);
+  margin-bottom: var(--portal-section-margin, 12px);
 `;
 
 const SectionHeader = styled.div`
@@ -81,7 +81,7 @@ const Grid = styled.div<{ $columns?: number }>`
     ${({ $columns = 1 }) => $columns},
     minmax(0, 1fr)
   );
-  gap: 12px;
+  gap: var(--portal-block-gap, 10px);
 
   @media (max-width: 960px) {
     grid-template-columns: 1fr;
@@ -91,7 +91,7 @@ const Grid = styled.div<{ $columns?: number }>`
 const BlockGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--portal-block-gap, 10px);
 
   @media (max-width: 960px) {
     grid-template-columns: 1fr;
@@ -449,10 +449,15 @@ const EditorResizeHandle = styled.button<{
 `;
 
 const SurfaceCard = styled.div`
-  padding: 18px;
+  padding: var(--portal-card-padding, 18px);
   border-radius: var(--portal-radius-lg, 0);
-  background: var(--portal-surface);
-  border: 1px solid var(--portal-border);
+  background: var(--portal-surface-card, var(--portal-surface));
+  border: 1px solid var(--portal-card-border, var(--portal-border, transparent));
+  box-shadow: var(--portal-shadow-card, none);
+  backdrop-filter: var(
+    --portal-surface-backdrop-filter,
+    saturate(140%) blur(10px)
+  );
 `;
 
 const DashboardDirectoryGrid = styled.div`
@@ -583,16 +588,39 @@ const Hero = styled.section`
   position: relative;
   overflow: hidden;
   border-radius: var(--portal-radius-lg, 0);
-  padding: 36px;
+  padding: var(--portal-hero-padding, 32px);
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.9fr);
-  gap: 28px;
-  background: var(--portal-hero-background, var(--portal-surface));
-  border: 1px solid var(--portal-border-strong);
+  grid-template-columns: minmax(0, 0.95fr) minmax(360px, 1.15fr);
+  gap: var(--portal-hero-gap, 16px);
+  align-items: start;
+  background: var(
+    --portal-hero-background,
+    var(--portal-surface-card, var(--portal-surface))
+  );
+  border: 1px solid
+    var(
+      --portal-hero-border,
+      var(--portal-card-border, var(--portal-border-strong, transparent))
+    );
+  box-shadow: var(--portal-shadow-card, none);
+  backdrop-filter: var(
+    --portal-surface-backdrop-filter,
+    saturate(140%) blur(10px)
+  );
+
+  & > div {
+    min-width: 0;
+  }
+
+  & > div:last-child {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
 
   @media (max-width: 980px) {
     grid-template-columns: 1fr;
-    padding: 24px;
+    padding: var(--portal-hero-padding-mobile, 24px);
   }
 `;
 
@@ -637,14 +665,19 @@ const Quote = styled.blockquote`
 const MetricsGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
+  gap: var(--portal-metric-gap, var(--portal-block-gap, 10px));
 `;
 
 const MetricCard = styled.div`
-  padding: 18px;
+  padding: var(--portal-card-padding, 18px);
   border-radius: var(--portal-radius-md, 0);
-  background: var(--portal-surface);
-  border: 1px solid var(--portal-border);
+  background: var(--portal-surface-card, var(--portal-surface));
+  border: 1px solid var(--portal-card-border, var(--portal-border, transparent));
+  box-shadow: var(--portal-shadow-card, none);
+  backdrop-filter: var(
+    --portal-surface-backdrop-filter,
+    saturate(140%) blur(10px)
+  );
 `;
 
 const MetricValue = styled.div`
@@ -711,10 +744,10 @@ const CalloutCard = styled.div<{ $tone?: string }>`
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 18px;
+  padding: var(--portal-card-padding, 18px);
   border-radius: var(--portal-radius-lg, 0);
-  background: var(--portal-surface);
-  border: 1px solid var(--portal-border);
+  background: var(--portal-surface-card, var(--portal-surface));
+  border: 1px solid var(--portal-card-border, var(--portal-border, transparent));
   border-left: 4px solid
     ${({ $tone }) =>
       $tone === 'warning'
@@ -763,7 +796,7 @@ function applyBackgroundImageOpacity(
     return backgroundImage;
   }
   const overlayAlpha = Math.max(0, Math.min(1, 1 - normalizedOpacity));
-  return `linear-gradient(rgba(255, 255, 255, ${overlayAlpha}), rgba(255, 255, 255, ${overlayAlpha})), ${backgroundImage}`;
+  return `linear-gradient(rgba(var(--portal-hero-overlay-rgb, 255, 255, 255), ${overlayAlpha}), rgba(var(--portal-hero-overlay-rgb, 255, 255, 255), ${overlayAlpha})), ${backgroundImage}`;
 }
 
 function backgroundAssetUrl(
@@ -835,17 +868,36 @@ function blockStyle(
     block.settings?.backgroundImageOpacity ??
       block.settings?.background_image_opacity,
   );
+  const backgroundSize =
+    normalizedStyles.backgroundSize || block.settings?.backgroundSize;
+  const backgroundPosition =
+    normalizedStyles.backgroundPosition || block.settings?.backgroundPosition;
+  const backgroundRepeat =
+    normalizedStyles.backgroundRepeat || block.settings?.backgroundRepeat;
   const nextStyle: CSSProperties = {
     ...((block.rendering?.inline_style || {}) as CSSProperties),
     ...normalizedStyles,
     backgroundImage: backgroundImageWithOpacity,
   };
   if (backgroundImageWithOpacity) {
-    nextStyle.backgroundSize = nextStyle.backgroundSize || 'cover';
-    nextStyle.backgroundPosition = nextStyle.backgroundPosition || 'center';
-    nextStyle.backgroundRepeat = nextStyle.backgroundRepeat || 'no-repeat';
+    nextStyle.backgroundSize =
+      nextStyle.backgroundSize || backgroundSize || 'cover';
+    nextStyle.backgroundPosition =
+      nextStyle.backgroundPosition || backgroundPosition || 'center';
+    nextStyle.backgroundRepeat =
+      nextStyle.backgroundRepeat || backgroundRepeat || 'no-repeat';
   }
   return nextStyle;
+}
+
+function normalizedSpacingValue(value?: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${value}px`;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    return value;
+  }
+  return undefined;
 }
 
 function blockClassName(block: PortalPageBlock) {
@@ -1330,7 +1382,14 @@ export function RenderBlockTree({
       return null;
     }
     return (
-      <BlockGrid data-block-grid="true">
+      <BlockGrid
+        data-block-grid="true"
+        style={{
+          gap:
+            normalizedSpacingValue(parentBlock?.settings?.gap) ||
+            normalizedSpacingValue(parentBlock?.styles?.gap),
+        }}
+      >
         {visibleBlocks.map(child => {
           const renderedChild = renderBlock(child);
           if (!renderedChild) {
@@ -2559,6 +2618,11 @@ export function RenderBlockTree({
                     padding: style.padding || 0,
                     border: style.border || 0,
                     background: style.background || 'transparent',
+                    boxShadow: style.boxShadow || 'none',
+                    backdropFilter: style.backdropFilter || 'none',
+                    overflow: style.overflow || 'hidden',
+                    minWidth: style.minWidth || 0,
+                    gap: 0,
                   }
                 : style
             }
@@ -2566,7 +2630,9 @@ export function RenderBlockTree({
             {showHeader ? (
               <div
                 style={
-                  borderlessContainer ? { padding: '0 0 16px' } : undefined
+                  borderlessContainer
+                    ? { padding: 0, marginBottom: 6, minWidth: 0 }
+                    : undefined
                 }
               >
                 {headerTitleText ? (

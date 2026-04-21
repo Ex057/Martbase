@@ -208,14 +208,11 @@ export function buildPublicChartEmbedUrl(
   return serializeRelativeUrl(urlObject);
 }
 
-function resolveFrameHeight(height: number, surfacePreset: ChartSurfacePreset) {
-  if (surfacePreset === 'map_focus') {
-    return Math.max(height, 560);
-  }
+function resolveFrameHeight(height: number) {
   return height;
 }
 
-function buildEmbeddedChartCss(
+export function buildEmbeddedChartCss(
   surfacePreset: ChartSurfacePreset,
   vizType?: string,
 ) {
@@ -275,6 +272,15 @@ function buildEmbeddedChartCss(
         .deckgl-wrapper,
         .deckgl-overlay,
         .viewport,
+        .leaflet-container,
+        .leaflet-map-pane,
+        .leaflet-pane,
+        .leaflet-overlay-pane,
+        .leaflet-tile-pane,
+        .leaflet-shadow-pane,
+        .leaflet-marker-pane,
+        .leaflet-tooltip-pane,
+        .leaflet-popup-pane,
         .mapboxgl-map,
         .mapboxgl-canvas-container,
         .mapboxgl-canvas,
@@ -359,7 +365,7 @@ export default function PublicChartContainer({
       }),
     [accessMode, formDataOverrides, legendPreset, url],
   );
-  const resolvedHeight = resolveFrameHeight(height, surfacePreset);
+  const resolvedHeight = resolveFrameHeight(height);
 
   useEffect(() => {
     setIsLoading(true);

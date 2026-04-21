@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from superset import db
 from superset.staging.models import SourceMetadataCache
@@ -46,6 +46,23 @@ def _run_with_sqlite_lock_retry(operation: Any) -> Any:
                 SQLITE_LOCK_RETRY_ATTEMPTS,
             )
             time.sleep(SQLITE_LOCK_RETRY_DELAY_SECONDS * (2**attempt))
+
+
+def _get_cache_entry(
+    *,
+    staged_source_id: int,
+    cache_namespace: str,
+    cache_key: str,
+) -> SourceMetadataCache | None:
+    return (
+        db.session.query(SourceMetadataCache)
+        .filter(
+            SourceMetadataCache.staged_source_id == staged_source_id,
+            SourceMetadataCache.cache_namespace == cache_namespace,
+            SourceMetadataCache.cache_key == cache_key,
+        )
+        .one_or_none()
+    )
 
 
 def get_cached_metadata_payload(
@@ -106,17 +123,17 @@ def set_cached_metadata_payload(
     payload_to_store = dict(payload)
     payload_to_store.pop("cached", None)
     payload_to_store.pop("cache_refreshed_at", None)
+    expires_at = (
+        now + timedelta(seconds=ttl_seconds) if ttl_seconds is not None else None
+    )
 
     def _write_payload() -> None:
-        entry = (
-            db.session.query(SourceMetadataCache)
-            .filter(
-                SourceMetadataCache.staged_source_id == source.id,
-                SourceMetadataCache.cache_namespace == cache_namespace,
-                SourceMetadataCache.cache_key == cache_key,
-            )
-            .one_or_none()
+        entry = _get_cache_entry(
+            staged_source_id=source.id,
+            cache_namespace=cache_namespace,
+            cache_key=cache_key,
         )
+        created_entry = False
         if entry is None:
             entry = SourceMetadataCache(
                 staged_source_id=source.id,
@@ -125,13 +142,34 @@ def set_cached_metadata_payload(
                 metadata_json="{}",
             )
             db.session.add(entry)
+            created_entry = True
 
         entry.metadata_json = json.dumps(payload_to_store, sort_keys=True)
         entry.refreshed_at = now
-        entry.expires_at = (
-            now + timedelta(seconds=ttl_seconds) if ttl_seconds is not None else None
-        )
-        db.session.commit()
+        entry.expires_at = expires_at
+
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            if not created_entry:
+                raise
+
+            # Another worker inserted the same cache row after our read. Reload
+            # that row and overwrite it so concurrent refresh jobs converge on a
+            # single cache entry instead of failing the whole metadata job.
+            entry = _get_cache_entry(
+                staged_source_id=source.id,
+                cache_namespace=cache_namespace,
+                cache_key=cache_key,
+            )
+            if entry is None:
+                raise
+
+            entry.metadata_json = json.dumps(payload_to_store, sort_keys=True)
+            entry.refreshed_at = now
+            entry.expires_at = expires_at
+            db.session.commit()
 
     _run_with_sqlite_lock_retry(_write_payload)
 
