@@ -54,7 +54,8 @@ const FrameShell = styled.div<{
   width: 100%;
   min-height: ${({ $height }) => $height}px;
   height: ${({ $height }) => $height}px;
-  --portal-frame-surface-opacity: ${({ $surfaceOpacity = 1 }) => $surfaceOpacity};
+  --portal-frame-surface-opacity: ${({ $surfaceOpacity = 1 }) =>
+    $surfaceOpacity};
   overflow: hidden;
   border-radius: ${({ $surfacePreset }) =>
     $surfacePreset === 'default' ? 'var(--portal-radius-md, 0)' : '0'};
@@ -319,12 +320,6 @@ export function buildEmbeddedChartCss(
           height: 100% !important;
           max-width: 100% !important;
         }
-        .leaflet-container svg,
-        .leaflet-overlay-pane svg {
-          width: auto !important;
-          height: auto !important;
-          max-width: none !important;
-        }
         .leaflet-container,
         .leaflet-pane,
         .leaflet-overlay-pane,
@@ -342,6 +337,26 @@ export function buildEmbeddedChartCss(
         }
         .leaflet-control-container {
           z-index: 3 !important;
+        }
+        .leaflet-interactive,
+        .leaflet-overlay-pane path,
+        .leaflet-overlay-pane svg path {
+          pointer-events: auto !important;
+          cursor: pointer !important;
+        }
+        .leaflet-overlay-pane svg polygon,
+        .leaflet-overlay-pane svg polyline,
+        .leaflet-overlay-pane svg circle,
+        .leaflet-overlay-pane svg rect {
+          pointer-events: auto !important;
+        }
+        .leaflet-tooltip-pane,
+        .leaflet-popup-pane {
+          z-index: 1200 !important;
+          visibility: visible !important;
+        }
+        .leaflet-overlay-pane svg {
+          pointer-events: none !important;
         }
         .dhis2-map-quick-filters,
         .dhis2-map-quick-filters-panel {

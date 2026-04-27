@@ -68,14 +68,26 @@ type VisualMode = 'light' | 'dark';
 const PAGE_QUERY_PARAM = 'page';
 const DASHBOARD_QUERY_PARAM = 'dashboard';
 const PORTAL_THEME_STORAGE_KEY = 'superset.public.portal.theme';
+const PORTAL_MESSAGE_CLASS = 'portal-page-message';
+const PORTAL_MESSAGE_STYLE: CSSProperties = {
+  background: '#0f172a',
+  color: '#f8fafc',
+  border: '1px solid rgba(148, 163, 184, 0.35)',
+  boxShadow: '0 8px 24px rgba(15, 23, 42, 0.35)',
+  borderRadius: 10,
+};
 
 const PageShell = styled.div`
   min-height: 100vh;
+  width: 100vw;
   display: flex;
   flex-direction: column;
   font-family: var(--portal-font-body, inherit);
   background: var(--portal-bg);
   color: var(--portal-text);
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
 
   a {
     color: var(--portal-link, var(--portal-accent));
@@ -270,6 +282,7 @@ const PageContentShell = styled.div<{ $dashboardMode?: boolean }>`
   position: relative;
   z-index: 1;
   padding-top: var(--portal-header-height, 0px);
+  min-height: calc(100vh - var(--portal-header-height, 0px));
   flex: 1 0 auto;
 `;
 
@@ -561,12 +574,24 @@ function pageBackgroundImageStyle(page?: PortalPage | null): CSSProperties {
   ) {
     return {};
   }
+  let backgroundImageUrl = page.featured_image_url;
+  const cacheBuster = page.changed_on || page.published_on || page.created_on;
+  if (cacheBuster) {
+    try {
+      const parsed = new URL(backgroundImageUrl, window.location.origin);
+      parsed.searchParams.set('_v', cacheBuster);
+      backgroundImageUrl = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    } catch {
+      const separator = backgroundImageUrl.includes('?') ? '&' : '?';
+      backgroundImageUrl = `${backgroundImageUrl}${separator}_v=${encodeURIComponent(cacheBuster)}`;
+    }
+  }
   const imageOpacity = normalizeOpacity(
     page.settings.pageBackgroundImageOpacity,
   );
   const overlayAlpha = Math.max(0, Math.min(1, 1 - imageOpacity));
   return {
-    backgroundImage: `linear-gradient(rgba(255, 255, 255, ${overlayAlpha}), rgba(255, 255, 255, ${overlayAlpha})), url("${page.featured_image_url.replace(/"/g, '\\"')}")`,
+    backgroundImage: `linear-gradient(rgba(255, 255, 255, ${overlayAlpha}), rgba(255, 255, 255, ${overlayAlpha})), url("${backgroundImageUrl.replace(/"/g, '\\"')}")`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat',
@@ -601,6 +626,20 @@ export default function PublicLandingPage() {
   const shouldOpenLayout = false;
   const { data, error, loading, reloadPortal } = usePublicPortal(pageSlug);
   const [messageApi, contextHolder] = message.useMessage();
+  const showSuccessMessage = (content: string) =>
+    messageApi.open({
+      type: 'success',
+      content,
+      className: PORTAL_MESSAGE_CLASS,
+      style: PORTAL_MESSAGE_STYLE,
+    });
+  const showErrorMessage = (content: string) =>
+    messageApi.open({
+      type: 'error',
+      content,
+      className: PORTAL_MESSAGE_CLASS,
+      style: PORTAL_MESSAGE_STYLE,
+    });
   const visualMode: VisualMode = getStoredTheme();
   const [layoutDrawerOpen, setLayoutDrawerOpen] = useState(false);
   const [layoutSections, setLayoutSections] = useState<PortalPageSection[]>([]);
@@ -779,7 +818,7 @@ export default function PublicLandingPage() {
         if (isCancelled) {
           return;
         }
-        messageApi.error(
+        showErrorMessage(
           caughtError instanceof Error
             ? caughtError.message
             : t('Failed to load the page studio draft.'),
@@ -901,9 +940,9 @@ export default function PublicLandingPage() {
       });
       await reloadPortal(currentPage.slug);
       setLayoutDrawerOpen(false);
-      messageApi.success(t('Layout preferences saved.'));
+      showSuccessMessage(t('Layout preferences saved.'));
     } catch (caughtError) {
-      messageApi.error(
+      showErrorMessage(
         caughtError instanceof Error
           ? caughtError.message
           : t('Failed to save layout preferences.'),
@@ -962,7 +1001,7 @@ export default function PublicLandingPage() {
       });
       setDraftPage(createDraftPage(response.json?.result as PortalPage));
     } catch (caughtError) {
-      messageApi.error(
+      showErrorMessage(
         caughtError instanceof Error
           ? caughtError.message
           : t('Failed to load the page studio draft.'),
@@ -1169,7 +1208,7 @@ export default function PublicLandingPage() {
       return;
     }
     if (!draftPage.title.trim()) {
-      messageApi.error(t('Page title is required.'));
+      showErrorMessage(t('Page title is required.'));
       return;
     }
     setSavingPage(true);
@@ -1182,9 +1221,9 @@ export default function PublicLandingPage() {
       setDraftPage(createDraftPage(savedPage));
       await reloadPortal(savedPage.slug);
       history.push(buildPageSearch(savedPage.slug));
-      messageApi.success(t('Page saved.'));
+      showSuccessMessage(t('Page saved.'));
     } catch (caughtError) {
-      messageApi.error(
+      showErrorMessage(
         caughtError instanceof Error
           ? caughtError.message
           : t('Failed to save page.'),
@@ -1295,9 +1334,30 @@ export default function PublicLandingPage() {
     Boolean(
       currentPage?.rendering?.template_structure?.regions?.sidebar?.enabled,
     ) && renderedRegions.sidebar.length > 0;
+  const isWelcomePage = currentPage?.slug === 'welcome' && !selectedDashboard;
+  const resolvedContentMaxWidth = isWelcomePage ? '100vw' : contentMaxWidth;
+  const resolvedPagePadding = isWelcomePage ? '0' : pagePadding;
   return (
     <PageShell style={shellThemeStyle}>
       {contextHolder}
+      <style>
+        {`
+          .ant-message-notice.${PORTAL_MESSAGE_CLASS} .ant-message-notice-content,
+          .${PORTAL_MESSAGE_CLASS}.ant-message-notice-content {
+            background: #0f172a !important;
+            color: #f8fafc !important;
+            border: 1px solid rgba(148, 163, 184, 0.35) !important;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35) !important;
+          }
+          .ant-message-notice.${PORTAL_MESSAGE_CLASS} .ant-message-custom-content,
+          .ant-message-notice.${PORTAL_MESSAGE_CLASS} .ant-message-custom-content span,
+          .${PORTAL_MESSAGE_CLASS}.ant-message-notice-content .ant-message-custom-content,
+          .${PORTAL_MESSAGE_CLASS}.ant-message-notice-content .ant-message-custom-content span,
+          .${PORTAL_MESSAGE_CLASS}.ant-message-notice-content .anticon {
+            color: #f8fafc !important;
+          }
+        `}
+      </style>
       <StickyHeader ref={stickyHeaderRef}>
         <HeaderInner $maxWidth={shellMaxWidth}>
           {/* ── Left: Brand | Welcome | Dashboard Select ── */}
@@ -1407,7 +1467,10 @@ export default function PublicLandingPage() {
         ) : (
           <>
             {error ? (
-              <Main $maxWidth={contentMaxWidth} $padding={pagePadding}>
+              <Main
+                $maxWidth={resolvedContentMaxWidth}
+                $padding={resolvedPagePadding}
+              >
                 <Alert
                   style={{ marginBottom: 20 }}
                   type="error"
@@ -1423,7 +1486,10 @@ export default function PublicLandingPage() {
             ) : null}
 
             {loading && !data ? (
-              <Main $maxWidth={contentMaxWidth} $padding={pagePadding}>
+              <Main
+                $maxWidth={resolvedContentMaxWidth}
+                $padding={resolvedPagePadding}
+              >
                 <div
                   style={{
                     display: 'flex',
@@ -1438,7 +1504,10 @@ export default function PublicLandingPage() {
               pageBlocks.length ? (
                 <>
                   {renderedRegions.header.length ? (
-                    <Main $maxWidth={contentMaxWidth} $padding={pagePadding}>
+                    <Main
+                      $maxWidth={resolvedContentMaxWidth}
+                      $padding={resolvedPagePadding}
+                    >
                       <RenderBlockTree
                         blocks={renderedRegions.header}
                         charts={data?.available_charts || []}
@@ -1461,7 +1530,10 @@ export default function PublicLandingPage() {
                     onNavigate={navigateToPath}
                     onOpenDashboard={navigateToPublicDashboard}
                   />
-                  <Main $maxWidth={contentMaxWidth} $padding={pagePadding}>
+                  <Main
+                    $maxWidth={resolvedContentMaxWidth}
+                    $padding={resolvedPagePadding}
+                  >
                     {renderedRegions.content.length ||
                     renderedRegions.sidebar.length ? (
                       <div
@@ -1528,7 +1600,10 @@ export default function PublicLandingPage() {
                   </Main>
                 </>
               ) : (
-                <Main $maxWidth={contentMaxWidth} $padding={pagePadding}>
+                <Main
+                  $maxWidth={resolvedContentMaxWidth}
+                  $padding={resolvedPagePadding}
+                >
                   <SurfaceCard>
                     <CardTitle>{currentPage.title}</CardTitle>
                     <CardBody>
@@ -1540,7 +1615,10 @@ export default function PublicLandingPage() {
                 </Main>
               )
             ) : (
-              <Main $maxWidth={contentMaxWidth} $padding={pagePadding}>
+              <Main
+                $maxWidth={resolvedContentMaxWidth}
+                $padding={resolvedPagePadding}
+              >
                 <SurfaceCard>
                   <Empty
                     description={

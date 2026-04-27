@@ -286,7 +286,7 @@ describe('ThemeController', () => {
       themeObject: mockThemeObject,
     });
 
-    expect(controller.getCurrentMode()).toBe(ThemeMode.SYSTEM);
+    expect(controller.getCurrentMode()).toBe(ThemeMode.DEFAULT);
   });
 
   test('should handle only default theme', () => {
@@ -487,7 +487,7 @@ describe('ThemeController', () => {
       jest.clearAllMocks();
 
       // Try to change to the same mode (DEFAULT)
-      controller.setThemeMode(ThemeMode.SYSTEM);
+      controller.setThemeMode(ThemeMode.DEFAULT);
 
       // Should not call setItem since mode didn't change
       expect(mockLocalStorage.setItem).not.toHaveBeenCalled();
@@ -561,7 +561,7 @@ describe('ThemeController', () => {
       expect(mockSetConfig).toHaveBeenCalledTimes(initialCallCount);
     });
 
-    test('should switch to dark theme when system is dark and mode is SYSTEM', () => {
+    test('should stay on light theme by default even when system is dark', () => {
       // Setup with both light and dark themes available
       mockGetBootstrapData.mockReturnValue(
         createMockBootstrapData({
@@ -583,16 +583,16 @@ describe('ThemeController', () => {
         themeObject: mockThemeObject,
       });
 
-      // Verify system mode is set by default
-      expect(controller.getCurrentMode()).toBe(ThemeMode.SYSTEM);
+      // Verify default mode is set by default
+      expect(controller.getCurrentMode()).toBe(ThemeMode.DEFAULT);
 
-      // Verify that dark theme was applied during initialization
+      // Verify that default theme was applied during initialization
       expect(mockSetConfig).toHaveBeenCalled();
       const lastCall =
         mockSetConfig.mock.calls[mockSetConfig.mock.calls.length - 1][0];
-      expect(lastCall.token.colorBgBase).toBe(DARK_THEME.token!.colorBgBase);
+      expect(lastCall.token.colorBgBase).toBe(DEFAULT_THEME.token!.colorBgBase);
       expect(lastCall.token.colorTextBase).toBe(
-        DARK_THEME.token!.colorTextBase,
+        DEFAULT_THEME.token!.colorTextBase,
       );
     });
   });
@@ -702,10 +702,11 @@ describe('ThemeController', () => {
       // Clear the call from controller initialization
       jest.clearAllMocks();
 
+      controller.setThemeMode(ThemeMode.DARK);
       controller.setThemeMode(ThemeMode.DEFAULT);
 
-      expect(mockSetConfig).toHaveBeenCalledTimes(1);
-      expect(mockSetConfig).toHaveBeenCalledWith(
+      expect(mockSetConfig).toHaveBeenCalledTimes(2);
+      expect(mockSetConfig).toHaveBeenLastCalledWith(
         expect.objectContaining({
           token: expect.objectContaining({
             colorBgBase: '#ededed',

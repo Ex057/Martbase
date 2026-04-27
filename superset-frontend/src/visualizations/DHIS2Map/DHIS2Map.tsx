@@ -1252,7 +1252,6 @@ function DHIS2Map({
     parentName: null,
     breadcrumbs: [],
   });
-  const [hoveredFeature, setHoveredFeature] = useState<string | null>(null);
   const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(
     null,
   );
@@ -3106,7 +3105,6 @@ function DHIS2Map({
         fillOpacityValue = Math.max(opacity * 0.6, 0.3);
       }
 
-      const isHovered = hoveredFeature === feature.id;
       const isSelected = selectedFeatureId === feature.id;
 
       // Auto-theme and level border colors only apply to selected/thematic areas.
@@ -3128,10 +3126,6 @@ function DHIS2Map({
         }
       }
 
-      if (isHovered) {
-        borderWidth = strokeWidth + 1;
-      }
-
       if (isSelected) {
         borderWidth = Math.max(borderWidth + 1.5, strokeWidth + 2);
         borderColor = darkenColor(borderColor, 0.25);
@@ -3149,7 +3143,6 @@ function DHIS2Map({
       getFeatureValue,
       legendNoDataColor,
       opacity,
-      hoveredFeature,
       strokeColor,
       strokeWidth,
       autoThemeBorders,
@@ -3211,14 +3204,7 @@ function DHIS2Map({
         className: 'dhis2-map-tooltip-container',
       });
 
-      const handlers: Record<string, () => void> = {
-        mouseover: () => {
-          setHoveredFeature(feature.id);
-        },
-        mouseout: () => {
-          setHoveredFeature(null);
-        },
-      };
+      const handlers: Record<string, () => void> = {};
 
       handlers.click = () => {
         setSelectedFeatureId(null);
@@ -3305,10 +3291,7 @@ function DHIS2Map({
 
   return (
     <MapWrapper style={{ width, height }}>
-      <MapCanvas
-        $backgroundColor={chartBackgroundColor}
-        onMouseLeave={() => setHoveredFeature(null)}
-      >
+      <MapCanvas $backgroundColor={chartBackgroundColor}>
         {/* @ts-ignore - React 19 compatibility */}
         <MapContainer
           center={[1.3733, 32.2903]}

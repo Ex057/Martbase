@@ -701,8 +701,9 @@ export class ThemeController {
       return ThemeMode.DEFAULT;
     }
 
-    // Default to system preference when both themes are available
-    return ThemeMode.SYSTEM;
+    // Default to light mode for fresh sessions. Users can still opt into
+    // dark/system mode explicitly and that preference will be persisted.
+    return ThemeMode.DEFAULT;
   }
 
   /**

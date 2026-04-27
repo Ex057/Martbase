@@ -1305,6 +1305,7 @@ type RenderBlockTreeProps = {
     block: PortalPageBlock,
     columnCount: number,
   ) => void;
+  onMoveBlockFromCanvas?: (block: PortalPageBlock, direction: -1 | 1) => void;
   onDeleteBlockFromCanvas?: (block: PortalPageBlock) => void;
 };
 
@@ -1328,6 +1329,7 @@ export function RenderBlockTree({
   onInsertBlockFromCanvas,
   onInsertBlockTypeFromCanvas,
   onInsertGridTemplateFromCanvas,
+  onMoveBlockFromCanvas,
   onDeleteBlockFromCanvas,
 }: RenderBlockTreeProps) {
   const [resizePreview, setResizePreview] = useState<{
@@ -1626,6 +1628,37 @@ export function RenderBlockTree({
     );
   }
 
+  function renderMoveControls(
+    block: PortalPageBlock,
+    label: string,
+  ): JSX.Element[] | null {
+    if (!onMoveBlockFromCanvas) {
+      return null;
+    }
+    return (
+      [
+        { direction: -1 as const, text: t('← Left') },
+        { direction: 1 as const, text: t('Right →') },
+      ] as const
+    ).map(action => (
+      <EditorInlineActionButton
+        key={`${blockId(block)}-move-${action.direction}`}
+        type="button"
+        aria-label={
+          action.direction < 0
+            ? t('Move %s to the left', label)
+            : t('Move %s to the right', label)
+        }
+        onClick={event => {
+          stopCanvasAction(event);
+          onMoveBlockFromCanvas(block, action.direction);
+        }}
+      >
+        {action.text}
+      </EditorInlineActionButton>
+    ));
+  }
+
   function wrapEditorBlock(
     block: PortalPageBlock,
     rendered: JSX.Element,
@@ -1806,6 +1839,7 @@ export function RenderBlockTree({
               },
             )}
             {renderGridTemplateControls(block, label)}
+            {renderMoveControls(block, label)}
             {renderDeleteControl(block, label)}
           </EditorInlineActions>
         </EditorSelectableHeader>
@@ -1976,62 +2010,65 @@ export function RenderBlockTree({
           </Section>
         );
       }
-      case 'hero':
-        {
-          const childBlocks = block.children || [];
-          const heroContentChildren = childBlocks.filter(
-            child =>
+      case 'hero': {
+        const childBlocks = block.children || [];
+        const heroContentChildren = childBlocks.filter(
+          child =>
+            child.block_type === 'button' &&
+            (mode === 'public' || child.settings?.heroPlacement !== 'panel'),
+        );
+        const heroVisualChildren = childBlocks.filter(
+          child =>
+            !(
               child.block_type === 'button' &&
-              (mode === 'public' || child.settings?.heroPlacement !== 'panel'),
-          );
-          const heroVisualChildren = childBlocks.filter(
-            child =>
-              !(
-                child.block_type === 'button' &&
-                (mode === 'public' || child.settings?.heroPlacement !== 'panel')
-              ),
-          );
-          const heroActionsAlign =
-            block.settings?.heroActionsAlign === 'center' ||
-            block.settings?.heroActionsAlign === 'end'
-              ? block.settings?.heroActionsAlign
-              : 'start';
-          const heroVisualPanelBackground = colorWithOpacity(
-            block.settings?.heroPanelBackground ||
-              block.styles?.backgroundColor ||
-              'rgba(255, 255, 255, 0.08)',
-            block.settings?.heroPanelOpacity ?? 0,
-          );
-          const heroVisualPanelBorder = colorWithOpacity(
-            block.settings?.heroPanelBorderColor || 'rgba(255, 255, 255, 0.18)',
-            block.settings?.heroPanelOpacity ?? 0,
-          );
-          const heroButtonBackground = colorWithOpacity(
-            block.settings?.heroButtonBackground || 'rgba(255, 255, 255, 0.92)',
-            block.settings?.heroButtonOpacity ?? 1,
-          );
-          const heroSecondaryButtonBackground = colorWithOpacity(
-            block.settings?.heroSecondaryButtonBackground ||
-              'rgba(255, 255, 255, 0.72)',
-            block.settings?.heroSecondaryButtonOpacity ??
-              block.settings?.heroButtonOpacity ??
-              1,
-          );
-          const heroStyle: CSSProperties = {
-            ...style,
-          };
-          const fullBleed =
-            mode === 'public' &&
-            block.slot === 'hero' &&
-            block.settings?.fullBleed !== false;
-          if (fullBleed) {
-            heroStyle.width = 'calc(100vw + 6px)';
-            heroStyle.maxWidth = 'calc(100vw + 6px)';
-            heroStyle.marginLeft = 'calc(50% - 50vw - 3px)';
-            heroStyle.marginRight = 'calc(50% - 50vw - 3px)';
-            heroStyle.borderRadius = 0;
-            heroStyle.border = 0;
+              (mode === 'public' || child.settings?.heroPlacement !== 'panel')
+            ),
+        );
+        const heroActionsAlign =
+          block.settings?.heroActionsAlign === 'center' ||
+          block.settings?.heroActionsAlign === 'end'
+            ? block.settings?.heroActionsAlign
+            : 'start';
+        const heroVisualPanelBackground = colorWithOpacity(
+          block.settings?.heroPanelBackground ||
+            block.styles?.backgroundColor ||
+            'rgba(255, 255, 255, 0.08)',
+          block.settings?.heroPanelOpacity ?? 0,
+        );
+        const heroVisualPanelBorder = colorWithOpacity(
+          block.settings?.heroPanelBorderColor || 'rgba(255, 255, 255, 0.18)',
+          block.settings?.heroPanelOpacity ?? 0,
+        );
+        const heroButtonBackground = colorWithOpacity(
+          block.settings?.heroButtonBackground || 'rgba(255, 255, 255, 0.92)',
+          block.settings?.heroButtonOpacity ?? 1,
+        );
+        const heroSecondaryButtonBackground = colorWithOpacity(
+          block.settings?.heroSecondaryButtonBackground ||
+            'rgba(255, 255, 255, 0.72)',
+          block.settings?.heroSecondaryButtonOpacity ??
+            block.settings?.heroButtonOpacity ??
+            1,
+        );
+        const heroStyle: CSSProperties = {
+          ...style,
+        };
+        const fullBleed =
+          mode === 'public' &&
+          block.slot === 'hero' &&
+          block.settings?.fullBleed !== false;
+        if (fullBleed) {
+          heroStyle.width = 'calc(100vw + 6px)';
+          heroStyle.maxWidth = 'calc(100vw + 6px)';
+          heroStyle.marginLeft = 'calc(50% - 50vw - 3px)';
+          heroStyle.marginRight = 'calc(50% - 50vw - 3px)';
+          heroStyle.borderRadius = 0;
+          heroStyle.border = 0;
+          if (block.settings?.fullViewport !== false) {
+            heroStyle.minHeight =
+              'calc(100vh - var(--portal-header-height, 0px))';
           }
+        }
         return (
           <Hero
             key={block.uid || block.id}
@@ -2077,7 +2114,8 @@ export function RenderBlockTree({
                                 block.settings?.heroButtonBorderColor ||
                                 'transparent',
                               color:
-                                block.settings?.heroButtonTextColor || '#0f172a',
+                                block.settings?.heroButtonTextColor ||
+                                '#0f172a',
                             }
                           : undefined
                       }
@@ -2100,7 +2138,8 @@ export function RenderBlockTree({
                           ? {
                               background: heroSecondaryButtonBackground,
                               borderColor:
-                                block.settings?.heroSecondaryButtonBorderColor ||
+                                block.settings
+                                  ?.heroSecondaryButtonBorderColor ||
                                 'transparent',
                               color:
                                 block.settings?.heroSecondaryButtonTextColor ||
@@ -2504,82 +2543,81 @@ export function RenderBlockTree({
           </SurfaceCard>
         );
       }
-      case 'button':
-        {
-          const buttonType =
-            (block.settings?.variant as
-              | 'default'
-              | 'primary'
-              | 'dashed'
-              | 'link'
-              | 'text') || 'primary';
-          const heroSlotButton = mode === 'public' && block.slot === 'hero';
-          const resolvedButtonBackground = colorWithOpacity(
-            (style.background as string) ||
-              (style.backgroundColor as string) ||
-              (heroSlotButton ? '#ffffff' : undefined),
-            block.settings?.buttonBackgroundOpacity ??
-              block.settings?.heroButtonOpacity ??
-              (heroSlotButton ? 0.78 : undefined),
-          );
-          const resolvedButtonBorder = colorWithOpacity(
-            (style.borderColor as string) ||
-              (heroSlotButton ? 'rgba(255, 255, 255, 0.24)' : undefined),
-            block.settings?.buttonBackgroundOpacity ??
-              block.settings?.heroButtonOpacity ??
-              (heroSlotButton ? 0.78 : undefined),
-          );
-          const buttonNode = (
-            <Button
-              type={buttonType}
-              style={
-                heroSlotButton
-                  ? {
-                      background: resolvedButtonBackground,
-                      borderColor: resolvedButtonBorder || 'transparent',
-                      color: String(style.color || '#0f172a'),
-                      boxShadow: 'none',
-                    }
-                  : undefined
-              }
-              onClick={() => onNavigate?.(block.settings?.url, false)}
-            >
-              {renderInlineRichContent(
-                labelHtml || titleHtml,
-                block.content?.label || title || t('Open link'),
-                { allowLinks: false },
-              )}
-            </Button>
-          );
-          if (heroSlotButton) {
-            return (
-              <div
-                key={block.uid || block.id}
-                className={className}
-                style={{
-                  ...style,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'flex-start',
-                  padding: 0,
-                  background: 'transparent',
-                  border: 0,
-                }}
-              >
-                {buttonNode}
-              </div>
-            );
-          }
+      case 'button': {
+        const buttonType =
+          (block.settings?.variant as
+            | 'default'
+            | 'primary'
+            | 'dashed'
+            | 'link'
+            | 'text') || 'primary';
+        const heroSlotButton = mode === 'public' && block.slot === 'hero';
+        const resolvedButtonBackground = colorWithOpacity(
+          (style.background as string) ||
+            (style.backgroundColor as string) ||
+            (heroSlotButton ? '#ffffff' : undefined),
+          block.settings?.buttonBackgroundOpacity ??
+            block.settings?.heroButtonOpacity ??
+            (heroSlotButton ? 0.78 : undefined),
+        );
+        const resolvedButtonBorder = colorWithOpacity(
+          (style.borderColor as string) ||
+            (heroSlotButton ? 'rgba(255, 255, 255, 0.24)' : undefined),
+          block.settings?.buttonBackgroundOpacity ??
+            block.settings?.heroButtonOpacity ??
+            (heroSlotButton ? 0.78 : undefined),
+        );
+        const buttonNode = (
+          <Button
+            type={buttonType}
+            style={
+              heroSlotButton
+                ? {
+                    background: resolvedButtonBackground,
+                    borderColor: resolvedButtonBorder || 'transparent',
+                    color: String(style.color || '#0f172a'),
+                    boxShadow: 'none',
+                  }
+                : undefined
+            }
+            onClick={() => onNavigate?.(block.settings?.url, false)}
+          >
+            {renderInlineRichContent(
+              labelHtml || titleHtml,
+              block.content?.label || title || t('Open link'),
+              { allowLinks: false },
+            )}
+          </Button>
+        );
+        if (heroSlotButton) {
           return (
-            <SurfaceCard
+            <div
               key={block.uid || block.id}
               className={className}
-              style={style}
+              style={{
+                ...style,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-start',
+                padding: 0,
+                background: 'transparent',
+                border: 0,
+              }}
             >
               {buttonNode}
-            </SurfaceCard>
+            </div>
           );
         }
+        return (
+          <SurfaceCard
+            key={block.uid || block.id}
+            className={className}
+            style={style}
+          >
+            {buttonNode}
+          </SurfaceCard>
+        );
+      }
       case 'menu': {
         const menu = findMenu(
           navigation,
@@ -2812,6 +2850,19 @@ export function RenderBlockTree({
             (headerTitleText &&
               (!chartIsMapLike ||
                 !isGenericChartTitle(headerTitleText, chart?.slice_name))));
+        const mapOpacityOverride = Number(block.settings?.mapOpacity);
+        const hasExplicitMapOpacityOverride =
+          Number.isFinite(mapOpacityOverride) &&
+          mapOpacityOverride >= 0 &&
+          mapOpacityOverride <= 1;
+        const mapFormDataOverrides =
+          chartIsMapLike &&
+          hasExplicitMapOpacityOverride &&
+          block.settings?.mapEmbedTweaks !== false
+            ? {
+                opacity: mapOpacityOverride,
+              }
+            : undefined;
         return (
           <SurfaceCard
             key={block.uid || block.id}
@@ -2861,9 +2912,10 @@ export function RenderBlockTree({
                 legendPreset={legendPreset}
                 vizType={chart.viz_type}
                 accessMode={chartEmbedAccess}
+                formDataOverrides={mapFormDataOverrides}
                 frameOpacity={
-                  chartIsMapLike && block.slot === 'hero'
-                    ? Number(block.settings?.frameOpacity) || 0.88
+                  chartIsMapLike
+                    ? Number(block.settings?.frameOpacity) || 0
                     : undefined
                 }
               />

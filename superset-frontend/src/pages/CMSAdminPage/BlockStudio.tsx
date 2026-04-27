@@ -1763,6 +1763,13 @@ export default function BlockStudio({
     pushBlocks(moveBlockByUid(blocks, blockKey(selectedBlock), direction));
   }
 
+  function moveBlockFromCanvas(block: PortalPageBlock, direction: -1 | 1) {
+    if (isPublishedPage) {
+      return;
+    }
+    pushBlocks(moveBlockByUid(blocks, blockKey(block), direction));
+  }
+
   function resizeSelectedBlock(
     axis: 'gridSpan' | 'minHeight',
     direction: -1 | 1,
@@ -4366,6 +4373,11 @@ export default function BlockStudio({
             onDeleteBlockFromCanvas={
               showSlotChrome && !isPublishedPage
                 ? removeBlockFromCanvas
+                : undefined
+            }
+            onMoveBlockFromCanvas={
+              showSlotChrome && !isPublishedPage
+                ? moveBlockFromCanvas
                 : undefined
             }
           />
