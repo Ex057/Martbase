@@ -647,11 +647,32 @@ const HeroSubtitle = styled.p`
   color: var(--portal-muted-strong);
 `;
 
-const HeroActions = styled.div`
+const HeroActions = styled.div<{ $align?: 'start' | 'center' | 'end' }>`
   display: flex;
   gap: 12px;
   margin-top: 18px;
   flex-wrap: wrap;
+  justify-content: ${({ $align = 'start' }) => $align};
+`;
+
+const HeroVisualPanel = styled.div<{
+  $background?: string;
+  $border?: string;
+  $padding?: string;
+}>`
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  padding: ${({ $padding }) => $padding || '0'};
+  border-radius: var(--portal-radius-lg, 0);
+  background: ${({ $background }) => $background || 'transparent'};
+  border: 1px solid ${({ $border }) => $border || 'transparent'};
+  box-shadow: var(--portal-shadow-card, none);
+  backdrop-filter: var(
+    --portal-surface-backdrop-filter,
+    saturate(140%) blur(10px)
+  );
 `;
 
 const Quote = styled.blockquote`
@@ -771,6 +792,44 @@ function cssBackgroundImage(value?: unknown): string | undefined {
     return trimmed;
   }
   return `url("${trimmed.replace(/"/g, '\\"')}")`;
+}
+
+function parseHexChannel(hex: string) {
+  return Number.parseInt(hex, 16);
+}
+
+function colorWithOpacity(color: string | undefined, opacity: unknown) {
+  if (typeof color !== 'string' || !color.trim()) {
+    return undefined;
+  }
+  const normalizedOpacity = Number(opacity);
+  if (!Number.isFinite(normalizedOpacity)) {
+    return color;
+  }
+  const alpha = Math.max(0, Math.min(1, normalizedOpacity));
+  const trimmed = color.trim();
+  const hex = trimmed.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hex) {
+    const raw = hex[1];
+    const expanded =
+      raw.length === 3
+        ? raw
+            .split('')
+            .map(channel => `${channel}${channel}`)
+            .join('')
+        : raw;
+    const red = parseHexChannel(expanded.slice(0, 2));
+    const green = parseHexChannel(expanded.slice(2, 4));
+    const blue = parseHexChannel(expanded.slice(4, 6));
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+  }
+  const rgb = trimmed.match(
+    /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*[\d.]+\s*)?\)$/i,
+  );
+  if (rgb) {
+    return `rgba(${rgb[1]}, ${rgb[2]}, ${rgb[3]}, ${alpha})`;
+  }
+  return trimmed;
 }
 
 function normalizeOpacity(value?: unknown): number | undefined {
@@ -1918,8 +1977,67 @@ export function RenderBlockTree({
         );
       }
       case 'hero':
+        {
+          const childBlocks = block.children || [];
+          const heroContentChildren = childBlocks.filter(
+            child =>
+              child.block_type === 'button' &&
+              (mode === 'public' || child.settings?.heroPlacement !== 'panel'),
+          );
+          const heroVisualChildren = childBlocks.filter(
+            child =>
+              !(
+                child.block_type === 'button' &&
+                (mode === 'public' || child.settings?.heroPlacement !== 'panel')
+              ),
+          );
+          const heroActionsAlign =
+            block.settings?.heroActionsAlign === 'center' ||
+            block.settings?.heroActionsAlign === 'end'
+              ? block.settings?.heroActionsAlign
+              : 'start';
+          const heroVisualPanelBackground = colorWithOpacity(
+            block.settings?.heroPanelBackground ||
+              block.styles?.backgroundColor ||
+              'rgba(255, 255, 255, 0.08)',
+            block.settings?.heroPanelOpacity ?? 0,
+          );
+          const heroVisualPanelBorder = colorWithOpacity(
+            block.settings?.heroPanelBorderColor || 'rgba(255, 255, 255, 0.18)',
+            block.settings?.heroPanelOpacity ?? 0,
+          );
+          const heroButtonBackground = colorWithOpacity(
+            block.settings?.heroButtonBackground || 'rgba(255, 255, 255, 0.92)',
+            block.settings?.heroButtonOpacity ?? 1,
+          );
+          const heroSecondaryButtonBackground = colorWithOpacity(
+            block.settings?.heroSecondaryButtonBackground ||
+              'rgba(255, 255, 255, 0.72)',
+            block.settings?.heroSecondaryButtonOpacity ??
+              block.settings?.heroButtonOpacity ??
+              1,
+          );
+          const heroStyle: CSSProperties = {
+            ...style,
+          };
+          const fullBleed =
+            mode === 'public' &&
+            block.slot === 'hero' &&
+            block.settings?.fullBleed !== false;
+          if (fullBleed) {
+            heroStyle.width = 'calc(100vw + 6px)';
+            heroStyle.maxWidth = 'calc(100vw + 6px)';
+            heroStyle.marginLeft = 'calc(50% - 50vw - 3px)';
+            heroStyle.marginRight = 'calc(50% - 50vw - 3px)';
+            heroStyle.borderRadius = 0;
+            heroStyle.border = 0;
+          }
         return (
-          <Hero key={block.uid || block.id} className={className} style={style}>
+          <Hero
+            key={block.uid || block.id}
+            className={className}
+            style={heroStyle}
+          >
             <div>
               {block.content?.eyebrow || eyebrowHtml ? (
                 <Eyebrow>
@@ -1946,11 +2064,23 @@ export function RenderBlockTree({
                 </CardBody>
               ) : null}
               {mode === 'public' ? (
-                <HeroActions>
+                <HeroActions $align={heroActionsAlign}>
                   {block.settings?.primaryActionUrl ? (
                     <Button
                       type="primary"
                       size="large"
+                      style={
+                        heroButtonBackground
+                          ? {
+                              background: heroButtonBackground,
+                              borderColor:
+                                block.settings?.heroButtonBorderColor ||
+                                'transparent',
+                              color:
+                                block.settings?.heroButtonTextColor || '#0f172a',
+                            }
+                          : undefined
+                      }
                       onClick={() =>
                         onNavigate?.(block.settings?.primaryActionUrl, false)
                       }
@@ -1965,6 +2095,19 @@ export function RenderBlockTree({
                   {block.settings?.secondaryActionUrl ? (
                     <Button
                       size="large"
+                      style={
+                        heroSecondaryButtonBackground
+                          ? {
+                              background: heroSecondaryButtonBackground,
+                              borderColor:
+                                block.settings?.heroSecondaryButtonBorderColor ||
+                                'transparent',
+                              color:
+                                block.settings?.heroSecondaryButtonTextColor ||
+                                '#0f172a',
+                            }
+                          : undefined
+                      }
                       onClick={() =>
                         onNavigate?.(block.settings?.secondaryActionUrl, false)
                       }
@@ -1978,10 +2121,22 @@ export function RenderBlockTree({
                   ) : null}
                 </HeroActions>
               ) : null}
+              {heroContentChildren.length ? (
+                <div style={{ marginTop: 18 }}>
+                  {renderChildrenGrid(heroContentChildren, 12, block)}
+                </div>
+              ) : null}
             </div>
-            <div>{renderChildrenGrid(block.children || [], 12, block)}</div>
+            <HeroVisualPanel
+              $background={heroVisualPanelBackground}
+              $border={heroVisualPanelBorder}
+              $padding={String(block.settings?.heroPanelPadding || '0')}
+            >
+              {renderChildrenGrid(heroVisualChildren, 12, block)}
+            </HeroVisualPanel>
           </Hero>
         );
+      }
       case 'group':
       case 'column': {
         const containerColumns = Number(block.settings?.columnCount) || 1;
@@ -2350,20 +2505,42 @@ export function RenderBlockTree({
         );
       }
       case 'button':
-        return (
-          <SurfaceCard
-            key={block.uid || block.id}
-            className={className}
-            style={style}
-          >
+        {
+          const buttonType =
+            (block.settings?.variant as
+              | 'default'
+              | 'primary'
+              | 'dashed'
+              | 'link'
+              | 'text') || 'primary';
+          const heroSlotButton = mode === 'public' && block.slot === 'hero';
+          const resolvedButtonBackground = colorWithOpacity(
+            (style.background as string) ||
+              (style.backgroundColor as string) ||
+              (heroSlotButton ? '#ffffff' : undefined),
+            block.settings?.buttonBackgroundOpacity ??
+              block.settings?.heroButtonOpacity ??
+              (heroSlotButton ? 0.78 : undefined),
+          );
+          const resolvedButtonBorder = colorWithOpacity(
+            (style.borderColor as string) ||
+              (heroSlotButton ? 'rgba(255, 255, 255, 0.24)' : undefined),
+            block.settings?.buttonBackgroundOpacity ??
+              block.settings?.heroButtonOpacity ??
+              (heroSlotButton ? 0.78 : undefined),
+          );
+          const buttonNode = (
             <Button
-              type={
-                (block.settings?.variant as
-                  | 'default'
-                  | 'primary'
-                  | 'dashed'
-                  | 'link'
-                  | 'text') || 'primary'
+              type={buttonType}
+              style={
+                heroSlotButton
+                  ? {
+                      background: resolvedButtonBackground,
+                      borderColor: resolvedButtonBorder || 'transparent',
+                      color: String(style.color || '#0f172a'),
+                      boxShadow: 'none',
+                    }
+                  : undefined
               }
               onClick={() => onNavigate?.(block.settings?.url, false)}
             >
@@ -2373,8 +2550,36 @@ export function RenderBlockTree({
                 { allowLinks: false },
               )}
             </Button>
-          </SurfaceCard>
-        );
+          );
+          if (heroSlotButton) {
+            return (
+              <div
+                key={block.uid || block.id}
+                className={className}
+                style={{
+                  ...style,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-start',
+                  padding: 0,
+                  background: 'transparent',
+                  border: 0,
+                }}
+              >
+                {buttonNode}
+              </div>
+            );
+          }
+          return (
+            <SurfaceCard
+              key={block.uid || block.id}
+              className={className}
+              style={style}
+            >
+              {buttonNode}
+            </SurfaceCard>
+          );
+        }
       case 'menu': {
         const menu = findMenu(
           navigation,
@@ -2656,6 +2861,11 @@ export function RenderBlockTree({
                 legendPreset={legendPreset}
                 vizType={chart.viz_type}
                 accessMode={chartEmbedAccess}
+                frameOpacity={
+                  chartIsMapLike && block.slot === 'hero'
+                    ? Number(block.settings?.frameOpacity) || 0.88
+                    : undefined
+                }
               />
             ) : (
               <Empty

@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import logging
 import os
 import sys
@@ -753,6 +754,19 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
                 "configuration/configuring-superset#specifying-a-secret_key"
             )
             logger.warning(bottom_banner)
+
+        source = self.config.get("SECRET_KEY_SOURCE", "unknown")
+        fingerprint = self.config.get("SECRET_KEY_FINGERPRINT")
+        if not fingerprint:
+            fingerprint = hashlib.sha256(
+                str(self.config["SECRET_KEY"]).encode("utf-8")
+            ).hexdigest()[:12]
+        logger.info(
+            "Active SECRET_KEY fingerprint=%s source=%s env=%s",
+            fingerprint,
+            source,
+            self.config.get("SUPERSET_ENV", os.environ.get("SUPERSET_ENV", "")),
+        )
 
         if self.config["SECRET_KEY"] == CHANGE_ME_SECRET_KEY:
             if (

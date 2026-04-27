@@ -48,6 +48,89 @@ type StagedOrgUnitLevel = {
   name?: string;
 };
 
+function parseHexColorString(value: string): RGBAColor | null {
+  const normalized = value.trim().replace(/^#/, '');
+  if (![3, 4, 6, 8].includes(normalized.length)) {
+    return null;
+  }
+
+  const expand = (hex: string) => (hex.length === 1 ? `${hex}${hex}` : hex);
+  let r: number;
+  let g: number;
+  let b: number;
+  let a = 1;
+
+  if (normalized.length === 3 || normalized.length === 4) {
+    r = parseInt(expand(normalized[0]), 16);
+    g = parseInt(expand(normalized[1]), 16);
+    b = parseInt(expand(normalized[2]), 16);
+    if (normalized.length === 4) {
+      a = parseInt(expand(normalized[3]), 16) / 255;
+    }
+  } else {
+    r = parseInt(normalized.slice(0, 2), 16);
+    g = parseInt(normalized.slice(2, 4), 16);
+    b = parseInt(normalized.slice(4, 6), 16);
+    if (normalized.length === 8) {
+      a = parseInt(normalized.slice(6, 8), 16) / 255;
+    }
+  }
+
+  if ([r, g, b].some(value => Number.isNaN(value))) {
+    return null;
+  }
+
+  return { r, g, b, a };
+}
+
+function parseRgbColorString(value: string): RGBAColor | null {
+  const match = value
+    .trim()
+    .match(/rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*(?:,\s*([0-9.]+)\s*)?\)/i);
+  if (!match) {
+    return null;
+  }
+
+  const r = Number(match[1]);
+  const g = Number(match[2]);
+  const b = Number(match[3]);
+  const a = match[4] !== undefined ? Number(match[4]) : 1;
+
+  if ([r, g, b, a].some(value => Number.isNaN(value))) {
+    return null;
+  }
+
+  return { r, g, b, a };
+}
+
+function parseCssColorString(value: string): RGBAColor | null {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('#')) {
+    return parseHexColorString(trimmed);
+  }
+  if (trimmed.startsWith('rgb')) {
+    return parseRgbColorString(trimmed);
+  }
+  return null;
+}
+
+function applyOpacityToColor(value: unknown, opacity?: number): unknown {
+  if (value && typeof value === 'object') {
+    return opacity !== undefined ? { ...value, a: opacity } : value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = parseCssColorString(value);
+    if (!parsed) {
+      return value;
+    }
+    return opacity !== undefined ? { ...parsed, a: opacity } : parsed;
+  }
+
+  return value;
+}
+
+
 type StagedLegendColumnDefinition = {
   columnName: string;
   definition: DHIS2LegendDefinition;
@@ -534,9 +617,19 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     formDataAny?.linearColorScheme || formDataAny?.linear_color_scheme;
   const use_linear_color_scheme =
     formDataAny?.useLinearColorScheme ?? formDataAny?.use_linear_color_scheme;
+  const chart_background_opacity =
+    formDataAny?.chartBackgroundOpacity ?? formDataAny?.chart_background_opacity;
+
+  const chart_background_color_hex =
+    formDataAny?.chartBackgroundColorHex ||
+    formDataAny?.chart_background_color_hex;
+  const rawBackgroundColor =
+    chart_background_color_hex ??
+    (formDataAny?.chartBackgroundColor || formDataAny?.chart_background_color);
   const chart_background_color = colorValueToCss(
-    formDataAny?.chartBackgroundColor || formDataAny?.chart_background_color,
+    applyOpacityToColor(rawBackgroundColor, chart_background_opacity),
   );
+
   const opacity = formDataAny?.opacity;
   const stroke_color = formDataAny?.strokeColor || formDataAny?.stroke_color;
   const stroke_width = formDataAny?.strokeWidth ?? formDataAny?.stroke_width;

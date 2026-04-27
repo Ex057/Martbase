@@ -872,6 +872,38 @@ const config: ControlPanelConfig = {
         ],
         [
           {
+            name: 'chart_background_color_hex',
+            config: {
+              type: 'TextControl',
+              label: t('Background color (HEX)'),
+              description: t(
+                'Enter a 6- or 8-digit hex color code, e.g. #F2EBEB or #F2EBEB00. ' +
+                  'This raw value overrides the color picker.',
+              ),
+              default: '',
+              renderTrigger: true,
+            },
+          },
+        ],
+        [
+          {
+            name: 'chart_background_opacity',
+            config: {
+              type: 'SliderControl',
+              label: t('Background Opacity'),
+              description: t(
+                'Transparency of background (0 = transparent, 1 = solid)',
+              ),
+              default: 1,
+              min: 0,
+              max: 1,
+              step: 0.1,
+              renderTrigger: true,
+            },
+          },
+        ],
+        [
+          {
             name: 'stroke_color',
             config: {
               type: 'ColorPickerControl',

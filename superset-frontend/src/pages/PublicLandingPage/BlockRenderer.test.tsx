@@ -755,6 +755,283 @@ test('renders hero background images from saved settings with overlay opacity', 
   );
 });
 
+test('renders full-bleed heroes with configurable hero panel and action surfaces', () => {
+  render(
+    <RenderBlockTree
+      blocks={[
+        {
+          uid: 'hero_polished',
+          block_type: 'hero',
+          slot: 'hero',
+          sort_order: 0,
+          is_container: true,
+          visibility: 'public',
+          status: 'active',
+          schema_version: 1,
+          style_bundle_id: null,
+          content: {
+            title: 'Blended landing page',
+            subtitle: 'Use the full width and softer surfaces.',
+          },
+          settings: {
+            fullBleed: true,
+            heroActionsAlign: 'center',
+            primaryActionUrl: '/superset/public/dashboards/',
+            primaryActionLabel: 'Browse dashboards',
+            heroPanelBackground: '#ffffff',
+            heroPanelOpacity: 0.18,
+            heroButtonBackground: '#ffffff',
+            heroButtonOpacity: 0.8,
+          },
+          styles: {},
+          metadata: {},
+          children: [],
+        },
+      ]}
+      charts={[]}
+      dashboards={[]}
+      page={page}
+      navigation={{ header: [], footer: [] }}
+    />,
+    { useTheme: true },
+  );
+
+  const heroTitle = screen.getByRole('heading', { name: 'Blended landing page' });
+  const heroSection = heroTitle.closest('section');
+  const heroButton = screen.getByRole('button', { name: 'Browse dashboards' });
+  const actions = heroButton.parentElement;
+
+  expect(heroSection).toHaveStyle({
+    width: 'calc(100vw + 6px)',
+    maxWidth: 'calc(100vw + 6px)',
+    borderRadius: '0',
+    border: '0',
+  });
+  expect(actions).toHaveStyle({ justifyContent: 'center' });
+  expect(heroButton).toHaveStyle({
+    background: 'rgba(255, 255, 255, 0.8)',
+    color: '#0f172a',
+  });
+  expect(heroSection?.lastElementChild).toHaveStyle({
+    background: 'rgba(255, 255, 255, 0.18)',
+  });
+});
+
+test('renders hero slot button blocks without a white surface card wrapper', () => {
+  render(
+    <RenderBlockTree
+      blocks={[
+        {
+          uid: 'hero_button_block',
+          block_type: 'button',
+          slot: 'hero',
+          sort_order: 0,
+          is_container: false,
+          visibility: 'public',
+          status: 'active',
+          schema_version: 1,
+          style_bundle_id: null,
+          content: {
+            label: 'Open Dashboard',
+          },
+          settings: {
+            url: '/superset/public/dashboards/',
+          },
+          styles: {},
+          metadata: {},
+          children: [],
+        },
+      ]}
+      charts={[]}
+      dashboards={[]}
+      page={page}
+      navigation={{ header: [], footer: [] }}
+    />,
+    { useTheme: true },
+  );
+
+  const heroButton = screen.getByRole('button', { name: 'Open Dashboard' });
+  const heroButtonWrapper = heroButton.parentElement;
+
+  expect(heroButtonWrapper).toHaveStyle({
+    background: 'transparent',
+    border: '0',
+    padding: '0',
+  });
+  expect(heroButton).toHaveStyle({
+    background: 'rgba(255, 255, 255, 0.78)',
+    color: '#0f172a',
+  });
+});
+
+test('passes softer frame opacity to hero slot map charts', () => {
+  render(
+    <RenderBlockTree
+      blocks={[
+        {
+          uid: 'hero_map_chart',
+          block_type: 'chart',
+          slot: 'hero',
+          sort_order: 0,
+          is_container: false,
+          visibility: 'public',
+          status: 'active',
+          schema_version: 1,
+          style_bundle_id: null,
+          content: {
+            title: 'Hero map',
+          },
+          settings: {
+            chart_ref: { id: 91 },
+            height: 360,
+          },
+          styles: {},
+          metadata: {},
+          children: [],
+        },
+      ]}
+      charts={[
+        {
+          id: 91,
+          slice_name: 'Hero map',
+          viz_type: 'dhis2_map',
+          url: '/superset/explore/?slice_id=91&standalone=true',
+        },
+      ]}
+      dashboards={[]}
+      page={page}
+      navigation={{ header: [], footer: [] }}
+    />,
+    { useTheme: true },
+  );
+
+  expect(
+    screen.getByText('Hero map:360:map_focus:default:dhis2_map:public'),
+  ).toBeInTheDocument();
+});
+
+test('renders hero content-placement button blocks under the text column', () => {
+  render(
+    <RenderBlockTree
+      blocks={[
+        {
+          uid: 'hero_with_left_button',
+          block_type: 'hero',
+          slot: 'hero',
+          sort_order: 0,
+          is_container: true,
+          visibility: 'public',
+          status: 'active',
+          schema_version: 1,
+          style_bundle_id: null,
+          content: {
+            title: 'Hero with moved button',
+            subtitle: 'Button should sit under the text column.',
+          },
+          settings: {},
+          styles: {},
+          metadata: {},
+          children: [
+            {
+              uid: 'left_button_child',
+              block_type: 'button',
+              slot: 'hero',
+              sort_order: 0,
+              is_container: false,
+              visibility: 'public',
+              status: 'active',
+              schema_version: 1,
+              style_bundle_id: null,
+              content: {
+                label: 'Open Dashboard',
+              },
+              settings: {
+                url: '/superset/public/dashboards/',
+                heroPlacement: 'content',
+              },
+              styles: {},
+              metadata: {},
+              children: [],
+            },
+          ],
+        },
+      ]}
+      charts={[]}
+      dashboards={[]}
+      page={page}
+      navigation={{ header: [], footer: [] }}
+    />,
+    { useTheme: true },
+  );
+
+  const heroTitle = screen.getByRole('heading', { name: 'Hero with moved button' });
+  const heroButton = screen.getByRole('button', { name: 'Open Dashboard' });
+  const heroSection = heroTitle.closest('section');
+
+  expect(heroSection?.textContent).toContain('Button should sit under the text column.');
+  expect(heroButton).toBeInTheDocument();
+});
+
+test('keeps hero button blocks with the text column on public pages', () => {
+  render(
+    <RenderBlockTree
+      blocks={[
+        {
+          uid: 'hero_with_public_button',
+          block_type: 'hero',
+          slot: 'hero',
+          sort_order: 0,
+          is_container: true,
+          visibility: 'public',
+          status: 'active',
+          schema_version: 1,
+          style_bundle_id: null,
+          content: {
+            title: 'Hero with public button',
+            subtitle: 'Public hero buttons should stay under the copy.',
+          },
+          settings: {},
+          styles: {},
+          metadata: {},
+          children: [
+            {
+              uid: 'panel_button_child',
+              block_type: 'button',
+              slot: 'hero',
+              sort_order: 0,
+              is_container: false,
+              visibility: 'public',
+              status: 'active',
+              schema_version: 1,
+              style_bundle_id: null,
+              content: {
+                label: 'Open Dashboard',
+              },
+              settings: {
+                url: '/superset/public/dashboards/',
+                heroPlacement: 'panel',
+              },
+              styles: {},
+              metadata: {},
+              children: [],
+            },
+          ],
+        },
+      ]}
+      charts={[]}
+      dashboards={[]}
+      page={page}
+      navigation={{ header: [], footer: [] }}
+    />,
+    { useTheme: true },
+  );
+
+  expect(screen.getByRole('button', { name: 'Open Dashboard' })).toBeInTheDocument();
+  expect(
+    screen.getByText('Public hero buttons should stay under the copy.'),
+  ).toBeInTheDocument();
+});
+
 test('resizes editor blocks by drag and commits the new size settings', () => {
   const onResizeBlock = jest.fn();
 

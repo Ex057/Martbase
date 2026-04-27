@@ -742,4 +742,112 @@ describe('DHIS2Map transformProps', () => {
 
     expect(result.chartBackgroundColor).toBe('rgba(15,23,42,0.4)');
   });
+
+  test('applies background opacity control to chart background color', () => {
+    const chartProps = {
+      width: 800,
+      height: 600,
+      formData: {
+        viz_type: 'dhis2_map',
+        metric: 'c_cases',
+        org_unit_column: 'region',
+        boundary_levels: [2],
+        chart_background_color: { r: 255, g: 255, b: 255, a: 1 },
+        chart_background_opacity: 0.3,
+        tooltip_columns: [],
+      },
+      queriesData: [{ data: [] }],
+      datasource: {
+        id: 4,
+        database: { id: 3 },
+        columns: [
+          {
+            column_name: 'region',
+            extra: JSON.stringify({
+              dhis2_is_ou_hierarchy: true,
+              dhis2_ou_level: 2,
+            }),
+          },
+        ],
+      },
+      hooks: {},
+      filterState: {},
+    } as any;
+
+    const result = transformProps(chartProps);
+
+    // Background opacity should override the color's alpha value
+    expect(result.chartBackgroundColor).toBe('rgba(255,255,255,0.3)');
+  });
+  test('applies background opacity to hex string colors', () => {
+    const chartProps = {
+      width: 800,
+      height: 600,
+      formData: {
+        viz_type: 'dhis2_map',
+        metric: 'c_cases',
+        org_unit_column: 'region',
+        boundary_levels: [2],
+        chart_background_color: '#F2EBEB',
+        chart_background_opacity: 0.25,
+        tooltip_columns: [],
+      },
+      queriesData: [{ data: [] }],
+      datasource: {
+        id: 4,
+        database: { id: 3 },
+        columns: [
+          {
+            column_name: 'region',
+            extra: JSON.stringify({
+              dhis2_is_ou_hierarchy: true,
+              dhis2_ou_level: 2,
+            }),
+          },
+        ],
+      },
+      hooks: {},
+      filterState: {},
+    } as any;
+
+    const result = transformProps(chartProps);
+
+    expect(result.chartBackgroundColor).toBe('rgba(242,235,235,0.25)');
+  });
+
+  test('uses raw hex background color override when provided', () => {
+    const chartProps = {
+      width: 800,
+      height: 600,
+      formData: {
+        viz_type: 'dhis2_map',
+        metric: 'c_cases',
+        org_unit_column: 'region',
+        boundary_levels: [2],
+        chart_background_color: { r: 255, g: 255, b: 255, a: 1 },
+        chart_background_color_hex: '#F2EBEB00',
+        tooltip_columns: [],
+      },
+      queriesData: [{ data: [] }],
+      datasource: {
+        id: 4,
+        database: { id: 3 },
+        columns: [
+          {
+            column_name: 'region',
+            extra: JSON.stringify({
+              dhis2_is_ou_hierarchy: true,
+              dhis2_ou_level: 2,
+            }),
+          },
+        ],
+      },
+      hooks: {},
+      filterState: {},
+    } as any;
+
+    const result = transformProps(chartProps);
+
+    expect(result.chartBackgroundColor).toBe('rgba(242,235,235,0)');
+  });
 });

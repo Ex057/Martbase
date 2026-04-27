@@ -734,7 +734,6 @@ export default function PublicLandingPage() {
     () => groupBlocksBySlot(pageBlocks),
     [pageBlocks],
   );
-
   useEffect(() => {
     if (!currentPage) {
       setLayoutSections([]);
@@ -1406,44 +1405,52 @@ export default function PublicLandingPage() {
         {currentPage && selectedDashboard ? (
           renderSelectedDashboardView(selectedDashboard)
         ) : (
-          <Main $maxWidth={contentMaxWidth} $padding={pagePadding}>
-            {error && (
-              <Alert
-                style={{ marginBottom: 20 }}
-                type="error"
-                showIcon
-                message={error}
-                action={
-                  <Button size="small" onClick={() => reloadPortal(pageSlug)}>
-                    {t('Retry')}
-                  </Button>
-                }
-              />
-            )}
+          <>
+            {error ? (
+              <Main $maxWidth={contentMaxWidth} $padding={pagePadding}>
+                <Alert
+                  style={{ marginBottom: 20 }}
+                  type="error"
+                  showIcon
+                  message={error}
+                  action={
+                    <Button size="small" onClick={() => reloadPortal(pageSlug)}>
+                      {t('Retry')}
+                    </Button>
+                  }
+                />
+              </Main>
+            ) : null}
 
             {loading && !data ? (
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  padding: '96px 0',
-                }}
-              >
-                <Spin size="large" />
-              </div>
+              <Main $maxWidth={contentMaxWidth} $padding={pagePadding}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    padding: '96px 0',
+                  }}
+                >
+                  <Spin size="large" />
+                </div>
+              </Main>
             ) : currentPage ? (
               pageBlocks.length ? (
                 <>
-                  <RenderBlockTree
-                    blocks={renderedRegions.header}
-                    charts={data?.available_charts || []}
-                    dashboards={data?.dashboards || []}
-                    page={currentPage}
-                    navigation={data?.navigation}
-                    highlights={data?.indicator_highlights || []}
-                    onNavigate={navigateToPath}
-                    onOpenDashboard={navigateToPublicDashboard}
-                  />
+                  {renderedRegions.header.length ? (
+                    <Main $maxWidth={contentMaxWidth} $padding={pagePadding}>
+                      <RenderBlockTree
+                        blocks={renderedRegions.header}
+                        charts={data?.available_charts || []}
+                        dashboards={data?.dashboards || []}
+                        page={currentPage}
+                        navigation={data?.navigation}
+                        highlights={data?.indicator_highlights || []}
+                        onNavigate={navigateToPath}
+                        onOpenDashboard={navigateToPublicDashboard}
+                      />
+                    </Main>
+                  ) : null}
                   <RenderBlockTree
                     blocks={renderedRegions.hero}
                     charts={data?.available_charts || []}
@@ -1454,37 +1461,25 @@ export default function PublicLandingPage() {
                     onNavigate={navigateToPath}
                     onOpenDashboard={navigateToPublicDashboard}
                   />
-                  {renderedRegions.content.length ||
-                  renderedRegions.sidebar.length ? (
-                    <div
-                      className="cms-template-content-shell"
-                      style={
-                        hasSidebar
-                          ? {
-                              display: 'grid',
-                              gridTemplateColumns: `minmax(0, 1fr) ${sidebarWidth}`,
-                              gap: contentShellGap,
-                              alignItems: 'start',
-                            }
-                          : undefined
-                      }
-                    >
-                      <div>
-                        <RenderBlockTree
-                          blocks={renderedRegions.content}
-                          charts={data?.available_charts || []}
-                          dashboards={data?.dashboards || []}
-                          page={currentPage}
-                          navigation={data?.navigation}
-                          highlights={data?.indicator_highlights || []}
-                          onNavigate={navigateToPath}
-                          onOpenDashboard={navigateToPublicDashboard}
-                        />
-                      </div>
-                      {hasSidebar ? (
-                        <aside>
+                  <Main $maxWidth={contentMaxWidth} $padding={pagePadding}>
+                    {renderedRegions.content.length ||
+                    renderedRegions.sidebar.length ? (
+                      <div
+                        className="cms-template-content-shell"
+                        style={
+                          hasSidebar
+                            ? {
+                                display: 'grid',
+                                gridTemplateColumns: `minmax(0, 1fr) ${sidebarWidth}`,
+                                gap: contentShellGap,
+                                alignItems: 'start',
+                              }
+                            : undefined
+                        }
+                      >
+                        <div>
                           <RenderBlockTree
-                            blocks={renderedRegions.sidebar}
+                            blocks={renderedRegions.content}
                             charts={data?.available_charts || []}
                             dashboards={data?.dashboards || []}
                             page={currentPage}
@@ -1493,52 +1488,70 @@ export default function PublicLandingPage() {
                             onNavigate={navigateToPath}
                             onOpenDashboard={navigateToPublicDashboard}
                           />
-                        </aside>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  <RenderBlockTree
-                    blocks={renderedRegions.cta}
-                    charts={data?.available_charts || []}
-                    dashboards={data?.dashboards || []}
-                    page={currentPage}
-                    navigation={data?.navigation}
-                    highlights={data?.indicator_highlights || []}
-                    onNavigate={navigateToPath}
-                    onOpenDashboard={navigateToPublicDashboard}
-                  />
-                  <RenderBlockTree
-                    blocks={renderedRegions.footer}
-                    charts={data?.available_charts || []}
-                    dashboards={data?.dashboards || []}
-                    page={currentPage}
-                    navigation={data?.navigation}
-                    highlights={data?.indicator_highlights || []}
-                    onNavigate={navigateToPath}
-                    onOpenDashboard={navigateToPublicDashboard}
-                  />
+                        </div>
+                        {hasSidebar ? (
+                          <aside>
+                            <RenderBlockTree
+                              blocks={renderedRegions.sidebar}
+                              charts={data?.available_charts || []}
+                              dashboards={data?.dashboards || []}
+                              page={currentPage}
+                              navigation={data?.navigation}
+                              highlights={data?.indicator_highlights || []}
+                              onNavigate={navigateToPath}
+                              onOpenDashboard={navigateToPublicDashboard}
+                            />
+                          </aside>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <RenderBlockTree
+                      blocks={renderedRegions.cta}
+                      charts={data?.available_charts || []}
+                      dashboards={data?.dashboards || []}
+                      page={currentPage}
+                      navigation={data?.navigation}
+                      highlights={data?.indicator_highlights || []}
+                      onNavigate={navigateToPath}
+                      onOpenDashboard={navigateToPublicDashboard}
+                    />
+                    <RenderBlockTree
+                      blocks={renderedRegions.footer}
+                      charts={data?.available_charts || []}
+                      dashboards={data?.dashboards || []}
+                      page={currentPage}
+                      navigation={data?.navigation}
+                      highlights={data?.indicator_highlights || []}
+                      onNavigate={navigateToPath}
+                      onOpenDashboard={navigateToPublicDashboard}
+                    />
+                  </Main>
                 </>
               ) : (
-                <SurfaceCard>
-                  <CardTitle>{currentPage.title}</CardTitle>
-                  <CardBody>
-                    {currentPage.description ||
-                      data?.portal_layout.config.emptyPageMessage ||
-                      t('This page does not have any visible blocks yet.')}
-                  </CardBody>
-                </SurfaceCard>
+                <Main $maxWidth={contentMaxWidth} $padding={pagePadding}>
+                  <SurfaceCard>
+                    <CardTitle>{currentPage.title}</CardTitle>
+                    <CardBody>
+                      {currentPage.description ||
+                        data?.portal_layout.config.emptyPageMessage ||
+                        t('This page does not have any visible blocks yet.')}
+                    </CardBody>
+                  </SurfaceCard>
+                </Main>
               )
             ) : (
-              <SurfaceCard>
-                <Empty
-                  description={
-                    data?.portal_layout.config.noPublicPageMessage ||
-                    t('No public page is available.')
-                  }
-                />
-              </SurfaceCard>
+              <Main $maxWidth={contentMaxWidth} $padding={pagePadding}>
+                <SurfaceCard>
+                  <Empty
+                    description={
+                      data?.portal_layout.config.noPublicPageMessage ||
+                      t('No public page is available.')
+                    }
+                  />
+                </SurfaceCard>
+              </Main>
             )}
-          </Main>
+          </>
         )}
       </PageContentShell>
 

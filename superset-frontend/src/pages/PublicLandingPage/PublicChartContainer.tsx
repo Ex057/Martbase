@@ -47,20 +47,33 @@ const MAP_VIZ_TYPES = new Set([
 const FrameShell = styled.div<{
   $height: number;
   $surfacePreset: ChartSurfacePreset;
+  $surfaceOpacity?: number;
 }>`
   position: relative;
+  isolation: isolate;
   width: 100%;
   min-height: ${({ $height }) => $height}px;
   height: ${({ $height }) => $height}px;
+  --portal-frame-surface-opacity: ${({ $surfaceOpacity = 1 }) => $surfaceOpacity};
   overflow: hidden;
   border-radius: ${({ $surfacePreset }) =>
     $surfacePreset === 'default' ? 'var(--portal-radius-md, 0)' : '0'};
   border: ${({ $surfacePreset }) =>
     $surfacePreset === 'default' ? '1px solid rgba(148, 163, 184, 0.24)' : '0'};
-  background: ${({ $surfacePreset }) =>
-    $surfacePreset === 'default'
-      ? 'var(--portal-surface, #ffffff)'
-      : 'transparent'};
+  background: transparent;
+
+  &::before {
+    position: absolute;
+    inset: 0;
+    content: '';
+    pointer-events: none;
+    z-index: 0;
+    background: ${({ $surfacePreset }) =>
+      $surfacePreset === 'default'
+        ? 'var(--portal-surface-card, var(--portal-surface, #ffffff))'
+        : 'var(--portal-chart-frame-background, rgba(255, 255, 255, 1))'};
+    opacity: var(--portal-frame-surface-opacity);
+  }
 `;
 
 const FrameOverlay = styled.div<{ $surfacePreset: ChartSurfacePreset }>`
@@ -80,6 +93,8 @@ const FrameOverlay = styled.div<{ $surfacePreset: ChartSurfacePreset }>`
 `;
 
 const Frame = styled.iframe`
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   border: 0;
@@ -269,6 +284,21 @@ export function buildEmbeddedChartCss(
     ${
       mapLike || surfacePreset === 'map_focus'
         ? `
+        body > div > div,
+        #app > div > div,
+        [data-test="standalone-app"] > div > div > div,
+        .chart-container > div,
+        .dashboard-chart > div,
+        .slice_container > div,
+        .chart-holder > div,
+        .chart-slice > div {
+          width: 100% !important;
+          height: 100% !important;
+          min-height: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          background: transparent !important;
+        }
         .deckgl-wrapper,
         .deckgl-overlay,
         .viewport,
@@ -294,6 +324,24 @@ export function buildEmbeddedChartCss(
           width: auto !important;
           height: auto !important;
           max-width: none !important;
+        }
+        .leaflet-container,
+        .leaflet-pane,
+        .leaflet-overlay-pane,
+        .leaflet-tile-pane,
+        .leaflet-shadow-pane,
+        .leaflet-marker-pane,
+        .leaflet-tooltip-pane,
+        .leaflet-popup-pane,
+        .leaflet-layer,
+        .leaflet-image-layer,
+        .leaflet-tile,
+        .mapboxgl-map,
+        .mapboxgl-canvas-container {
+          background: transparent !important;
+        }
+        .leaflet-control-container {
+          z-index: 3 !important;
         }
         .dhis2-map-quick-filters,
         .dhis2-map-quick-filters-panel {
@@ -341,6 +389,7 @@ type PublicChartContainerProps = {
   vizType?: string;
   accessMode?: ChartEmbedAccessMode;
   formDataOverrides?: Record<string, unknown>;
+  frameOpacity?: number;
 };
 
 export default function PublicChartContainer({
@@ -353,6 +402,7 @@ export default function PublicChartContainer({
   vizType,
   accessMode = 'public',
   formDataOverrides,
+  frameOpacity,
 }: PublicChartContainerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
@@ -372,7 +422,11 @@ export default function PublicChartContainer({
   }, [resolvedUrl]);
 
   return (
-    <FrameShell $height={resolvedHeight} $surfacePreset={surfacePreset}>
+    <FrameShell
+      $height={resolvedHeight}
+      $surfacePreset={surfacePreset}
+      $surfaceOpacity={frameOpacity}
+    >
       {isLoading && (
         <FrameOverlay $surfacePreset={surfacePreset}>
           {loadingLabel}

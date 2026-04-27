@@ -437,6 +437,12 @@ const CONTENT_ALIGN_OPTIONS = [
   { value: 'end', label: t('Right') },
 ] as const;
 
+const HERO_ACTION_ALIGN_OPTIONS = [
+  { value: 'start', label: t('Left') },
+  { value: 'center', label: t('Center') },
+  { value: 'end', label: t('Right') },
+] as const;
+
 const OVERFLOW_OPTIONS = [
   { value: 'visible', label: t('Visible') },
   { value: 'hidden', label: t('Hidden') },
@@ -2541,6 +2547,34 @@ export default function BlockStudio({
             </FieldBlock>
             <FieldGrid>
               <FieldBlock>
+                <FieldLabel>{t('Full Bleed Hero')}</FieldLabel>
+                <Switch
+                  disabled={isPublishedPage}
+                  checked={selectedBlock.settings?.fullBleed !== false}
+                  onChange={checked =>
+                    updateSelectedBlockSettings({
+                      fullBleed: checked,
+                    })
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Hero Actions Align')}</FieldLabel>
+                <Select
+                  disabled={isPublishedPage}
+                  value={selectedBlock.settings?.heroActionsAlign || 'start'}
+                  options={HERO_ACTION_ALIGN_OPTIONS.map(option => ({
+                    value: option.value,
+                    label: option.label,
+                  }))}
+                  onChange={value =>
+                    updateSelectedBlockSettings({
+                      heroActionsAlign: value,
+                    })
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
                 <FieldLabel>{t('Primary Action Label')}</FieldLabel>
                 <RichTextComposer
                   readOnly={isPublishedPage}
@@ -2594,6 +2628,74 @@ export default function BlockStudio({
                   onChange={event =>
                     updateSelectedBlockSettings({
                       secondaryActionUrl: event.target.value,
+                    })
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Hero Panel Background')}</FieldLabel>
+                <Input
+                  disabled={isPublishedPage}
+                  value={selectedBlock.settings?.heroPanelBackground || ''}
+                  placeholder={t('rgba(255,255,255,0.08)')}
+                  onChange={event =>
+                    updateSelectedBlockSettings({
+                      heroPanelBackground: event.target.value || undefined,
+                    })
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Hero Panel Opacity')}</FieldLabel>
+                <InputNumber
+                  disabled={isPublishedPage}
+                  style={{ width: '100%' }}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={
+                    selectedBlock.settings?.heroPanelOpacity === undefined
+                      ? 0
+                      : Number(selectedBlock.settings?.heroPanelOpacity)
+                  }
+                  onChange={value =>
+                    updateSelectedBlockSettings({
+                      heroPanelOpacity:
+                        value === null ? undefined : Number(value),
+                    })
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Hero Button Background')}</FieldLabel>
+                <Input
+                  disabled={isPublishedPage}
+                  value={selectedBlock.settings?.heroButtonBackground || ''}
+                  placeholder={t('rgba(255,255,255,0.92)')}
+                  onChange={event =>
+                    updateSelectedBlockSettings({
+                      heroButtonBackground: event.target.value || undefined,
+                    })
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Hero Button Opacity')}</FieldLabel>
+                <InputNumber
+                  disabled={isPublishedPage}
+                  style={{ width: '100%' }}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={
+                    selectedBlock.settings?.heroButtonOpacity === undefined
+                      ? 1
+                      : Number(selectedBlock.settings?.heroButtonOpacity)
+                  }
+                  onChange={value =>
+                    updateSelectedBlockSettings({
+                      heroButtonOpacity:
+                        value === null ? undefined : Number(value),
                     })
                   }
                 />
@@ -2906,6 +3008,44 @@ export default function BlockStudio({
                 ]}
               />
             </FieldBlock>
+            {selectedBlock.slot === 'hero' ? (
+              <FieldBlock>
+                <FieldLabel>{t('Hero Placement')}</FieldLabel>
+                <Select
+                  disabled={isPublishedPage}
+                  value={selectedBlock.settings?.heroPlacement || 'panel'}
+                  onChange={value =>
+                    updateSelectedBlockSettings({ heroPlacement: value })
+                  }
+                  options={[
+                    { value: 'panel', label: t('Right Panel') },
+                    { value: 'content', label: t('Under Text') },
+                  ]}
+                />
+              </FieldBlock>
+            ) : null}
+            <FieldBlock>
+              <FieldLabel>{t('Button Surface Opacity')}</FieldLabel>
+              <InputNumber
+                disabled={isPublishedPage}
+                style={{ width: '100%' }}
+                min={0}
+                max={1}
+                step={0.05}
+                value={
+                  selectedBlock.settings?.buttonBackgroundOpacity === undefined
+                    ? undefined
+                    : Number(selectedBlock.settings?.buttonBackgroundOpacity)
+                }
+                placeholder={t('Default')}
+                onChange={value =>
+                  updateSelectedBlockSettings({
+                    buttonBackgroundOpacity:
+                      value === null ? undefined : Number(value),
+                  })
+                }
+              />
+            </FieldBlock>
           </FieldGrid>
         )}
         {selectedBlock.block_type === 'chart' && (
@@ -3060,6 +3200,27 @@ export default function BlockStudio({
                 }))}
                 onChange={value =>
                   updateSelectedBlockSettings({ legend_preset: value })
+                }
+              />
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t('Frame Opacity')}</FieldLabel>
+              <InputNumber
+                disabled={isPublishedPage}
+                style={{ width: '100%' }}
+                min={0}
+                max={1}
+                step={0.05}
+                value={
+                  selectedBlock.settings?.frameOpacity === undefined
+                    ? undefined
+                    : Number(selectedBlock.settings?.frameOpacity)
+                }
+                placeholder={t('Default')}
+                onChange={value =>
+                  updateSelectedBlockSettings({
+                    frameOpacity: value === null ? undefined : Number(value),
+                  })
                 }
               />
             </FieldBlock>

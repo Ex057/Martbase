@@ -352,6 +352,7 @@ export function createEmptyBlock(blockType = 'paragraph'): PortalPageBlock {
         ...base.settings,
         url: '',
         variant: 'primary',
+        heroPlacement: 'content',
       };
       break;
     case 'spacer':
@@ -371,6 +372,13 @@ export function createEmptyBlock(blockType = 'paragraph'): PortalPageBlock {
         eyebrow: '',
         title: t('Hero Title'),
         subtitle: t('Introduce the page with a strong message.'),
+      };
+      base.settings = {
+        ...base.settings,
+        fullBleed: true,
+        heroActionsAlign: 'start',
+        heroPanelOpacity: 0,
+        heroButtonOpacity: 1,
       };
       break;
     case 'group':

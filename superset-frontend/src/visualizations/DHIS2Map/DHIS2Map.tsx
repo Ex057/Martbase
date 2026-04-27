@@ -721,9 +721,10 @@ const DynamicGeoJSON: FC<DynamicGeoJSONProps> = ({
   useEffect(() => {
     const styleChanged =
       prevStyleKeyRef.current !== styleKey || prevStyleRef.current !== style;
-    const bindingsChanged =
-      prevStyleKeyRef.current !== styleKey ||
-      prevOnEachFeatureRef.current !== onEachFeature;
+    // Rebind handlers/tooltips only when the binding callback identity changes.
+    // Hover/selection style updates should not churn layer bindings, otherwise
+    // tooltips can flicker due to repeated unbind/rebind cycles.
+    const bindingsChanged = prevOnEachFeatureRef.current !== onEachFeature;
     if (geoJsonRef.current && (styleChanged || bindingsChanged)) {
       prevStyleKeyRef.current = styleKey;
       prevStyleRef.current = style;
@@ -2312,6 +2313,59 @@ function DHIS2Map({
     parentSelectionColumn,
   ]);
 
+  const tooltipRowByOrgUnitKey = useMemo(() => {
+    const index = new Map<string, Record<string, any>>();
+    if (!filteredData.length) {
+      return index;
+    }
+
+    filteredData.forEach(row => {
+      const rowOrgUnitValue = getRowColumnValue(
+        row,
+        effectiveOrgUnitDataColumn,
+        'dimension',
+      );
+      buildOrgUnitMatchKeys(rowOrgUnitValue).forEach(key => {
+        if (key && !index.has(key)) {
+          index.set(key, row);
+        }
+      });
+    });
+
+    return index;
+  }, [effectiveOrgUnitDataColumn, filteredData, getRowColumnValue]);
+
+  const getTooltipRowForFeature = useCallback(
+    (feature: BoundaryFeature): Record<string, any> | undefined => {
+      const matchKeys = [
+        ...buildOrgUnitMatchKeys(feature.id),
+        ...buildOrgUnitMatchKeys(feature.properties?.name),
+      ];
+
+      for (const key of matchKeys) {
+        const row = tooltipRowByOrgUnitKey.get(key);
+        if (row) {
+          return row;
+        }
+      }
+
+      // Fallback for uncommon fuzzy matches not covered by exact keys.
+      return filteredData.find(row =>
+        matchesFeatureOrgUnit(
+          getRowColumnValue(row, effectiveOrgUnitDataColumn, 'dimension'),
+          feature,
+        ),
+      );
+    },
+    [
+      effectiveOrgUnitDataColumn,
+      filteredData,
+      getRowColumnValue,
+      matchesFeatureOrgUnit,
+      tooltipRowByOrgUnitKey,
+    ],
+  );
+
   const resolvedParentSelectionColumn = useMemo(
     () => resolveDimensionDataColumnName(parentSelectionColumn),
     [parentSelectionColumn, resolveDimensionDataColumnName],
@@ -2940,6 +2994,26 @@ function DHIS2Map({
     return visibleBoundaries;
   }, [boundaries, selectedBoundaryIds, showAllBoundaries]);
 
+  const displayBoundaryIdsSignature = useMemo(
+    () =>
+      displayBoundaries
+        .map(boundary => boundary.id)
+        .sort()
+        .join(','),
+    [displayBoundaries],
+  );
+
+  const levelBorderColorSignature = useMemo(
+    () =>
+      (levelBorderColors || [])
+        .map(
+          levelColor =>
+            `${levelColor.level}:${levelColor.color.r},${levelColor.color.g},${levelColor.color.b},${levelColor.color.a}`,
+        )
+        .join('|'),
+    [levelBorderColors],
+  );
+
   useEffect(() => {
     const firstFiveBoundaries = displayBoundaries.slice(0, 5).map(boundary => ({
       id: boundary.id,
@@ -3110,6 +3184,7 @@ function DHIS2Map({
         getElement?: () => SVGElement | null;
       };
       const value = getFeatureValue(feature);
+      const tooltipRow = getTooltipRowForFeature(feature);
       const tooltipContent = `
         <div class="dhis2-map-tooltip">
           <strong>${feature.properties.name}</strong>
@@ -3117,23 +3192,13 @@ function DHIS2Map({
           ${metricDisplayName}: ${value !== undefined ? formatValue(value) : 'No data'}
           ${
             tooltipColumns
-              ?.map(col => {
-                const row = filteredData.find(r =>
-                  matchesFeatureOrgUnit(
-                    getRowColumnValue(
-                      r,
-                      effectiveOrgUnitDataColumn,
-                      'dimension',
-                    ),
-                    feature,
-                  ),
-                );
-                return row
+              ?.map(col =>
+                tooltipRow
                   ? `<br/>${col}: ${String(
-                      getRowColumnValue(row, col, 'dimension') ?? '',
+                      getRowColumnValue(tooltipRow, col, 'dimension') ?? '',
                     )}`
-                  : '';
-              })
+                  : '',
+              )
               .join('') || ''
           }
         </div>
@@ -3149,15 +3214,9 @@ function DHIS2Map({
       const handlers: Record<string, () => void> = {
         mouseover: () => {
           setHoveredFeature(feature.id);
-          if ('openTooltip' in layer) {
-            (layer as L.Layer & { openTooltip?: () => void }).openTooltip?.();
-          }
         },
         mouseout: () => {
           setHoveredFeature(null);
-          if ('closeTooltip' in layer) {
-            (layer as L.Layer & { closeTooltip?: () => void }).closeTooltip?.();
-          }
         },
       };
 
@@ -3223,15 +3282,13 @@ function DHIS2Map({
     },
     [
       getFeatureValue,
+      getTooltipRowForFeature,
       dataMap,
       metric,
       metricDisplayName,
-      filteredData,
       getRowColumnValue,
-      effectiveOrgUnitDataColumn,
       resolvedEffectiveOrgUnitColumn,
       tooltipColumns,
-      matchesFeatureOrgUnit,
       showLabels,
       labelType,
       labelFontSize,
@@ -3319,10 +3376,7 @@ function DHIS2Map({
               }
               style={getFeatureStyle as any}
               onEachFeature={onEachFeature as any}
-              styleKey={`levels-${boundaryLevelsKey}-drill-${drillState.currentLevel}-${drillState.parentId}-hover-${hoveredFeature ?? 'none'}-selected-${selectedFeatureId ?? 'none'}-colors-${JSON.stringify(levelBorderColors?.map(lc => lc.color))}-boundaries-${displayBoundaries
-                .map(b => b.id)
-                .sort()
-                .join(',')}`}
+              styleKey={`levels-${boundaryLevelsKey}-drill-${drillState.currentLevel}-${drillState.parentId}-colors-${levelBorderColorSignature}-boundaries-${displayBoundaryIdsSignature}`}
             />
           )}
         </MapContainer>

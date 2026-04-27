@@ -1,4 +1,5 @@
 # Superset specific config
+import hashlib
 import os
 from datetime import timedelta
 from celery.schedules import crontab
@@ -47,15 +48,30 @@ WTF_CSRF_EXEMPT_LIST = [
 # Set this API key to enable Mapbox visualizations
 MAPBOX_API_KEY = os.environ.get('MAPBOX_API_KEY', '')
 
-# Secret key for signing cookies.
-# Reads SECRET_KEY first (Celery workers need this exact name), then falls back to
-# SUPERSET_SECRET_KEY (the name used by the base config), then the hardcoded value.
-# Production: set SECRET_KEY in /etc/superset/superset.env — do NOT rely on this fallback.
-SECRET_KEY = (
-    os.environ.get("SECRET_KEY")
-    or os.environ.get("SUPERSET_SECRET_KEY")
-    or "222nevYrQia2O5NAfpkFgaD9g7loFW2gqpW6C+lh1t/mj77t8kRQpHwG"
-)
+# Secret key for signing cookies and encrypting credentials at rest.
+# DHIS2 instance passwords/tokens are encrypted with this key, so every web and
+# Celery process must use the exact same value. If the key changes, previously
+# saved credentials become unreadable until they are re-saved under the new key.
+_SECRET_KEY_FALLBACK = "222nevYrQia2O5NAfpkFgaD9g7loFW2gqpW6C+lh1t/mj77t8kRQpHwG"
+_SUPERSET_ENV = (os.environ.get("SUPERSET_ENV") or "").strip().lower()
+_EXPLICIT_SECRET_KEY = os.environ.get("SECRET_KEY")
+_EXPLICIT_SECRET_KEY_SOURCE = "SECRET_KEY"
+if not _EXPLICIT_SECRET_KEY:
+    _EXPLICIT_SECRET_KEY = os.environ.get("SUPERSET_SECRET_KEY")
+    _EXPLICIT_SECRET_KEY_SOURCE = "SUPERSET_SECRET_KEY"
+if not _EXPLICIT_SECRET_KEY:
+    _EXPLICIT_SECRET_KEY_SOURCE = "fallback"
+    if _SUPERSET_ENV == "production":
+        raise RuntimeError(
+            "Production requires an explicit SECRET_KEY (preferred) or "
+            "SUPERSET_SECRET_KEY. Refusing to start with the built-in fallback "
+            "because encrypted credentials would break across restarts or "
+            "between web and Celery processes."
+        )
+
+SECRET_KEY = _EXPLICIT_SECRET_KEY or _SECRET_KEY_FALLBACK
+SECRET_KEY_SOURCE = _EXPLICIT_SECRET_KEY_SOURCE
+SECRET_KEY_FINGERPRINT = hashlib.sha256(SECRET_KEY.encode("utf-8")).hexdigest()[:12]
 
 # Keep backend startup stable by default; enable debug explicitly when needed.
 DEBUG = os.environ.get("SUPERSET_DEBUG", "0") == "1"

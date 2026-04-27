@@ -101,6 +101,7 @@ test('PublicChartContainer respects explicit map_focus heights', () => {
       height={320}
       surfacePreset="map_focus"
       vizType="dhis2_map"
+      frameOpacity={0.88}
     />,
     { useTheme: true },
   );
@@ -111,6 +112,7 @@ test('PublicChartContainer respects explicit map_focus heights', () => {
   expect(frameShell).toHaveStyle({
     height: '320px',
     minHeight: '320px',
+    '--portal-frame-surface-opacity': '0.88',
   });
 });
 
@@ -119,5 +121,7 @@ test('buildEmbeddedChartCss hides DHIS2 quick filters on public map embeds', () 
 
   expect(css).toContain('.dhis2-map-quick-filters');
   expect(css).toContain('.dhis2-map-quick-filters-panel');
+  expect(css).toContain('.chart-container > div');
+  expect(css).toContain('.leaflet-layer');
   expect(css).toContain('display: none !important;');
 });
