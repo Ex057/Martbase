@@ -2582,6 +2582,56 @@ export default function BlockStudio({
                 />
               </FieldBlock>
               <FieldBlock>
+                <FieldLabel>{t('Space Below Hero (px)')}</FieldLabel>
+                <InputNumber
+                  disabled={isPublishedPage}
+                  style={{ width: '100%' }}
+                  min={0}
+                  max={120}
+                  value={
+                    selectedBlock.settings?.sectionGap === undefined
+                      ? undefined
+                      : Number(selectedBlock.settings?.sectionGap)
+                  }
+                  placeholder={t('Use page default')}
+                  onChange={value =>
+                    updateSelectedBlockSettings({
+                      sectionGap:
+                        value === null || value === undefined
+                          ? undefined
+                          : Number(value),
+                    })
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Space Above Hero (px)')}</FieldLabel>
+                <InputNumber
+                  disabled={isPublishedPage}
+                  style={{ width: '100%' }}
+                  min={0}
+                  max={120}
+                  value={
+                    selectedBlock.settings?.sectionTopGap === undefined
+                      ? undefined
+                      : Number(selectedBlock.settings?.sectionTopGap)
+                  }
+                  placeholder={t('Use page default')}
+                  onChange={value =>
+                    updateSelectedBlockSettings({
+                      sectionTopGap:
+                        value === null || value === undefined
+                          ? undefined
+                          : Number(value),
+                      section_top_gap:
+                        value === null || value === undefined
+                          ? undefined
+                          : Number(value),
+                    })
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
                 <FieldLabel>{t('Primary Action Label')}</FieldLabel>
                 <RichTextComposer
                   readOnly={isPublishedPage}
@@ -3173,6 +3223,60 @@ export default function BlockStudio({
               />
             </FieldBlock>
             <FieldBlock>
+              <FieldLabel>{t('Space Above Chart (px)')}</FieldLabel>
+              <InputNumber
+                disabled={isPublishedPage}
+                style={{ width: '100%' }}
+                min={0}
+                max={120}
+                value={
+                  selectedBlock.settings?.sectionTopGap === undefined
+                    ? undefined
+                    : Number(selectedBlock.settings?.sectionTopGap)
+                }
+                placeholder={t('Use page default')}
+                onChange={value =>
+                  updateSelectedBlockSettings({
+                    sectionTopGap:
+                      value === null || value === undefined
+                        ? undefined
+                        : Number(value),
+                    section_top_gap:
+                      value === null || value === undefined
+                        ? undefined
+                        : Number(value),
+                  })
+                }
+              />
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t('Space Below Chart (px)')}</FieldLabel>
+              <InputNumber
+                disabled={isPublishedPage}
+                style={{ width: '100%' }}
+                min={0}
+                max={120}
+                value={
+                  selectedBlock.settings?.sectionGap === undefined
+                    ? undefined
+                    : Number(selectedBlock.settings?.sectionGap)
+                }
+                placeholder={t('Use page default')}
+                onChange={value =>
+                  updateSelectedBlockSettings({
+                    sectionGap:
+                      value === null || value === undefined
+                        ? undefined
+                        : Number(value),
+                    section_gap:
+                      value === null || value === undefined
+                        ? undefined
+                        : Number(value),
+                  })
+                }
+              />
+            </FieldBlock>
+            <FieldBlock>
               <FieldLabel>{t('Show Header')}</FieldLabel>
               <Switch
                 disabled={isPublishedPage}
@@ -3227,6 +3331,84 @@ export default function BlockStudio({
                 onChange={value =>
                   updateSelectedBlockSettings({
                     frameOpacity: value === null ? undefined : Number(value),
+                  })
+                }
+              />
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t('Chart Background Image Asset')}</FieldLabel>
+              <Select
+                disabled={isPublishedPage}
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                value={
+                  selectedBlock.settings?.chart_background_asset_ref?.id ||
+                  selectedBlock.settings?.chartBackgroundAssetRef?.id ||
+                  undefined
+                }
+                options={mediaOptions.filter(option => {
+                  const asset = mediaAssets.find(
+                    item => item.id === option.value,
+                  );
+                  return asset?.asset_type === 'image';
+                })}
+                onChange={value =>
+                  updateSelectedBlockSettings({
+                    chart_background_asset_ref: value ? { id: value } : null,
+                    chartBackgroundAssetRef: value ? { id: value } : null,
+                    chart_background_asset_id: value || null,
+                    chartBackgroundAssetId: value || null,
+                  })
+                }
+              />
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t('Chart Background Image URL')}</FieldLabel>
+              <Input
+                disabled={isPublishedPage}
+                value={
+                  selectedBlock.settings?.chartBackgroundImageUrl ||
+                  selectedBlock.settings?.chart_background_image_url ||
+                  ''
+                }
+                placeholder={t('https://...')}
+                onChange={event =>
+                  updateSelectedBlockSettings({
+                    chartBackgroundImageUrl: event.target.value || undefined,
+                    chart_background_image_url:
+                      event.target.value || undefined,
+                  })
+                }
+              />
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t('Chart Background Image Opacity')}</FieldLabel>
+              <InputNumber
+                disabled={isPublishedPage}
+                style={{ width: '100%' }}
+                min={0}
+                max={1}
+                step={0.05}
+                value={
+                  selectedBlock.settings?.chartBackgroundImageOpacity ===
+                    undefined &&
+                  selectedBlock.settings?.chart_background_image_opacity ===
+                    undefined
+                    ? undefined
+                    : Number(
+                        selectedBlock.settings?.chartBackgroundImageOpacity ??
+                          selectedBlock.settings
+                            ?.chart_background_image_opacity,
+                      )
+                }
+                placeholder={t('Default')}
+                onChange={value =>
+                  updateSelectedBlockSettings({
+                    chartBackgroundImageOpacity:
+                      value === null ? undefined : Number(value),
+                    chart_background_image_opacity:
+                      value === null ? undefined : Number(value),
                   })
                 }
               />
@@ -3349,6 +3531,56 @@ export default function BlockStudio({
                 value={Number(selectedBlock.settings?.columns) || 1}
                 onChange={value =>
                   updateSelectedBlockSettings({ columns: Number(value) || 1 })
+                }
+              />
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t('Space Above Section (px)')}</FieldLabel>
+              <InputNumber
+                disabled={isPublishedPage}
+                style={{ width: '100%' }}
+                min={0}
+                max={120}
+                value={
+                  selectedBlock.settings?.sectionTopGap === undefined
+                    ? undefined
+                    : Number(selectedBlock.settings?.sectionTopGap)
+                }
+                placeholder={t('Use page default')}
+                onChange={value =>
+                  updateSelectedBlockSettings({
+                    sectionTopGap:
+                      value === null || value === undefined
+                        ? undefined
+                        : Number(value),
+                    section_top_gap:
+                      value === null || value === undefined
+                        ? undefined
+                        : Number(value),
+                  })
+                }
+              />
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t('Space Below Section (px)')}</FieldLabel>
+              <InputNumber
+                disabled={isPublishedPage}
+                style={{ width: '100%' }}
+                min={0}
+                max={120}
+                value={
+                  selectedBlock.settings?.sectionGap === undefined
+                    ? undefined
+                    : Number(selectedBlock.settings?.sectionGap)
+                }
+                placeholder={t('Use page default')}
+                onChange={value =>
+                  updateSelectedBlockSettings({
+                    sectionGap:
+                      value === null || value === undefined
+                        ? undefined
+                        : Number(value),
+                  })
                 }
               />
             </FieldBlock>

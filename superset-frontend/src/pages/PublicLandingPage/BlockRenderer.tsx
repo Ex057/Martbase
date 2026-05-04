@@ -959,6 +959,18 @@ function normalizedSpacingValue(value?: unknown) {
   return undefined;
 }
 
+function normalizedSpacingOffset(
+  value: unknown,
+  baseVarName: string,
+  baseFallback: string,
+) {
+  const normalized = normalizedSpacingValue(value);
+  if (!normalized) {
+    return undefined;
+  }
+  return `calc(${normalized} - var(${baseVarName}, ${baseFallback}))`;
+}
+
 function blockClassName(block: PortalPageBlock) {
   return ['cms-block-shell', block.rendering?.scope_class]
     .filter(Boolean)
@@ -1979,6 +1991,13 @@ export function RenderBlockTree({
           sectionColumns > 1
             ? Math.max(Math.floor(12 / sectionColumns), 1)
             : 12;
+        const sectionGap =
+          normalizedSpacingValue(
+            block.settings?.sectionGap ?? block.settings?.section_gap,
+          ) || style.marginBottom;
+        const sectionTopGap = normalizedSpacingValue(
+          block.settings?.sectionTopGap ?? block.settings?.section_top_gap,
+        );
         return (
           <Section
             key={block.uid || block.id}
@@ -1988,6 +2007,8 @@ export function RenderBlockTree({
               ...style,
               background: block.settings?.background || undefined,
               padding: block.styles?.padding || undefined,
+              marginTop: sectionTopGap,
+              marginBottom: sectionGap,
             }}
           >
             {(title || titleHtml || subtitle || subtitleHtml) && (
@@ -2053,6 +2074,9 @@ export function RenderBlockTree({
         const heroStyle: CSSProperties = {
           ...style,
         };
+        const heroSectionTopGap = normalizedSpacingValue(
+          block.settings?.sectionTopGap ?? block.settings?.section_top_gap,
+        );
         const fullBleed =
           mode === 'public' &&
           block.slot === 'hero' &&
@@ -2069,6 +2093,12 @@ export function RenderBlockTree({
               'calc(100vh - var(--portal-header-height, 0px))';
           }
         }
+        const heroSectionGap =
+          normalizedSpacingValue(
+            block.settings?.sectionGap ?? block.settings?.section_gap,
+          ) || heroStyle.marginBottom;
+        heroStyle.marginTop = heroSectionTopGap;
+        heroStyle.marginBottom = heroSectionGap;
         return (
           <Hero
             key={block.uid || block.id}
@@ -2818,6 +2848,16 @@ export function RenderBlockTree({
         );
       case 'chart': {
         const chart = lookupChart(block, charts);
+        const chartTopGap = normalizedSpacingOffset(
+          block.settings?.sectionTopGap ?? block.settings?.section_top_gap,
+          '--portal-block-gap',
+          '10px',
+        );
+        const chartBottomGap = normalizedSpacingOffset(
+          block.settings?.sectionGap ?? block.settings?.section_gap,
+          '--portal-block-gap',
+          '10px',
+        );
         const chartIsMapLike = isMapLikeViz(chart?.viz_type);
         const explicitSurfacePreset =
           block.settings?.surface_preset === 'borderless' ||
@@ -2871,6 +2911,8 @@ export function RenderBlockTree({
               borderlessContainer
                 ? {
                     ...style,
+                    marginTop: chartTopGap,
+                    marginBottom: chartBottomGap || style.marginBottom,
                     padding: style.padding || 0,
                     border: style.border || 0,
                     background: style.background || 'transparent',
@@ -2880,7 +2922,11 @@ export function RenderBlockTree({
                     minWidth: style.minWidth || 0,
                     gap: 0,
                   }
-                : style
+                : {
+                    ...style,
+                    marginTop: chartTopGap,
+                    marginBottom: chartBottomGap || style.marginBottom,
+                  }
             }
           >
             {showHeader ? (
@@ -2904,6 +2950,26 @@ export function RenderBlockTree({
               </div>
             ) : null}
             {chart ? (
+              (() => {
+                const chartBackgroundAssetId =
+                  block.settings?.chart_background_asset_ref?.id ||
+                  block.settings?.chartBackgroundAssetRef?.id ||
+                  block.settings?.chart_background_asset_id ||
+                  block.settings?.chartBackgroundAssetId;
+                const chartBackgroundAssetUrl = chartBackgroundAssetId
+                  ? mediaAssets.find(
+                      asset => asset.id === Number(chartBackgroundAssetId),
+                    )?.download_url
+                  : undefined;
+                const chartBackgroundImage =
+                  chartBackgroundAssetUrl ||
+                  String(
+                    block.settings?.chartBackgroundImageUrl ||
+                      block.settings?.chart_background_image_url ||
+                      '',
+                  ) ||
+                  undefined;
+                return (
               <PublicChartContainer
                 title={chart.slice_name}
                 url={chart.url}
@@ -2918,7 +2984,21 @@ export function RenderBlockTree({
                     ? Number(block.settings?.frameOpacity) || 0
                     : undefined
                 }
+                chartBackgroundImage={chartBackgroundImage}
+                chartBackgroundImageOpacity={Math.min(
+                  1,
+                  Math.max(
+                    0,
+                    Number(
+                      block.settings?.chartBackgroundImageOpacity ??
+                        block.settings?.chart_background_image_opacity ??
+                        0.2,
+                    ),
+                  ),
+                )}
               />
+                );
+              })()
             ) : (
               <Empty
                 description={t('Choose a public chart to render this block.')}

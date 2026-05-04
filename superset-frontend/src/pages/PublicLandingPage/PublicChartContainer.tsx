@@ -48,6 +48,8 @@ const FrameShell = styled.div<{
   $height: number;
   $surfacePreset: ChartSurfacePreset;
   $surfaceOpacity?: number;
+  $chartBackgroundImage?: string;
+  $chartBackgroundImageOpacity?: number;
 }>`
   position: relative;
   isolation: isolate;
@@ -74,6 +76,21 @@ const FrameShell = styled.div<{
         ? 'var(--portal-surface-card, var(--portal-surface, #ffffff))'
         : 'var(--portal-chart-frame-background, rgba(255, 255, 255, 1))'};
     opacity: var(--portal-frame-surface-opacity);
+  }
+
+  &::after {
+    position: absolute;
+    inset: 0;
+    content: '';
+    pointer-events: none;
+    z-index: 0;
+    background-image: ${({ $chartBackgroundImage }) =>
+      $chartBackgroundImage ? `url(${$chartBackgroundImage})` : 'none'};
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: ${({ $chartBackgroundImageOpacity = 0 }) =>
+      $chartBackgroundImageOpacity};
   }
 `;
 
@@ -233,6 +250,8 @@ export function buildEmbeddedChartCss(
   vizType?: string,
 ) {
   const mapLike = isMapLikeViz(vizType);
+  const normalizedVizType = (vizType || '').trim().toLowerCase();
+  const dhis2Map = normalizedVizType === 'dhis2_map';
   const sharedCss = `
     html, body {
       margin: 0 !important;
@@ -283,7 +302,7 @@ export function buildEmbeddedChartCss(
       display: none !important;
     }
     ${
-      mapLike || surfacePreset === 'map_focus'
+      (mapLike || surfacePreset === 'map_focus') && !dhis2Map
         ? `
         body > div > div,
         #app > div > div,
@@ -365,6 +384,28 @@ export function buildEmbeddedChartCss(
       `
         : ''
     }
+    ${
+      dhis2Map
+        ? `
+        body > div > div,
+        #app > div > div,
+        [data-test="standalone-app"] > div > div > div,
+        .chart-container > div,
+        .dashboard-chart > div,
+        .slice_container > div,
+        .chart-holder > div,
+        .chart-slice > div,
+        .leaflet-layer {
+          width: 100% !important;
+          height: 100% !important;
+        }
+        .dhis2-map-quick-filters,
+        .dhis2-map-quick-filters-panel {
+          display: none !important;
+        }
+      `
+        : ''
+    }
   `;
 }
 
@@ -405,6 +446,8 @@ type PublicChartContainerProps = {
   accessMode?: ChartEmbedAccessMode;
   formDataOverrides?: Record<string, unknown>;
   frameOpacity?: number;
+  chartBackgroundImage?: string;
+  chartBackgroundImageOpacity?: number;
 };
 
 export default function PublicChartContainer({
@@ -418,6 +461,8 @@ export default function PublicChartContainer({
   accessMode = 'public',
   formDataOverrides,
   frameOpacity,
+  chartBackgroundImage,
+  chartBackgroundImageOpacity,
 }: PublicChartContainerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
@@ -441,6 +486,8 @@ export default function PublicChartContainer({
       $height={resolvedHeight}
       $surfacePreset={surfacePreset}
       $surfaceOpacity={frameOpacity}
+      $chartBackgroundImage={chartBackgroundImage}
+      $chartBackgroundImageOpacity={chartBackgroundImageOpacity}
     >
       {isLoading && (
         <FrameOverlay $surfacePreset={surfacePreset}>

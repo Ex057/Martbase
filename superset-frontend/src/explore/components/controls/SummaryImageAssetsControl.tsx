@@ -26,6 +26,8 @@ type MediaAsset = {
   id: number;
   title: string;
   asset_type?: string;
+  mime_type?: string;
+  file_extension?: string | null;
   download_url?: string;
   visibility?: string;
   is_public?: boolean;
@@ -77,7 +79,22 @@ export default function SummaryImageAssetsControl({
   const imageOptions = useMemo(
     () =>
       assets
-        .filter(asset => asset.asset_type === 'image' && asset.download_url)
+        .filter(asset => {
+          if (!asset.download_url) {
+            return false;
+          }
+          const assetType = String(asset.asset_type || '').toLowerCase();
+          const mimeType = String(asset.mime_type || '').toLowerCase();
+          const extension = String(asset.file_extension || '').toLowerCase();
+          return (
+            assetType === 'image' ||
+            assetType.includes('image') ||
+            mimeType.startsWith('image/') ||
+            ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(
+              extension,
+            )
+          );
+        })
         .map(asset => ({
           value: asset.download_url as string,
           label: `${asset.title}${asset.visibility ? ` · ${asset.visibility}` : ''}`,
