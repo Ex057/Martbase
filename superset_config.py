@@ -13,6 +13,17 @@ SUPERSET_WEBSERVER_TIMEOUT = int(timedelta(minutes=5).total_seconds())  # 5 minu
 SQLLAB_TIMEOUT = int(timedelta(minutes=5).total_seconds())  # 5 minutes (was 30 sec)
 SQLLAB_ASYNC_TIME_LIMIT_SEC = int(timedelta(hours=6).total_seconds())  # Keep 6 hours for async
 
+# Session timeout policy: auto logout after 1 hour of inactivity.
+PERMANENT_SESSION_LIFETIME = timedelta(seconds=3600)
+SESSION_PERMANENT = True
+SESSION_REFRESH_EACH_REQUEST = True
+SESSION_SERVER_SIDE = True
+SESSION_TYPE = "filesystem"
+SESSION_FILE_DIR = os.path.join(os.path.dirname(__file__), ".flask_session")
+SESSION_FILE_THRESHOLD = 500
+# Exposed to frontend session warning timer.
+SESSION_TIMEOUT_IDLE_SECONDS = 3600
+
 # The SQLAlchemy connection string to your database backend
 # This connection defines the path to the database that stores your
 # superset metadata (slices, connections, tables, dashboards, ...).

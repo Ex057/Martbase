@@ -188,31 +188,30 @@ const config: ControlPanelConfig = {
                 'Organization unit level for the map. Loads boundaries and ' +
                   'disaggregates data by the matching OU column.',
               ),
-              default: '2:region',
-              choices: [['2:region', t('Level 2 (Region)')]],
+              default: '',
+              choices: [['', t('Select boundary level')]],
               mapStateToProps: (state: any) => {
                 const dsColumns = state.datasource?.columns || [];
                 const levels = getDatasourceBoundaryLevels(dsColumns);
+                const existingValue = state.controls?.boundary_level?.value;
                 if (levels.length > 0) {
+                  const choices = levels.map(l => [
+                    `${l.level}:${l.columnName || ''}`,
+                    `Level ${l.level} (${l.label})`,
+                  ]);
+                  const hasExistingChoice = choices.some(
+                    ([value]) => value === existingValue,
+                  );
                   return {
-                    choices: levels.map(l => [
-                      `${l.level}:${l.columnName || ''}`,
-                      `Level ${l.level} (${l.label})`,
-                    ]),
+                    choices,
+                    value: hasExistingChoice ? existingValue : choices[0][0],
                   };
                 }
                 return {
                   choices: [
-                    ['1:national', t('Level 1 (National)')],
-                    ['2:region', t('Level 2 (Region)')],
-                    ['3:district_city', t('Level 3 (District)')],
-                    ['4:dlg_municipality_city_council', t('Level 4 (County)')],
-                    [
-                      '5:sub_county_town_council_division',
-                      t('Level 5 (Sub-county)'),
-                    ],
-                    ['6:health_facility', t('Level 6 (Facility)')],
+                    ['', t('No DHIS2 boundary levels detected in dataset metadata')],
                   ],
+                  value: '',
                 };
               },
               renderTrigger: false,

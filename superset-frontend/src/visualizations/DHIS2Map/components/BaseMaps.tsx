@@ -24,13 +24,13 @@ import { styled } from '@superset-ui/core';
 // Available base map configurations
 export const BASE_MAPS = {
   none: {
-    name: 'White Background',
+    name: 'Transparent Background',
     url: '',
     attribution: '',
     maxZoom: 20,
   },
   osmLight: {
-    name: 'OSM Light (DHIS2 Default)',
+    name: 'Light CARTO Positron',
     url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     attribution: '&copy; OpenStreetMap &copy; CARTO',
     maxZoom: 20,
@@ -42,28 +42,28 @@ export const BASE_MAPS = {
     maxZoom: 19,
   },
   satellite: {
-    name: 'Satellite (Esri)',
+    name: 'Satellite (Esri World Imagery)',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     attribution: '&copy; Esri',
     maxZoom: 18,
   },
   terrain: {
-    name: 'Terrain',
+    name: 'Vegetation / Topo (OpenTopoMap)',
     url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
     attribution: '&copy; OpenTopoMap',
     maxZoom: 17,
   },
   dark: {
-    name: 'Dark',
+    name: 'Dark CARTO Dark Matter',
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     attribution: '&copy; CartoDB',
     maxZoom: 20,
   },
-  light: {
-    name: 'Light',
-    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; CartoDB',
-    maxZoom: 20,
+  naturalEsri: {
+    name: 'Desert / Natural (Esri NatGeo)',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri & National Geographic',
+    maxZoom: 16,
   },
 };
 
@@ -86,7 +86,7 @@ export function BaseMapLayer({ mapType }: BaseMapLayerProps): React.ReactElement
 /* eslint-disable theme-colors/no-literal-colors */
 const SelectorWrapper = styled.div`
   position: relative;
-  z-index: 1001;
+  z-index: 4000;
 `;
 
 const SelectorButton = styled.button`
@@ -110,7 +110,7 @@ const SelectorButton = styled.button`
 
 const DropdownMenu = styled.div`
   position: absolute;
-  bottom: calc(100% + 6px);
+  top: calc(100% + 6px);
   right: 0;
   background: #ffffff;
   border: 1px solid rgba(148, 163, 184, 0.35);
@@ -119,7 +119,7 @@ const DropdownMenu = styled.div`
   min-width: 196px;
   max-height: 300px;
   overflow-y: auto;
-  z-index: 1002;
+  z-index: 4001;
 `;
 
 const MapOption = styled.button<{ $isActive: boolean }>`

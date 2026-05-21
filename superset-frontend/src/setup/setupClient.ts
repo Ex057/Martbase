@@ -22,6 +22,14 @@ import getBootstrapData from 'src/utils/getBootstrapData';
 
 const bootstrapData = getBootstrapData();
 
+function buildAppPath(path: string): string {
+  const rawRoot = bootstrapData.common.application_root || '';
+  const normalizedRoot =
+    rawRoot === '/' ? '' : String(rawRoot).replace(/\/+$/, '');
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${normalizedRoot}${normalizedPath}`;
+}
+
 function getDefaultConfiguration(): ClientConfig {
   const csrfNode = document.querySelector<HTMLInputElement>('#csrf_token');
   const csrfToken = csrfNode?.value;
@@ -70,7 +78,7 @@ function getDefaultConfiguration(): ClientConfig {
     );
 
   const unauthorizedHandler = () => {
-    const { pathname, href } = window.location;
+    const { pathname } = window.location;
     // Suppress redirect if on a public page or login page
     if (
       window.IS_PUBLIC_PAGE === true ||
@@ -83,11 +91,11 @@ function getDefaultConfiguration(): ClientConfig {
       return;
     }
     // Default behavior
-    const appRoot = bootstrapData.common.application_root || '';
-    const loginUrl = `${appRoot}/login?next=${href}`;
+    const publicUrl = buildAppPath('/superset/public/');
+    const loginUrl = `${buildAppPath('/login/')}?next=${encodeURIComponent(publicUrl)}`;
     // eslint-disable-next-line no-console
     console.warn('[SupersetClient] 401 Unauthorized - redirecting to login:', loginUrl);
-    window.location.href = loginUrl;
+    window.location.replace(loginUrl);
   };
 
   return {

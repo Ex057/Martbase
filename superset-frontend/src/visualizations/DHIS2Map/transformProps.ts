@@ -629,6 +629,13 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
   const chart_background_color = colorValueToCss(
     applyOpacityToColor(rawBackgroundColor, chart_background_opacity),
   );
+  const transparent_card_container =
+    formDataAny?.transparentCardContainer ??
+    formDataAny?.transparent_card_container;
+  const boundary_focus_mask_style =
+    formDataAny?.boundaryFocusMaskStyle ??
+    formDataAny?.boundary_focus_mask_style;
+  const basemap_style = formDataAny?.basemapStyle ?? formDataAny?.basemap_style;
 
   const opacity = formDataAny?.opacity;
   const stroke_color = formDataAny?.strokeColor || formDataAny?.stroke_color;
@@ -1147,6 +1154,9 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     linearColorScheme: linear_color_scheme || 'superset_seq_1',
     useLinearColorScheme: effectiveUseLinearColorScheme,
     chartBackgroundColor: chart_background_color,
+    transparentCardContainer: transparent_card_container === true,
+    boundaryFocusMaskStyle: boundary_focus_mask_style || 'off',
+    basemapStyle: basemap_style || 'osmLight',
     opacity: opacity ?? 0.7,
     strokeColor: stroke_color || { r: 255, g: 255, b: 255, a: 1 },
     strokeWidth: stroke_width ?? 1,

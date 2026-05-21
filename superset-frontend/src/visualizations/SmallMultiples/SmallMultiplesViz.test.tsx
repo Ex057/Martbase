@@ -308,6 +308,29 @@ describe('DHIS2 presets', () => {
     { column_name: 'quarter', verbose_name: 'Quarter' },
     { column_name: 'month', verbose_name: 'Month' },
   ];
+  const SIERRA_LEONE_COLUMNS = [
+    {
+      column_name: 'national',
+      verbose_name: 'National',
+      extra: JSON.stringify({ dhis2_is_ou_hierarchy: true, dhis2_ou_level: 1 }),
+    },
+    {
+      column_name: 'district',
+      verbose_name: 'District',
+      extra: JSON.stringify({ dhis2_is_ou_hierarchy: true, dhis2_ou_level: 2 }),
+    },
+    {
+      column_name: 'chiefdom',
+      verbose_name: 'Chiefdom',
+      extra: JSON.stringify({ dhis2_is_ou_hierarchy: true, dhis2_ou_level: 3 }),
+    },
+    {
+      column_name: 'facility',
+      verbose_name: 'Facility',
+      extra: JSON.stringify({ dhis2_is_ou_hierarchy: true, dhis2_ou_level: 4 }),
+    },
+    { column_name: 'period', verbose_name: 'Period' },
+  ];
 
   test('detects OU hierarchy presets from metadata', () => {
     const presets = detectAvailablePresets(DHIS2_COLUMNS);
@@ -383,6 +406,7 @@ describe('DHIS2 presets', () => {
   test('buildQuery resolves Region preset when hidden control is unavailable', () => {
     const queryContext = buildQuery({
       datasource: '1__table',
+      columns: DHIS2_COLUMNS,
       dhis2_split_preset: 'by_region',
       groupby: ['should_be_ignored'],
       x_axis: ['period'],
@@ -394,6 +418,7 @@ describe('DHIS2 presets', () => {
   test('buildQuery raises low row limit so all region panels can be returned', () => {
     const queryContext = buildQuery({
       datasource: '1__table',
+      columns: DHIS2_COLUMNS,
       dhis2_split_preset: 'by_region',
       x_axis: ['period'],
       metrics: [{ label: 'cch precipitation chirps' }],
@@ -408,6 +433,7 @@ describe('DHIS2 presets', () => {
   test('buildQuery disables terminal hierarchy filtering for region rollups', () => {
     const queryContext = buildQuery({
       datasource: '1__table',
+      columns: DHIS2_COLUMNS,
       dhis2_split_preset: 'by_region',
       x_axis: ['period'],
       metrics: [{ label: 'cch relative humidity era5 land' }],
@@ -420,6 +446,40 @@ describe('DHIS2 presets', () => {
     expect(
       queryContext.form_data.extras.dhis2_terminal_hierarchy_filtering,
     ).toBe(false);
+  });
+
+  test('buildQuery falls back to custom split column when preset cannot resolve', () => {
+    const queryContext = buildQuery({
+      datasource: '1__table',
+      columns: SIERRA_LEONE_COLUMNS,
+      dhis2_split_preset: 'by_level_9',
+      groupby: ['chiefdom'],
+      x_axis: ['period'],
+      metrics: [{ label: 'cases' }],
+    } as any);
+
+    expect(queryContext.queries[0].columns).toEqual(['chiefdom', 'period']);
+  });
+
+  test('buildQuery falls back to x-axis when preset cannot resolve and no custom split exists', () => {
+    const queryContext = buildQuery({
+      datasource: '1__table',
+      columns: SIERRA_LEONE_COLUMNS,
+      dhis2_split_preset: 'by_level_9',
+      x_axis: ['period'],
+      metrics: [{ label: 'cases' }],
+    } as any);
+
+    expect(queryContext.queries[0].columns).toEqual(['period']);
+  });
+
+  test('resolves level-based preset for Sierra Leone style hierarchy names', () => {
+    const resolved = resolvePresetColumn(
+      'by_level_3',
+      SIERRA_LEONE_COLUMNS,
+      ['national', 'district', 'chiefdom', 'facility', 'period'],
+    );
+    expect(resolved).toBe('chiefdom');
   });
 
   test('uses persisted DHIS2 source database id in public chart form data', () => {

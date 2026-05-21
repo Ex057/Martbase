@@ -37,6 +37,7 @@ import setupPlugins from 'src/setup/setupPlugins';
 import { routes, isFrontendRoute } from 'src/views/routes';
 import { Logger, LOG_ACTIONS_SPA_NAVIGATION } from 'src/logger/LogUtils';
 import setupCodeOverrides from 'src/setup/setupCodeOverrides';
+import SessionTimeoutManager from 'src/setup/SessionTimeoutManager';
 import { logEvent } from 'src/logger/actions';
 import { store } from 'src/views/store';
 import ExtensionsStartup from 'src/extensions/ExtensionsStartup';
@@ -93,6 +94,7 @@ const AppShell = () => {
       <RootContextProviders>
         <AppGlobalStyles />
         <ExtensionsStartup />
+        <SessionTimeoutManager />
         {!isPublicPortalRoute && (
           <Menu
             data={bootstrapData.common.menu_data}

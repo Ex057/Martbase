@@ -76,6 +76,19 @@ export type LegendDisplayType =
   | 'compact';
 
 export type CompassStyle = 'north_badge' | 'arrow_north' | 'minimal_n';
+export type BoundaryFocusMaskStyle =
+  | 'off'
+  | 'light'
+  | 'dark'
+  | 'transparent';
+export type BasemapStyle =
+  | 'none'
+  | 'osmLight'
+  | 'osm'
+  | 'dark'
+  | 'terrain'
+  | 'naturalEsri'
+  | 'satellite';
 export type LegendType =
   | 'auto'
   | 'equal_interval'
@@ -134,6 +147,9 @@ export interface DHIS2MapProps {
   linearColorScheme?: string;
   useLinearColorScheme?: boolean;
   chartBackgroundColor?: string;
+  transparentCardContainer?: boolean;
+  boundaryFocusMaskStyle?: BoundaryFocusMaskStyle;
+  basemapStyle?: BasemapStyle;
   opacity: number;
   strokeColor: { r: number; g: number; b: number; a: number };
   strokeWidth: number;

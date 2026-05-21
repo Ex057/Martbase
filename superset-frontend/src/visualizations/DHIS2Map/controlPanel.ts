@@ -904,6 +904,61 @@ const config: ControlPanelConfig = {
         ],
         [
           {
+            name: 'basemap_style',
+            config: {
+              type: 'SelectControl',
+              label: t('Basemap'),
+              description: t('Tile layer shown under boundaries'),
+              default: 'osmLight',
+              choices: [
+                ['none', t('Transparent Background')],
+                ['osmLight', t('Light CARTO Positron')],
+                ['dark', t('Dark CARTO Dark Matter')],
+                ['terrain', t('Vegetation / Topo (OpenTopoMap)')],
+                ['naturalEsri', t('Desert / Natural (Esri NatGeo)')],
+                ['satellite', t('Satellite (Esri World Imagery)')],
+                ['osm', t('OpenStreetMap')],
+              ],
+              renderTrigger: true,
+            },
+          },
+        ],
+        [
+          {
+            name: 'transparent_card_container',
+            config: {
+              type: 'CheckboxControl',
+              label: t('Transparent Card Container'),
+              description: t(
+                'Make the chart container/card background transparent for this DHIS2 map.',
+              ),
+              default: false,
+              renderTrigger: true,
+            },
+          },
+        ],
+        [
+          {
+            name: 'boundary_focus_mask_style',
+            config: {
+              type: 'SelectControl',
+              label: t('Outside Boundary Mask'),
+              description: t(
+                'Shade areas outside selected boundaries. Useful to de-emphasize non-focus regions.',
+              ),
+              default: 'off',
+              choices: [
+                ['off', t('Off')],
+                ['light', t('Light')],
+                ['dark', t('Dark')],
+                ['transparent', t('Transparent')],
+              ],
+              renderTrigger: true,
+            },
+          },
+        ],
+        [
+          {
             name: 'stroke_color',
             config: {
               type: 'ColorPickerControl',

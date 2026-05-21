@@ -36,6 +36,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
   AggregationMethod,
+  BoundaryFocusMaskStyle,
   CompassStyle,
   DHIS2DatasourceColumn,
   DHIS2LegendDefinition,
@@ -65,6 +66,12 @@ import MapCompass from './components/MapCompass';
 import DrillControls from './components/DrillControls';
 import DataPreviewPanel from './components/DataPreviewPanel';
 import FiltersPanel from './components/FiltersPanel';
+import {
+  BASE_MAPS,
+  BaseMapLayer,
+  BaseMapSelector,
+  BaseMapType,
+} from './components/BaseMaps';
 import {
   buildLegendEntries,
   getColorScale,
@@ -122,7 +129,7 @@ function parseColumnExtra(extra: unknown): Record<string, any> | undefined {
 
 // Use hardcoded values for map styling to avoid theme context issues
 // These are legitimate map styling values, not UI theming
-const MapWrapper = styled.div`
+const MapWrapper = styled.div<{ $transparentCardContainer?: boolean }>`
   width: 100%;
   height: 100%;
   position: relative;
@@ -131,6 +138,12 @@ const MapWrapper = styled.div`
   min-height: 0;
   isolation: isolate;
   z-index: 0;
+  background: ${({ $transparentCardContainer }) =>
+    $transparentCardContainer ? 'transparent' : 'inherit'};
+  border: ${({ $transparentCardContainer }) =>
+    $transparentCardContainer ? 'none' : 'inherit'};
+  box-shadow: ${({ $transparentCardContainer }) =>
+    $transparentCardContainer ? 'none' : 'inherit'};
 `;
 
 const MapCanvas = styled.div<{ $backgroundColor?: string }>`
@@ -467,6 +480,7 @@ function MapAutoFocus({
 interface BoundaryMaskProps {
   boundaries: BoundaryFeature[];
   enabled: boolean;
+  maskStyle?: BoundaryFocusMaskStyle;
 }
 
 function MapInstanceBridge({
@@ -516,6 +530,7 @@ function MapInstanceBridge({
 function BoundaryMask({
   boundaries,
   enabled,
+  maskStyle = 'light',
 }: BoundaryMaskProps): ReactElement | null {
   const map = useMap();
   const [paneReady, setPaneReady] = useState(false);
@@ -592,12 +607,30 @@ function BoundaryMask({
   return (
     <GeoJSON
       data={maskFeature as any}
-      style={() => ({
-        fillColor: '#ffffff',
-        fillOpacity: 0.9,
-        color: 'transparent',
-        weight: 0,
-      })}
+      style={() => {
+        if (maskStyle === 'transparent') {
+          return {
+            fillColor: 'transparent',
+            fillOpacity: 0,
+            color: 'transparent',
+            weight: 0,
+          };
+        }
+        if (maskStyle === 'dark') {
+          return {
+            fillColor: '#0f172a',
+            fillOpacity: 0.45,
+            color: 'transparent',
+            weight: 0,
+          };
+        }
+        return {
+          fillColor: '#ffffff',
+          fillOpacity: 0.45,
+          color: 'transparent',
+          weight: 0,
+        };
+      }}
       pane="dhis2MaskPane"
     />
   );
@@ -1060,6 +1093,9 @@ function DHIS2Map({
   linearColorScheme,
   useLinearColorScheme = true,
   chartBackgroundColor,
+  transparentCardContainer = false,
+  boundaryFocusMaskStyle = 'off',
+  basemapStyle = 'osmLight',
   labelTextColor,
   opacity,
   strokeColor,
@@ -1103,6 +1139,7 @@ function DHIS2Map({
   ouHierarchyColumns = [],
   periodColumns = [],
 }: DHIS2MapProps): ReactElement {
+  const MAX_PENDING_BOUNDARY_RETRIES = 8;
   const metricDisplayName = metricLabel || metric;
   const hasQueryData = data.length > 0;
   const sourceInstanceIdsInputKey = useMemo(
@@ -1246,6 +1283,8 @@ function DHIS2Map({
     useState<FocusedBoundaryRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [boundaryPendingRetryCount, setBoundaryPendingRetryCount] = useState(0);
+  const [boundaryPendingStalled, setBoundaryPendingStalled] = useState(false);
   const [drillState, setDrillState] = useState<DrillState>({
     currentLevel: resolvedPrimaryBoundaryLevel,
     parentId: null,
@@ -1276,6 +1315,21 @@ function DHIS2Map({
     {},
   );
   const [interactionEnabled, setInteractionEnabled] = useState(true);
+  const [currentBasemap, setCurrentBasemap] = useState<BaseMapType>(() => {
+    if (typeof window !== 'undefined' && chartId) {
+      try {
+        const stored = window.localStorage.getItem(
+          `dhis2_map_basemap_chart_${chartId}`,
+        );
+        if (stored && stored in BASE_MAPS) {
+          return stored as BaseMapType;
+        }
+      } catch {
+        // Ignore localStorage read errors
+      }
+    }
+    return basemapStyle as BaseMapType;
+  });
   const [resolvedDatasetSql, setResolvedDatasetSql] = useState(datasetSql);
   const [resolvedIsDHIS2Dataset, setResolvedIsDHIS2Dataset] =
     useState(isDHIS2Dataset);
@@ -1314,6 +1368,36 @@ function DHIS2Map({
       resolvedDatasetSql,
     ],
   );
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && chartId) {
+      try {
+        const stored = window.localStorage.getItem(
+          `dhis2_map_basemap_chart_${chartId}`,
+        );
+        if (stored && stored in BASE_MAPS) {
+          setCurrentBasemap(stored as BaseMapType);
+          return;
+        }
+      } catch {
+        // Ignore localStorage read errors
+      }
+    }
+    setCurrentBasemap(basemapStyle as BaseMapType);
+  }, [basemapStyle, chartId]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && chartId) {
+      try {
+        window.localStorage.setItem(
+          `dhis2_map_basemap_chart_${chartId}`,
+          currentBasemap,
+        );
+      } catch {
+        // Ignore localStorage write errors
+      }
+    }
+  }, [currentBasemap, chartId]);
   const effectiveDataBoundaryLevel = useMemo(
     () =>
       resolveFocusedDataLevel(
@@ -2133,9 +2217,86 @@ function DHIS2Map({
     ],
   );
 
+  const fallbackSparseOrgUnitColumn = useMemo(() => {
+    if (!effectiveOrgUnitColumn || !effectiveData.length) {
+      return undefined;
+    }
+
+    const candidateColumns = Array.from(
+      new Set(
+        [
+          effectiveOrgUnitColumn,
+          parentSelectionColumn,
+          orgUnitColumn,
+          ...hierarchyColumns,
+        ].filter(Boolean),
+      ),
+    ).filter(column => effectiveDataColumns.includes(column));
+
+    if (!candidateColumns.includes(effectiveOrgUnitColumn)) {
+      return undefined;
+    }
+
+    const sample = effectiveData.slice(0, 500);
+    const fillRate = (columnName: string) => {
+      let populated = 0;
+      sample.forEach(row => {
+        const value = row?.[columnName];
+        const text = String(value ?? '').trim();
+        if (text.length > 0 && text.toLowerCase() !== 'null') {
+          populated += 1;
+        }
+      });
+      return sample.length > 0 ? populated / sample.length : 0;
+    };
+
+    const currentFill = fillRate(effectiveOrgUnitColumn);
+    if (currentFill >= 0.15) {
+      return undefined;
+    }
+
+    let bestColumn = effectiveOrgUnitColumn;
+    let bestFill = currentFill;
+    candidateColumns.forEach(columnName => {
+      const rate = fillRate(columnName);
+      if (rate > bestFill) {
+        bestFill = rate;
+        bestColumn = columnName;
+      }
+    });
+
+    if (bestColumn !== effectiveOrgUnitColumn && bestFill >= 0.25) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[DHIS2Map] Fallback org unit column: "${effectiveOrgUnitColumn}" appears sparse (${(
+          currentFill * 100
+        ).toFixed(1)}%). Using "${bestColumn}" (${(bestFill * 100).toFixed(
+          1,
+        )}%) for boundary matching.`,
+      );
+      return bestColumn;
+    }
+
+    return undefined;
+  }, [
+    effectiveData,
+    effectiveDataColumns,
+    effectiveOrgUnitColumn,
+    hierarchyColumns,
+    orgUnitColumn,
+    parentSelectionColumn,
+  ]);
+
   const effectiveOrgUnitDataColumn = useMemo(
-    () => fallbackFocusedOrgUnitColumn || effectiveOrgUnitColumn,
-    [effectiveOrgUnitColumn, fallbackFocusedOrgUnitColumn],
+    () =>
+      fallbackFocusedOrgUnitColumn ||
+      fallbackSparseOrgUnitColumn ||
+      effectiveOrgUnitColumn,
+    [
+      effectiveOrgUnitColumn,
+      fallbackFocusedOrgUnitColumn,
+      fallbackSparseOrgUnitColumn,
+    ],
   );
 
   const resolveDimensionDataColumnName = useCallback(
@@ -2617,6 +2778,7 @@ function DHIS2Map({
 
     setLoading(true);
     setError(null);
+    setBoundaryPendingStalled(false);
     setFocusedParentBoundaries([]);
 
     try {
@@ -2626,12 +2788,15 @@ function DHIS2Map({
         endpoint: 'geoJSON' | 'geoFeatures',
         levels: number[],
         parentOuIds?: string[],
+        forceWithoutInstanceIds?: boolean,
       ) =>
         loadDHIS2GeoFeatures({
           databaseId,
           chartId,
           dashboardId,
-          sourceInstanceIds: normalizedSourceInstanceIds,
+          sourceInstanceIds: forceWithoutInstanceIds
+            ? []
+            : normalizedSourceInstanceIds,
           levels,
           parentOuIds,
           endpoint,
@@ -2658,6 +2823,32 @@ function DHIS2Map({
             levels,
             parentOuIds,
           );
+        }
+        if (result.totalCount === 0 && normalizedSourceInstanceIds.length > 0) {
+          // Some datasets can return empty boundaries when instance scoping is too restrictive.
+          // Retry once without instance scope before surfacing an error.
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[DHIS2Map] No boundaries returned with instance_ids (${normalizedSourceInstanceIds.join(
+              ',',
+            )}). Retrying without instance scope.`,
+          );
+          result = await loadWithEndpoint(
+            endpointToUse,
+            levels,
+            parentOuIds,
+            true,
+          );
+          if (result.totalCount === 0) {
+            const fallbackEndpoint =
+              endpointToUse === 'geoJSON' ? 'geoFeatures' : 'geoJSON';
+            result = await loadWithEndpoint(
+              fallbackEndpoint,
+              levels,
+              parentOuIds,
+              true,
+            );
+          }
         }
         return result;
       };
@@ -2705,6 +2896,27 @@ function DHIS2Map({
         requestedParentIds,
       );
 
+      if (
+        result.totalCount === 0 &&
+        requestedLevels.length > 0 &&
+        resolvedPrimaryBoundaryLevel > 0 &&
+        !requestedLevels.includes(resolvedPrimaryBoundaryLevel)
+      ) {
+        // If selected levels return no boundaries, retry once with the
+        // resolved primary level. This guards against stale/misaligned
+        // metadata level mappings in some DHIS2 sources.
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[DHIS2Map] No boundaries for selected levels (${requestedLevels.join(
+            ',',
+          )}). Retrying with primary level ${resolvedPrimaryBoundaryLevel}.`,
+        );
+        result = await loadBoundaryResult(
+          [resolvedPrimaryBoundaryLevel],
+          requestedParentIds,
+        );
+      }
+
       if (requestedParentIds?.length && result.totalCount === 0) {
         // eslint-disable-next-line no-console
         console.warn(
@@ -2723,6 +2935,19 @@ function DHIS2Map({
       // Backend returned pending status — boundaries are being prepared
       // asynchronously. Show a friendly message and auto-retry.
       if (result.pendingRetry) {
+        const nextRetryCount = boundaryPendingRetryCount + 1;
+        if (nextRetryCount > MAX_PENDING_BOUNDARY_RETRIES) {
+          setBoundaryPendingStalled(true);
+          setBoundaryPendingRetryCount(0);
+          setError(
+            t(
+              'Boundary staging is taking longer than expected. Retry now or check DHIS2 staging diagnostics.',
+            ),
+          );
+          setLoading(false);
+          return;
+        }
+        setBoundaryPendingRetryCount(nextRetryCount);
         setError(
           t(
             'Map boundaries are being prepared in the background. The map will refresh automatically.',
@@ -2741,6 +2966,8 @@ function DHIS2Map({
         }, retryMs);
         return;
       }
+      setBoundaryPendingRetryCount(0);
+      setBoundaryPendingStalled(false);
 
       if (result.totalCount === 0) {
         setError(t('No boundary data found for selected levels'));
@@ -2778,6 +3005,7 @@ function DHIS2Map({
       setLoading(false);
     }
   }, [
+    boundaryPendingRetryCount,
     databaseId,
     chartId,
     dashboardId,
@@ -3288,9 +3516,24 @@ function DHIS2Map({
   // progressive and the chart can render data immediately once available.
   const showMapLoadingOverlay = dhis2DataLoading || stagedLocalDataLoading;
   const boundaryLoading = loading;
+  const isMaskEnabled =
+    boundaryFocusMaskStyle !== 'off' &&
+    (showAllBoundaries || focusSelectedBoundaryWithChildren);
+
+  const handleRetryBoundariesNow = useCallback(() => {
+    setBoundaryPendingStalled(false);
+    setBoundaryPendingRetryCount(0);
+    setError(null);
+    lastLoadedBoundaryRequestKeyRef.current = null;
+    setLoading(true);
+    fetchBoundaries();
+  }, [fetchBoundaries]);
 
   return (
-    <MapWrapper style={{ width, height }}>
+    <MapWrapper
+      $transparentCardContainer={transparentCardContainer}
+      style={{ width, height }}
+    >
       <MapCanvas $backgroundColor={chartBackgroundColor}>
         {/* @ts-ignore - React 19 compatibility */}
         <MapContainer
@@ -3306,6 +3549,8 @@ function DHIS2Map({
           keyboard={interactionEnabled}
           touchZoom={interactionEnabled}
         >
+          {/* @ts-ignore - React 19 compatibility */}
+          <BaseMapLayer mapType={currentBasemap as any} />
           <MapInstanceBridge onReady={handleMapInstanceReady} />
 
           {/* Auto-focus map when boundaries load */}
@@ -3320,7 +3565,11 @@ function DHIS2Map({
 
           {/* Light basemap focus mask to de-emphasize areas outside boundaries */}
           {/* @ts-ignore - React 19 compatibility */}
-          <BoundaryMask boundaries={displayBoundaries} enabled={false} />
+          <BoundaryMask
+            boundaries={displayBoundaries}
+            enabled={isMaskEnabled}
+            maskStyle={boundaryFocusMaskStyle}
+          />
 
           {/* Explicit in-map zoom controls */}
           {/* @ts-ignore - React 19 compatibility */}
@@ -3380,6 +3629,20 @@ function DHIS2Map({
           </div>
         )}
 
+        <div
+          style={{
+            position: 'absolute',
+            top: 14,
+            right: 14,
+            zIndex: 1002,
+          }}
+        >
+          <BaseMapSelector
+            currentMap={currentBasemap}
+            onMapChange={setCurrentBasemap}
+          />
+        </div>
+
         {enableDrill && drillState.breadcrumbs.length > 0 && (
           /* @ts-ignore - React 19 compatibility */
           <DrillControls
@@ -3419,6 +3682,35 @@ function DHIS2Map({
         )}
 
         {error && <div className="map-error-message">{error}</div>}
+        {boundaryPendingStalled && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 46,
+              right: 8,
+              zIndex: 1001,
+              background: 'rgba(255, 255, 255, 0.98)',
+              border: '1px solid rgba(148, 163, 184, 0.4)',
+              borderRadius: 6,
+              padding: '8px 10px',
+            }}
+          >
+            <button
+              type="button"
+              onClick={handleRetryBoundariesNow}
+              style={{
+                border: '1px solid #94a3b8',
+                background: '#f8fafc',
+                borderRadius: 4,
+                padding: '4px 8px',
+                cursor: 'pointer',
+                fontSize: 12,
+              }}
+            >
+              {t('Retry boundaries now')}
+            </button>
+          </div>
+        )}
 
         {/* Show message when no data is available (possibly due to query timeout) */}
         {!showMapLoadingOverlay && !error && effectiveData.length === 0 && (

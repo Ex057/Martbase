@@ -199,6 +199,16 @@ test-results/
 superset-frontend/test-report.html
 .git.worktree.broken
 *.rdb
+.flask_session/
+
+# UAT/export artifacts (generated for spreadsheet sharing)
+deployment/testing/*.csv
+deployment/testing/*.tsv
+
+# Temporary test/source scratch files (keep production tests tracked)
+*.tmp.test.tsx
+*.scratch.test.tsx
+*.tmp.tsx
 
 # Local archived patches
 scripts/archive/patches/*.patch

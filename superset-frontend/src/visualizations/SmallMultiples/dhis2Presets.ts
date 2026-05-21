@@ -63,6 +63,16 @@ const OU_LEVEL_PRESET_MAP: Record<number, DHIS2SplitPreset> = {
   7: 'by_facility',
 };
 
+const PRESET_NAME_FALLBACK_PATTERNS: Record<string, string[]> = {
+  by_national: ['national', 'country'],
+  by_region: ['region', 'province'],
+  by_district: ['district', 'district city', 'district_city'],
+  by_county: ['county'],
+  by_subcounty: ['subcounty', 'sub county'],
+  by_parish: ['parish'],
+  by_facility: ['facility', 'org unit', 'organisation unit'],
+};
+
 function parseExtra(extra: unknown): Record<string, any> | undefined {
   if (!extra) return undefined;
   if (typeof extra === 'string') {
@@ -188,5 +198,22 @@ export function resolvePresetColumn(
   const found = availableDataColumns.find(
     col => normalize(col) === normalizedTarget,
   );
-  return found || null;
+  if (found) {
+    return found;
+  }
+
+  // Fallback when metadata is missing/stale: infer from preset name + column names.
+  const fallbackPatterns =
+    PRESET_NAME_FALLBACK_PATTERNS[String(preset)] ||
+    (levelMatch ? [`level ${levelMatch[1]}`, `level_${levelMatch[1]}`] : []);
+  const normalizedColumns = availableDataColumns.map(col => ({
+    raw: col,
+    normalized: normalize(col),
+  }));
+  const fallback = normalizedColumns.find(({ normalized }) =>
+    fallbackPatterns.some(
+      pattern => normalized === normalize(pattern) || normalized.includes(normalize(pattern)),
+    ),
+  );
+  return fallback?.raw || null;
 }
