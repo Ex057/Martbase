@@ -1,0 +1,23 @@
+name: PolinRider Cloud Scanner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  scan-repo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the target repository code
+        uses: actions/checkout@v4
+
+      - name: Install Base Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git grep findutils curl
+      - name: Download the PolinRider Scanner Script
+        run: |
+          curl -fsSL "https://raw.githubusercontent.com/OpenSourceMalware/PolinRider/main/polinrider-scanner.sh" -o polinrider-scanner.sh
+          chmod +x polinrider-scanner.sh
+      - name: Execute Scan on Repository Root
+        run: |
+          ./polinrider-scanner.sh .
