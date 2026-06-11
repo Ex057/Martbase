@@ -68,16 +68,6 @@ CELERY_CONCURRENCY="${CELERY_CONCURRENCY:-2}"
 CELERY_BEAT_SCHEDULE="$PROJECT_DIR/celerybeat-schedule"
 
 # ClickHouse (set CLICKHOUSE_ENABLED=1 to install and manage it)
-# By default, enable it if ClickHouse binary is found (staging/dev mode)
-CLICKHOUSE_ENABLED="${CLICKHOUSE_ENABLED:-}"
-if [[ -z "$CLICKHOUSE_ENABLED" ]]; then
-  if command -v clickhouse >/dev/null 2>&1 || command -v clickhouse-server >/dev/null 2>&1; then
-    CLICKHOUSE_ENABLED=1
-  else
-    CLICKHOUSE_ENABLED=0
-  fi
-fi
-
 CLICKHOUSE_HOST="${CLICKHOUSE_HOST:-127.0.0.1}"
 CLICKHOUSE_HTTP_PORT="${CLICKHOUSE_HTTP_PORT:-8124}"
 CLICKHOUSE_NATIVE_PORT="${CLICKHOUSE_NATIVE_PORT:-19001}"
@@ -95,6 +85,20 @@ CLICKHOUSE_PID_FILE="${CLICKHOUSE_PID_FILE:-$PROJECT_DIR/clickhouse.pid}"
 CLICKHOUSE_LOG_FILE="${CLICKHOUSE_LOG_FILE:-$LOG_DIR/clickhouse.log}"
 CLICKHOUSE_ERROR_LOG_FILE="${CLICKHOUSE_ERROR_LOG_FILE:-$LOG_DIR/clickhouse-error.log}"
 CLICKHOUSE_STDOUT_LOG_FILE="${CLICKHOUSE_STDOUT_LOG_FILE:-$LOG_DIR/clickhouse-stdout.log}"
+
+# By default, enable ClickHouse if this checkout already has local ClickHouse
+# state or if a ClickHouse binary is available. This keeps Superset from
+# starting without its chart datasource.
+CLICKHOUSE_ENABLED="${CLICKHOUSE_ENABLED:-}"
+if [[ -z "$CLICKHOUSE_ENABLED" ]]; then
+  if [[ -d "$CLICKHOUSE_DATA_DIR" || -f "$CLICKHOUSE_PID_FILE" ]] || \
+     command -v clickhouse >/dev/null 2>&1 || \
+     command -v clickhouse-server >/dev/null 2>&1; then
+    CLICKHOUSE_ENABLED=1
+  else
+    CLICKHOUSE_ENABLED=0
+  fi
+fi
 
 # ----------------------------------------------------------------------------
 # Helpers
@@ -454,6 +458,25 @@ detect_platform() {
 # ----------------------------------------------------------------------------
 clickhouse_running() {
   curl -fsS "http://$CLICKHOUSE_HOST:$CLICKHOUSE_HTTP_PORT/ping" >/dev/null 2>&1
+}
+
+clickhouse_should_report() {
+  [[ "${CLICKHOUSE_ENABLED:-0}" == "1" ]] || \
+    [[ -d "$CLICKHOUSE_DATA_DIR" || -f "$CLICKHOUSE_PID_FILE" || -f "$CLICKHOUSE_LOG_FILE" ]]
+}
+
+require_clickhouse_ready_for_backend() {
+  [[ "${CLICKHOUSE_ENABLED:-0}" == "1" ]] || return 0
+
+  if clickhouse_running; then
+    return 0
+  fi
+
+  error "ClickHouse is required for this Martbase Superset setup, but it is not reachable."
+  error "Expected ClickHouse HTTP ping at: http://$CLICKHOUSE_HOST:$CLICKHOUSE_HTTP_PORT/ping"
+  error "Start it with: ./superset-manager.sh start-clickhouse"
+  error "Or restart everything with: ./superset-manager.sh restart-all"
+  exit 1
 }
 
 clickhouse_pid() {
@@ -1024,6 +1047,7 @@ start_backend() {
     return 0
   fi
 
+  require_clickhouse_ready_for_backend
   start_redis || true
 
   cd "$BACKEND_DIR"
@@ -1370,7 +1394,7 @@ health_check() {
     warn "Frontend not running"
   fi
 
-  if [[ "${CLICKHOUSE_ENABLED:-0}" == "1" ]]; then
+  if clickhouse_should_report; then
     if clickhouse_running; then
       ok "ClickHouse running"
     else
@@ -1633,7 +1657,7 @@ status_all() {
   celery_status
   frontend_status
   redis_status
-  if [[ "${CLICKHOUSE_ENABLED:-0}" == "1" ]]; then
+  if clickhouse_should_report; then
     clickhouse_status
   fi
 }
@@ -1658,8 +1682,11 @@ Commands:
   build-frontend        Build frontend assets
 
   start-all             Start backend + celery worker + beat + frontend
+  start all             Alias for start-all
   stop-all              Stop everything (frontend, celery, backend, clickhouse, redis)
+  stop all              Alias for stop-all
   restart-all           Restart everything with cache cleanup
+  restart all           Alias for restart-all
   status-all            Show full status
 
   start-celery          Start Celery worker + beat
@@ -1717,9 +1744,9 @@ EOF
 # ----------------------------------------------------------------------------
 main() {
   case "${1:-help}" in
-    start) start_backend ;;
-    stop) stop_backend ;;
-    restart) restart_backend ;;
+    start) if [[ "${2:-}" == "all" ]]; then start_all; else start_backend; fi ;;
+    stop) if [[ "${2:-}" == "all" ]]; then stop_all; else stop_backend; fi ;;
+    restart) if [[ "${2:-}" == "all" ]]; then restart_all; else restart_backend; fi ;;
     status) backend_status ;;
 
     start-frontend) start_frontend ;;

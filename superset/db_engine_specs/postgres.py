@@ -28,6 +28,7 @@ from sqlalchemy.dialects.postgresql import DOUBLE_PRECISION, ENUM, JSON
 from sqlalchemy.dialects.postgresql.base import PGInspector
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.engine.url import URL
+from sqlalchemy.sql import text
 from sqlalchemy.types import Date, DateTime, String
 
 from superset.constants import TimeGrain
@@ -407,10 +408,47 @@ WHERE datistemplate = false;
     def get_table_names(
         cls, database: Database, inspector: PGInspector, schema: str | None
     ) -> set[str]:
-        """Need to consider foreign tables for PostgreSQL"""
-        return set(inspector.get_table_names(schema)) | set(
+        """Include physical, foreign, and materialized-view objects for PostgreSQL."""
+        table_names = set(inspector.get_table_names(schema)) | set(
             inspector.get_foreign_table_names(schema)
         )
+        return table_names | cls.get_materialized_view_names(
+            database=database,
+            inspector=inspector,
+            schema=schema,
+        )
+
+    @classmethod
+    def get_materialized_view_names(
+        cls,
+        database: Database,  # pylint: disable=unused-argument
+        inspector: PGInspector,
+        schema: str | None,
+    ) -> set[str]:
+        """
+        Get materialized view names for PostgreSQL.
+
+        SQLAlchemy's PostgreSQL inspector may expose ``get_materialized_view_names``.
+        Fall back to ``pg_matviews`` when unavailable.
+        """
+        get_materialized_view_names = getattr(
+            inspector,
+            "get_materialized_view_names",
+            None,
+        )
+        if callable(get_materialized_view_names):
+            try:
+                return set(get_materialized_view_names(schema))
+            except Exception:  # pylint: disable=broad-except
+                pass
+
+        sql = """
+            SELECT matviewname
+            FROM pg_matviews
+            WHERE schemaname = :schema
+        """
+        rows = inspector.bind.execute(text(sql), {"schema": schema}).fetchall()
+        return {row[0] for row in rows}
 
     @staticmethod
     def get_extra_params(

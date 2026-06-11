@@ -327,10 +327,6 @@ export class ChartCreation extends PureComponent<
         'schema',
       ],
       filters: [
-        // Restrict to chart-eligible datasets (MART + NULL)
-        // so that ONLY analytical marts are shown for chart creation.
-        // Original METADATA definitions are excluded here.
-        { col: 'dataset_role', opr: 'dataset_context', value: 'chart' },
         ...(search ? [{ col: 'table_name', opr: 'ct', value: search }] : []),
       ],
       page,

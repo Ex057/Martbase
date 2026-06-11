@@ -49,10 +49,9 @@ import {
 import { DHIS2DataLoader } from './dhis2DataLoader';
 import {
   clearGeoFeatureCache,
-  GeoFeatureLoadResult,
-  loadDHIS2GeoFeatures,
   DHIS2GeoJSONFeature,
 } from 'src/utils/dhis2GeoFeatureLoader';
+import ugandaCountryMapGeoJson from '../../../plugins/legacy-plugin-chart-country-map/src/countries/uganda.geojson';
 import {
   resolveEffectiveBoundaryLevels,
   resolvePrimaryBoundaryLevel,
@@ -112,7 +111,6 @@ import {
   resolveQueryMetricColumnName,
 } from './loaderColumns';
 import { sanitizeDHIS2ColumnName } from '../../features/datasets/AddDataset/DHIS2ParameterBuilder/sanitize';
-import ugandaGeoJson from '../../../plugins/legacy-plugin-chart-country-map/src/countries/uganda.geojson';
 
 /* eslint-disable theme-colors/no-literal-colors */
 
@@ -827,41 +825,163 @@ function convertToBoundaryFeatures(
   return filterValidFeatures(convertedFeatures);
 }
 
-function buildBoundaryFeaturesFromUgandaGeoJson(
-  levels: number[],
-): BoundaryFeature[] {
-  const targetLevel = levels[0] || 2;
-  const features = Array.isArray((ugandaGeoJson as any)?.features)
-    ? (ugandaGeoJson as any).features
+type StaticGeoJsonFeatureCollection = {
+  type: 'FeatureCollection';
+  features: Array<{
+    type: 'Feature';
+    properties?: Record<string, any>;
+    geometry: any;
+    id?: string;
+  }>;
+};
+
+const staticGeoJsonCollectionCache = new Map<
+  string,
+  StaticGeoJsonFeatureCollection | null
+>();
+
+async function loadGeoJsonCollectionFromAsset(
+  asset: unknown,
+): Promise<StaticGeoJsonFeatureCollection | null> {
+  if (
+    asset &&
+    typeof asset === 'object' &&
+    'default' in (asset as Record<string, unknown>)
+  ) {
+    return loadGeoJsonCollectionFromAsset(
+      (asset as Record<string, unknown>).default,
+    );
+  }
+
+  if (asset && typeof asset === 'object') {
+    const asCollection = asset as StaticGeoJsonFeatureCollection;
+    return Array.isArray(asCollection.features) ? asCollection : null;
+  }
+
+  if (typeof asset !== 'string') {
+    return null;
+  }
+
+  if (asset.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(asset) as StaticGeoJsonFeatureCollection;
+      return Array.isArray(parsed?.features) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  if (staticGeoJsonCollectionCache.has(asset)) {
+    return staticGeoJsonCollectionCache.get(asset) || null;
+  }
+
+  try {
+    const response = await fetch(asset);
+    if (!response.ok) {
+      staticGeoJsonCollectionCache.set(asset, null);
+      return null;
+    }
+    const parsed =
+      (await response.json()) as Partial<StaticGeoJsonFeatureCollection>;
+    const collection = Array.isArray(parsed?.features)
+      ? (parsed as StaticGeoJsonFeatureCollection)
+      : null;
+    staticGeoJsonCollectionCache.set(asset, collection);
+    return collection;
+  } catch {
+    staticGeoJsonCollectionCache.set(asset, null);
+    return null;
+  }
+}
+
+async function loadStaticUgFeatures(levels: number[]): Promise<DHIS2GeoJSONFeature[]> {
+  const parseGeoJsonAsset = (
+    asset: unknown,
+  ) => loadGeoJsonCollectionFromAsset(asset);
+
+  const countryMapCollection = await parseGeoJsonAsset(ugandaCountryMapGeoJson);
+  const rawFeatures: any[] = [];
+  const requestedLevels = Array.isArray(levels)
+    ? levels.filter(level => level === 2 || level === 3)
     : [];
+  const normalizedLevels =
+    requestedLevels.length > 0 ? requestedLevels : [3];
 
-  const convertedFeatures: BoundaryFeature[] = features
-    .filter((feature: any) => feature?.geometry && feature?.properties)
-    .map((feature: any, index: number) => {
-      const isoCode = String(feature.properties?.ISO || `UG-${index}`);
-      const districtName = String(feature.properties?.NAME_1 || isoCode);
-      return {
-        type: 'Feature' as const,
-        id: isoCode,
-        properties: {
-          id: isoCode,
-          name: districtName,
-          level: targetLevel,
-          parentId: '',
-          parentName: '',
-          hasChildrenWithCoordinates: false,
-          hasParentWithCoordinates: true,
-        },
-        geometry: feature.geometry,
-      };
+  if (countryMapCollection?.features?.length) {
+    rawFeatures.push(...countryMapCollection.features);
+  }
+
+  if (rawFeatures.length === 0) {
+    // eslint-disable-next-line no-console
+    console.warn('[UGMaps] Static GeoJSON load returned no features', {
+      normalizedLevels,
+      hasCountryMapCollection: Boolean(countryMapCollection),
+      countryMapFeatureCount: countryMapCollection?.features?.length || 0,
+      countryMapAssetType: typeof ugandaCountryMapGeoJson,
     });
+  }
 
-  return filterValidFeatures(convertedFeatures);
+  const normalized = rawFeatures.map((feature, index) => {
+    const properties = feature.properties || {};
+    const id =
+      String(
+        properties.id ||
+          properties.uid ||
+          properties.ISO ||
+          properties.code ||
+          feature.id ||
+          `ug-${index}`,
+      ).trim() || `ug-${index}`;
+    const name = String(
+      properties.name ||
+        properties.NAME_1 ||
+        properties.NAME ||
+        properties.NAME_2 ||
+        id,
+    ).trim();
+    const level = Number.isFinite(Number(properties.level))
+      ? Number(properties.level)
+      : String(properties.ISO || '').startsWith('UG-')
+        ? 3
+        : normalizedLevels.includes(2) && !normalizedLevels.includes(3)
+          ? 2
+          : 3;
+
+    return {
+      type: 'Feature',
+      id,
+      properties: {
+        ...properties,
+        id,
+        name,
+        level,
+        parent: properties.parent || '',
+        parentName: properties.parentName || '',
+        hasCoordinatesDown: true,
+        hasCoordinatesUp: true,
+      },
+      geometry: feature.geometry,
+    } as DHIS2GeoJSONFeature;
+  });
+  const invalidCount = normalized.filter(
+    feature =>
+      !String(feature.properties?.name || '').trim() ||
+      !String(feature.properties?.id || '').trim(),
+  ).length;
+  if (invalidCount > 0) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[UGMaps] ${invalidCount} boundary features are missing id/name after normalization.`,
+    );
+  }
+
+  return normalized;
 }
 
 function buildAggregatedValueMaps(options: {
   rows: Record<string, any>[];
   requestedOrgUnitColumn: string;
+  geoJoinKeyColumn?: string;
   metric: string;
   aggregationMethod: AggregationMethod;
   actualOrgUnitColumn?: string;
@@ -872,6 +992,7 @@ function buildAggregatedValueMaps(options: {
   const {
     rows,
     requestedOrgUnitColumn,
+    geoJoinKeyColumn,
     metric,
     aggregationMethod,
     actualOrgUnitColumn,
@@ -881,12 +1002,15 @@ function buildAggregatedValueMaps(options: {
   } = options;
   const metricMapById = new Map<string, number>();
   const metricMapByName = new Map<string, number>();
+  const metricMapByGeoKey = new Map<string, number>();
   const orgUnitData = new Map<string, number[]>();
+  const geoJoinData = new Map<string, number[]>();
 
   if (!rows.length) {
     return {
       dataMap: metricMapById,
       dataMapByName: metricMapByName,
+      dataMapByGeoKey: metricMapByGeoKey,
     };
   }
 
@@ -920,11 +1044,16 @@ function buildAggregatedValueMaps(options: {
       datasourceColumns,
       availableColumns,
     });
+  const actualGeoJoinKeyCol =
+    geoJoinKeyColumn && availableColumns.includes(geoJoinKeyColumn)
+      ? geoJoinKeyColumn
+      : undefined;
 
   if (!actualOrgUnitCol || !actualMetricCol) {
     return {
       dataMap: metricMapById,
       dataMapByName: metricMapByName,
+      dataMapByGeoKey: metricMapByGeoKey,
     };
   }
 
@@ -961,6 +1090,7 @@ function buildAggregatedValueMaps(options: {
 
     const orgUnitValue = row[actualOrgUnitCol];
     const metricValue = row[actualMetricCol];
+    const geoJoinValue = actualGeoJoinKeyCol ? row[actualGeoJoinKeyCol] : null;
 
     if (orgUnitValue === undefined || orgUnitValue === null) {
       return;
@@ -975,6 +1105,15 @@ function buildAggregatedValueMaps(options: {
     const values = orgUnitData.get(id) || [];
     values.push(numValue);
     orgUnitData.set(id, values);
+
+    if (geoJoinValue !== undefined && geoJoinValue !== null) {
+      const normalizedGeoJoinValue = normalizeOrgUnitMatchKey(geoJoinValue);
+      if (normalizedGeoJoinValue) {
+        const geoValues = geoJoinData.get(normalizedGeoJoinValue) || [];
+        geoValues.push(numValue);
+        geoJoinData.set(normalizedGeoJoinValue, geoValues);
+      }
+    }
   });
 
   orgUnitData.forEach((values, id) => {
@@ -1012,11 +1151,44 @@ function buildAggregatedValueMaps(options: {
         metricMapByName.set(key, aggregatedValue);
       }
     });
+
+  });
+
+  geoJoinData.forEach((values, geoKey) => {
+    let aggregatedValue: number;
+    switch (aggregationMethod) {
+      case 'none':
+        aggregatedValue = values[values.length - 1];
+        break;
+      case 'sum':
+        aggregatedValue = values.reduce((left, right) => left + right, 0);
+        break;
+      case 'average':
+        aggregatedValue =
+          values.reduce((left, right) => left + right, 0) / values.length;
+        break;
+      case 'max':
+        aggregatedValue = Math.max(...values);
+        break;
+      case 'min':
+        aggregatedValue = Math.min(...values);
+        break;
+      case 'count':
+        aggregatedValue = values.length;
+        break;
+      case 'latest':
+        aggregatedValue = values[values.length - 1];
+        break;
+      default:
+        aggregatedValue = values.reduce((left, right) => left + right, 0);
+    }
+    metricMapByGeoKey.set(geoKey, aggregatedValue);
   });
 
   return {
     dataMap: metricMapById,
     dataMapByName: metricMapByName,
+    dataMapByGeoKey: metricMapByGeoKey,
   };
 }
 
@@ -1024,7 +1196,24 @@ function resolveFeatureValueFromMaps(
   feature: BoundaryFeature,
   dataMap: Map<string, number>,
   dataMapByName: Map<string, number>,
+  dataMapByGeoKey: Map<string, number>,
+  geoJoinFeatureProperty?: string,
 ): number | undefined {
+  const featureProperties = (feature.properties || {}) as Record<string, any>;
+  const resolvedGeoJoinProperty = String(
+    geoJoinFeatureProperty || 'name',
+  ).trim();
+  if (resolvedGeoJoinProperty) {
+    const rawGeoJoinValue = featureProperties[resolvedGeoJoinProperty];
+    const normalizedGeoJoinValue = normalizeOrgUnitMatchKey(rawGeoJoinValue);
+    if (normalizedGeoJoinValue) {
+      const joinedValue = dataMapByGeoKey.get(normalizedGeoJoinValue);
+      if (joinedValue !== undefined) {
+        return joinedValue;
+      }
+    }
+  }
+
   let value = dataMap.get(feature.id);
   if (value !== undefined) {
     return value;
@@ -1060,6 +1249,8 @@ function resolveFeatureValueFromMaps(
 
   return undefined;
 }
+
+const EMPTY_NUMERIC_MAP = new Map<string, number>();
 
 function resolveFallbackFocusHierarchyColumn(options: {
   currentOrgUnitColumn: string;
@@ -1169,11 +1360,12 @@ function DHIS2Map({
   chartId,
   dashboardId,
   datasourceColumns = [],
+  geoJoinKeyColumn,
+  geoJoinFeatureProperty = 'NAME_1',
   boundaryLoadMethod = 'geoFeatures',
   ouHierarchyColumns = [],
   periodColumns = [],
 }: DHIS2MapProps): ReactElement {
-  const MAX_PENDING_BOUNDARY_RETRIES = 8;
   const metricDisplayName = metricLabel || metric;
   const hasQueryData = data.length > 0;
   const sourceInstanceIdsInputKey = useMemo(
@@ -1201,9 +1393,15 @@ function DHIS2Map({
   const [liveLegendDefinition, setLiveLegendDefinition] = useState<
     DHIS2LegendDefinition | undefined
   >(undefined);
+  const shouldSyncDhis2LegendSets = useMemo(
+    () =>
+      (legendType === 'staged' || Boolean(stagedLegendDefinition)) &&
+      (isDHIS2Dataset || hasDHIS2SqlComment(datasetSql || '')),
+    [datasetSql, isDHIS2Dataset, legendType, stagedLegendDefinition],
+  );
 
   useEffect(() => {
-    if (!databaseId) return;
+    if (!databaseId || !shouldSyncDhis2LegendSets) return;
     let cancelled = false;
 
     syncDHIS2LegendSchemesForDatabase(databaseId)
@@ -1244,7 +1442,7 @@ function DHIS2Map({
     return () => {
       cancelled = true;
     };
-  }, [databaseId, metric, datasourceColumns]);
+  }, [databaseId, datasourceColumns, metric, shouldSyncDhis2LegendSets]);
 
   const effectiveStagedLegendDefinition = useMemo(() => {
     // Use staged DHIS2 legend ranges by default, but leave explicit manual
@@ -1376,7 +1574,6 @@ function DHIS2Map({
   // Track whether we've had a successful databaseId at least once — while it
   // has never been set, we suppress the "no database" error (the datasource
   // may still be loading).
-  const everHadDatabaseIdRef = useRef<boolean>(false);
   const lastLoadedStagedLocalRequestKeyRef = useRef<string | null>(null);
   const inFlightStagedLocalRequestKeyRef = useRef<string | null>(null);
   const stagedLocalFocusCacheRef = useRef<
@@ -1478,11 +1675,17 @@ function DHIS2Map({
   ]);
   const effectiveOrgUnitColumn = useMemo(
     () =>
+      geoJoinKeyColumn ||
       boundaryLevelColumns?.[effectiveDataBoundaryLevel] ||
       (Number.isFinite(effectiveDataBoundaryLevel)
         ? `ou_level_${effectiveDataBoundaryLevel}`
         : orgUnitColumn),
-    [boundaryLevelColumns, effectiveDataBoundaryLevel, orgUnitColumn],
+    [
+      boundaryLevelColumns,
+      effectiveDataBoundaryLevel,
+      geoJoinKeyColumn,
+      orgUnitColumn,
+    ],
   );
   const prefetchFocusedOrgUnitColumn = useMemo(
     () =>
@@ -1637,86 +1840,6 @@ function DHIS2Map({
     effectiveStagedDatasetId,
     normalizedSourceInstanceIds,
   ]);
-
-  // Fetch and cache org unit levels for the control panel dropdown
-  // This ensures the boundary_levels control shows actual DHIS2 levels
-  useEffect(() => {
-    if (
-      typeof window === 'undefined' ||
-      !/(^|\/)explore(\/|$)/.test(window.location.pathname)
-    ) {
-      return;
-    }
-    if (!databaseId) return;
-
-    const cacheKey = `dhis2_org_unit_levels_db${databaseId}`;
-
-    // Check if already cached and valid
-    try {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        const { timestamp } = JSON.parse(cached);
-        // Cache valid for 1 hour
-        if (Date.now() - timestamp < 3600000) {
-          return; // Already cached and valid
-        }
-      }
-    } catch (e) {
-      // Ignore cache check errors
-    }
-
-    // Fetch org unit levels from DHIS2
-    const protectedEndpoint = `/api/v1/database/${databaseId}/dhis2_metadata/?type=organisationUnitLevels&staged=true`;
-    const publicEndpoint =
-      chartId != null
-        ? `/api/v1/database/${databaseId}/dhis2_metadata_public/?type=organisationUnitLevels&staged=true&slice_id=${chartId}${dashboardId ? `&dashboard_id=${dashboardId}` : ''}`
-        : null;
-
-    SupersetClient.get({
-      endpoint: protectedEndpoint,
-      ignoreUnauthorized: true,
-    })
-      .then(response => {
-        if (response.json?.result) {
-          const levels = response.json.result.sort(
-            (a: any, b: any) => a.level - b.level,
-          );
-          // Cache for the control panel
-          localStorage.setItem(
-            cacheKey,
-            JSON.stringify({
-              data: levels,
-              timestamp: Date.now(),
-            }),
-          );
-        }
-      })
-      .catch(error => {
-        const status = Number((error as any)?.status);
-        if (!publicEndpoint || ![400, 401, 403, 404].includes(status)) {
-          return;
-        }
-
-        SupersetClient.get({ endpoint: publicEndpoint })
-          .then(response => {
-            if (response.json?.result) {
-              const levels = response.json.result.sort(
-                (a: any, b: any) => a.level - b.level,
-              );
-              localStorage.setItem(
-                cacheKey,
-                JSON.stringify({
-                  data: levels,
-                  timestamp: Date.now(),
-                }),
-              );
-            }
-          })
-          .catch(() => {
-            // Silently fail - control panel will use fallback choices
-          });
-      });
-  }, [databaseId, chartId, dashboardId]);
 
   // Fetch DHIS2 data using the preview endpoint when standard data is empty
   // This uses the same approach as DataPreview which successfully loads DHIS2 data
@@ -2188,18 +2311,39 @@ function DHIS2Map({
       .map(columnName => resolveAvailableColumn(columnName))
       .filter((columnName): columnName is string => Boolean(columnName));
 
+    const explicitTooltipCandidates = (tooltipColumns || [])
+      .map(columnName => resolveAvailableColumn(String(columnName || '')))
+      .filter((columnName): columnName is string => Boolean(columnName));
+
+    const semanticDimensionCandidates = unfilteredEffectiveDataColumns.filter(
+      columnName => {
+        const normalized = sanitizeDHIS2ColumnName(String(columnName || ''));
+        return (
+          normalized.includes('disease') ||
+          normalized.includes('metric_type') ||
+          normalized === 'metric_type' ||
+          normalized.includes('source_system') ||
+          normalized === 'year' ||
+          normalized === 'week'
+        );
+      },
+    );
+
     return Array.from(
       new Set([
         ...explicitPeriodCandidates,
         ...metadataPeriodCandidates,
         ...heuristicPeriodCandidates,
         ...resolvedHierarchyColumns,
+        ...explicitTooltipCandidates,
+        ...semanticDimensionCandidates,
       ]),
     );
   }, [
     datasourceColumns,
     ouHierarchyColumns,
     periodColumns,
+    tooltipColumns,
     unfilteredEffectiveDataColumns,
   ]);
 
@@ -2605,8 +2749,10 @@ function DHIS2Map({
         feature,
         parentSelectionDataMap,
         parentSelectionDataMapByName,
+        EMPTY_NUMERIC_MAP,
+        geoJoinFeatureProperty,
       ),
-    [parentSelectionDataMap, parentSelectionDataMapByName],
+    [geoJoinFeatureProperty, parentSelectionDataMap, parentSelectionDataMapByName],
   );
   // Keep a ref so fetchBoundaries can read the latest value without it
   // becoming a reactive dependency.  If getParentSelectionValue were in the
@@ -2620,7 +2766,7 @@ function DHIS2Map({
 
   // Aggregate data by OrgUnit using the selected aggregation method
   // Build maps by both ID and name to support different data formats
-  const { dataMap, dataMapByName } = useMemo(() => {
+  const { dataMap, dataMapByName, dataMapByGeoKey } = useMemo(() => {
     // Determine the target OU level from the resolved hierarchy column's metadata
     const colMeta = datasourceColumns.find(
       c => c.column_name === resolvedEffectiveOrgUnitColumn,
@@ -2631,6 +2777,7 @@ function DHIS2Map({
     const aggregatedMaps = buildAggregatedValueMaps({
       rows: filteredData,
       requestedOrgUnitColumn: effectiveOrgUnitDataColumn,
+      geoJoinKeyColumn,
       metric,
       aggregationMethod,
       actualOrgUnitColumn: resolvedEffectiveOrgUnitColumn,
@@ -2649,6 +2796,7 @@ function DHIS2Map({
     datasourceColumns,
     effectiveOrgUnitDataColumn,
     filteredData,
+    geoJoinKeyColumn,
     metric,
     parentSelectionColumn,
     resolvedEffectiveOrgUnitColumn,
@@ -2660,8 +2808,14 @@ function DHIS2Map({
   // inheriting the selected parent total.
   const getFeatureValue = useCallback(
     (feature: BoundaryFeature): number | undefined =>
-      resolveFeatureValueFromMaps(feature, dataMap, dataMapByName),
-    [dataMap, dataMapByName],
+      resolveFeatureValueFromMaps(
+        feature,
+        dataMap,
+        dataMapByName,
+        dataMapByGeoKey,
+        geoJoinFeatureProperty,
+      ),
+    [dataMap, dataMapByGeoKey, dataMapByName, geoJoinFeatureProperty],
   );
 
   // Calculate value range from actual data for proper legend scaling
@@ -2790,11 +2944,6 @@ function DHIS2Map({
   );
 
   const fetchBoundaries = useCallback(async () => {
-    if (!databaseId) {
-      setError(t('No database selected'));
-      setLoading(false);
-      return;
-    }
     if (!effectiveBoundaryLevels || effectiveBoundaryLevels.length === 0) {
       // eslint-disable-next-line no-console
       console.warn(
@@ -2816,116 +2965,35 @@ function DHIS2Map({
     setFocusedParentBoundaries([]);
 
     try {
-      const endpointToUse = boundaryLoadMethod || 'geoJSON';
-      const useUgGeoJson = endpointToUse === 'ug_geojson';
-
-      const loadWithEndpoint = async (
-        endpoint: 'geoJSON' | 'geoFeatures' | 'ug_geojson',
-        levels: number[],
-        parentOuIds?: string[],
-        forceWithoutInstanceIds?: boolean,
-      ): Promise<GeoFeatureLoadResult> => {
-        if (endpoint === 'ug_geojson') {
-          const allFeatures = buildBoundaryFeaturesFromUgandaGeoJson(levels);
-          const featuresByLevel = new Map<number, DHIS2GeoJSONFeature[]>();
-          levels.forEach(level => {
-            featuresByLevel.set(
-              level,
-              allFeatures as unknown as DHIS2GeoJSONFeature[],
-            );
-          });
-          return {
-            featuresByLevel,
-            allFeatures: allFeatures as unknown as DHIS2GeoJSONFeature[],
-            totalCount: allFeatures.length,
-            fromCache: true,
-            backgroundRefreshInProgress: false,
-            loadTimeMs: 0,
-            errors: [],
-            pendingRetry: false,
-          };
-        }
-
-        return loadDHIS2GeoFeatures({
-          databaseId,
-          chartId,
-          dashboardId,
-          sourceInstanceIds: forceWithoutInstanceIds
-            ? []
-            : normalizedSourceInstanceIds,
-          levels,
-          parentOuIds,
-          endpoint,
-          cacheKeyPrefix: 'dhis2map_boundaries',
-          cacheDuration: 24 * 60 * 60 * 1000, // 24 hours persistent cache
-          enableBackgroundRefresh: true,
-          forceRefresh: false,
-        });
-      };
-
-      const loadBoundaryResult = async (
-        levels: number[],
-        parentOuIds?: string[],
-      ) => {
-        let result = await loadWithEndpoint(endpointToUse, levels, parentOuIds);
-        if (result.totalCount === 0 && !useUgGeoJson) {
-          const fallbackEndpoint =
-            endpointToUse === 'geoJSON' ? 'geoFeatures' : 'geoJSON';
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[DHIS2Map] No boundaries returned from ${endpointToUse}. Falling back to ${fallbackEndpoint}`,
-          );
-          result = await loadWithEndpoint(
-            fallbackEndpoint,
-            levels,
-            parentOuIds,
-          );
-        }
-        if (
-          result.totalCount === 0 &&
-          normalizedSourceInstanceIds.length > 0 &&
-          !useUgGeoJson
-        ) {
-          // Some datasets can return empty boundaries when instance scoping is too restrictive.
-          // Retry once without instance scope before surfacing an error.
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[DHIS2Map] No boundaries returned with instance_ids (${normalizedSourceInstanceIds.join(
-              ',',
-            )}). Retrying without instance scope.`,
-          );
-          result = await loadWithEndpoint(
-            endpointToUse,
-            levels,
-            parentOuIds,
-            true,
-          );
-          if (result.totalCount === 0) {
-            const fallbackEndpoint =
-              endpointToUse === 'geoJSON' ? 'geoFeatures' : 'geoJSON';
-            result = await loadWithEndpoint(
-              fallbackEndpoint,
-              levels,
-              parentOuIds,
-              true,
-            );
-          }
-        }
-        return result;
-      };
-
       let requestedLevels = effectiveBoundaryLevels;
-      let requestedParentIds: string[] | undefined;
       let selectedParents: BoundaryFeature[] = [];
       let focusedRequest: FocusedBoundaryRequest | null = null;
+
+      requestedLevels =
+        requestedLevels
+          ?.map(level => Number(level))
+          .filter(level => level === 2 || level === 3) || [];
+      if (requestedLevels.length === 0) {
+        if (resolvedPrimaryBoundaryLevel === 2 || resolvedPrimaryBoundaryLevel === 3) {
+          requestedLevels = [resolvedPrimaryBoundaryLevel];
+        } else if (
+          String(geoJoinKeyColumn || '')
+            .toLowerCase()
+            .includes('region')
+        ) {
+          requestedLevels = [2];
+        } else {
+          requestedLevels = [3];
+        }
+      }
 
       if (
         focusSelectedBoundaryWithChildren &&
         resolvedPrimaryBoundaryLevel > 0
       ) {
-        const parentResult = await loadBoundaryResult([
-          resolvedPrimaryBoundaryLevel,
-        ]);
+        const parentResult = {
+          allFeatures: await loadStaticUgFeatures([resolvedPrimaryBoundaryLevel]),
+        };
         const parentFeatures = convertToBoundaryFeatures(
           parentResult.allFeatures,
         );
@@ -2939,7 +3007,6 @@ function DHIS2Map({
 
         if (focusedRequest.childLevel && focusedRequest.parentIds.length > 0) {
           requestedLevels = [focusedRequest.childLevel];
-          requestedParentIds = focusedRequest.parentIds;
           selectedParents = focusedRequest.selectedParents;
           setActiveFocusedBoundaryRequest(focusedRequest);
           setFocusedParentBoundaries(selectedParents);
@@ -2952,10 +3019,11 @@ function DHIS2Map({
         setFocusedParentBoundaries([]);
       }
 
-      let result = await loadBoundaryResult(
-        requestedLevels,
-        requestedParentIds,
-      );
+      const result = {
+        allFeatures: await loadStaticUgFeatures(requestedLevels),
+        totalCount: 0,
+      };
+      result.totalCount = result.allFeatures.length;
 
       if (
         result.totalCount === 0 &&
@@ -2972,13 +3040,13 @@ function DHIS2Map({
             ',',
           )}). Retrying with primary level ${resolvedPrimaryBoundaryLevel}.`,
         );
-        result = await loadBoundaryResult(
-          [resolvedPrimaryBoundaryLevel],
-          requestedParentIds,
-        );
+        result.allFeatures = await loadStaticUgFeatures([
+          resolvedPrimaryBoundaryLevel,
+        ]);
+        result.totalCount = result.allFeatures.length;
       }
 
-      if (requestedParentIds?.length && result.totalCount === 0) {
+      if (focusedRequest?.parentIds?.length && result.totalCount === 0) {
         // eslint-disable-next-line no-console
         console.warn(
           `[DHIS2Map] No child boundaries returned for focused selection. Falling back to selected parent boundaries.`,
@@ -2988,45 +3056,6 @@ function DHIS2Map({
         return;
       }
 
-      if (result.errors.length > 0) {
-        // eslint-disable-next-line no-console
-        console.warn('[DHIS2Map] Errors during boundary fetch:', result.errors);
-      }
-
-      // Backend returned pending status — boundaries are being prepared
-      // asynchronously. Show a friendly message and auto-retry.
-      if (result.pendingRetry) {
-        const nextRetryCount = boundaryPendingRetryCount + 1;
-        if (nextRetryCount > MAX_PENDING_BOUNDARY_RETRIES) {
-          setBoundaryPendingStalled(true);
-          setBoundaryPendingRetryCount(0);
-          setError(
-            t(
-              'Boundary staging is taking longer than expected. Retry now or check DHIS2 staging diagnostics.',
-            ),
-          );
-          setLoading(false);
-          return;
-        }
-        setBoundaryPendingRetryCount(nextRetryCount);
-        setError(
-          t(
-            'Map boundaries are being prepared in the background. The map will refresh automatically.',
-          ),
-        );
-        setLoading(false);
-        const retryMs = result.retryAfterMs ?? 8000;
-        if (boundaryPendingRetryTimerRef.current) {
-          clearTimeout(boundaryPendingRetryTimerRef.current);
-        }
-        boundaryPendingRetryTimerRef.current = setTimeout(() => {
-          setError(null);
-          setLoading(true);
-          lastLoadedBoundaryRequestKeyRef.current = null;
-          fetchBoundaries();
-        }, retryMs);
-        return;
-      }
       setBoundaryPendingRetryCount(0);
       setBoundaryPendingStalled(false);
 
@@ -3067,15 +3096,11 @@ function DHIS2Map({
     }
   }, [
     boundaryPendingRetryCount,
-    databaseId,
-    chartId,
-    dashboardId,
-    normalizedSourceInstanceIds,
     effectiveBoundaryLevels,
-    boundaryLoadMethod,
     focusSelectedBoundaryWithChildren,
-    resolvedPrimaryBoundaryLevel,
+    geoJoinKeyColumn,
     maxAvailableBoundaryLevel,
+    resolvedPrimaryBoundaryLevel,
     // getParentSelectionValue is intentionally excluded — it's accessed via
     // getParentSelectionValueRef so data changes don't recreate this callback
     // and retrigger the boundary-load effect (which would set loading=true again).
@@ -3100,7 +3125,6 @@ function DHIS2Map({
     // setLoading(true) + re-fetch cycle that would make the map appear
     // permanently loading.
     const boundaryRequestKey = [
-      databaseId ?? 'none',
       boundaryLevelsKey,
       sourceInstanceIdsKey,
     ].join('|');
@@ -3109,16 +3133,7 @@ function DHIS2Map({
       return; // same config — do not re-fetch
     }
 
-    // Only call fetchBoundaries if we have valid level and database info
-    if (databaseId) {
-      everHadDatabaseIdRef.current = true;
-    }
-
-    if (
-      databaseId &&
-      effectiveBoundaryLevels &&
-      effectiveBoundaryLevels.length > 0
-    ) {
+    if (effectiveBoundaryLevels && effectiveBoundaryLevels.length > 0) {
       // Cancel any pending retry when the config itself changes.
       if (boundaryPendingRetryTimerRef.current) {
         clearTimeout(boundaryPendingRetryTimerRef.current);
@@ -3131,16 +3146,6 @@ function DHIS2Map({
       setLoading(true);
       fetchBoundaries();
     } else {
-      // Only show the "no database" error if we have previously had a valid
-      // databaseId — while the datasource is still loading (placeholder),
-      // databaseId is undefined but the error would be spurious.
-      if (!databaseId && everHadDatabaseIdRef.current) {
-        setError(
-          t(
-            'Database connection not found. Please ensure your dataset is linked to a DHIS2 database.',
-          ),
-        );
-      }
       // Always clear loading when we've decided not to fetch boundaries — the
       // map should not remain stuck on the loading overlay indefinitely.
       setLoading(false);
@@ -3151,7 +3156,7 @@ function DHIS2Map({
         boundaryPendingRetryTimerRef.current = null;
       }
     };
-  }, [boundaryLevelsKey, sourceInstanceIdsKey, databaseId, fetchBoundaries]);
+  }, [boundaryLevelsKey, sourceInstanceIdsKey, fetchBoundaries]);
 
   const handleDrillUp = useCallback(
     (toIndex?: number) => {
@@ -3202,7 +3207,8 @@ function DHIS2Map({
 
   useEffect(() => {
     const hasBoundaryData = boundaries.length > 0;
-    const hasMetricData = dataMap.size > 0 || dataMapByName.size > 0;
+    const hasMetricData =
+      dataMap.size > 0 || dataMapByName.size > 0 || dataMapByGeoKey.size > 0;
     const hasRows = filteredData.length > 0;
 
     if (
@@ -3225,12 +3231,13 @@ function DHIS2Map({
       metric || '',
       Array.from(dataMap.keys()).slice(0, 20).join(','),
       Array.from(dataMapByName.keys()).slice(0, 20).join(','),
+      Array.from(dataMapByGeoKey.keys()).slice(0, 20).join(','),
     ].join('|');
 
     if (lastNoMatchBoundaryRefreshKeyRef.current === noMatchKey) {
       setError(
         t(
-          'Map boundaries loaded, but none matched the dataset org units. Check the selected org unit column, boundary level, and DHIS2 source instance.',
+          'Map boundaries loaded, but none matched dataset rows. Check Boundary Join Column, GeoJSON Property, and Boundary level.',
         ),
       );
       return;
@@ -3239,7 +3246,7 @@ function DHIS2Map({
     lastNoMatchBoundaryRefreshKeyRef.current = noMatchKey;
     setError(
       t(
-        'Refreshing map boundaries because the cached boundaries did not match the dataset org units.',
+        'Refreshing map boundaries because cached boundaries did not match dataset rows.',
       ),
     );
 
@@ -3256,6 +3263,7 @@ function DHIS2Map({
     boundaries,
     boundaryLevelsKey,
     dataMap,
+    dataMapByGeoKey,
     dataMapByName,
     databaseId,
     effectiveOrgUnitDataColumn,
@@ -3266,6 +3274,54 @@ function DHIS2Map({
     resolvedEffectiveOrgUnitColumn,
     selectedBoundaryIds.size,
     sourceInstanceIdsKey,
+  ]);
+
+  useEffect(() => {
+    if (
+      loading ||
+      boundaries.length === 0 ||
+      filteredData.length === 0 ||
+      selectedBoundaryIds.size > 0
+    ) {
+      return;
+    }
+
+    const boundaryNameKeys = new Set<string>();
+    boundaries.forEach(feature => {
+      const key = normalizeOrgUnitMatchKey(
+        (feature.properties as Record<string, any>)?.[geoJoinFeatureProperty] ??
+          feature.properties?.name,
+      );
+      if (key) {
+        boundaryNameKeys.add(key);
+      }
+    });
+
+    const unmatchedGeoKeys = Array.from(dataMapByGeoKey.keys())
+      .filter(key => !boundaryNameKeys.has(key))
+      .slice(0, 20);
+    const sampleBoundaryKeys = Array.from(boundaryNameKeys).slice(0, 20);
+
+    // eslint-disable-next-line no-console
+    console.warn('[UGMaps Join Diagnostics]', {
+      geoJoinFeatureProperty,
+      geoJoinKeyColumn,
+      dataRows: filteredData.length,
+      rawBoundaries: boundaries.length,
+      boundaries: boundaries.length,
+      matchedBoundaries: selectedBoundaryIds.size,
+      dataMapByGeoKeySize: dataMapByGeoKey.size,
+      unmatchedGeoKeys,
+      sampleBoundaryKeys,
+    });
+  }, [
+    boundaries,
+    dataMapByGeoKey,
+    filteredData.length,
+    geoJoinFeatureProperty,
+    geoJoinKeyColumn,
+    loading,
+    selectedBoundaryIds.size,
   ]);
 
   const displayBoundaries = useMemo(() => {

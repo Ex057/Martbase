@@ -195,8 +195,12 @@ export interface DHIS2MapProps {
   chartId?: number;
   dashboardId?: number;
   datasourceColumns?: DHIS2DatasourceColumn[];
-  // Boundary loading method: 'geoFeatures' (default), 'geoJSON', or local Uganda geojson
-  boundaryLoadMethod?: 'geoFeatures' | 'geoJSON' | 'ug_geojson';
+  regionColumn?: string;
+  districtColumn?: string;
+  geoJoinKeyColumn?: string;
+  geoJoinFeatureProperty?: string;
+  // Boundary loading method: 'geoFeatures' (default) or 'geoJSON'
+  boundaryLoadMethod?: 'geoFeatures' | 'geoJSON';
   // Compass
   compassVisible?: boolean;
   compassPosition?: MapCornerPosition;

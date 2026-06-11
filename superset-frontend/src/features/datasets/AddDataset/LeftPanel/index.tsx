@@ -313,6 +313,9 @@ export default function LeftPanel({
               if (!dataset) {
                 return;
               }
+              const isDHIS2Dataset =
+                (dataset.staging_source_type || dataset.db?.backend) ===
+                'dhis2';
 
               const datasetIdentifier =
                 dataset.dataset_name || dataset.table_name;
@@ -324,7 +327,7 @@ export default function LeftPanel({
                 table_name: datasetIdentifier,
               };
 
-              if (dataset.dhis2_parameters) {
+              if (isDHIS2Dataset && dataset.dhis2_parameters) {
                 const sourceTable =
                   parseSourceTable(datasetIdentifier) || dataset.table_name;
                 const paramsStr = Object.entries(dataset.dhis2_parameters)

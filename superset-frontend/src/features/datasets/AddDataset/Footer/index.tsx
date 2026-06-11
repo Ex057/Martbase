@@ -110,6 +110,10 @@ function Footer({
 
   const onSave = (createChart: boolean = true) => {
     if (datasetObject) {
+      const isDHIS2Dataset =
+        (datasetObject.staging_source_type || datasetObject.db?.backend) ===
+        'dhis2';
+
       // For DHIS2 datasets: Use dataset_name (custom name like "analytics_version2")
       // Parse the source table from it (e.g., "analytics")
       const datasetIdentifier =
@@ -123,7 +127,7 @@ function Footer({
       };
 
       // Include DHIS2 parameters in SQL if present
-      if (datasetObject.dhis2_parameters) {
+      if (isDHIS2Dataset && datasetObject.dhis2_parameters) {
         // Parse the source table from the dataset name
         // Example: "analytics_version2" -> "analytics"
         const sourceTable =
@@ -154,9 +158,10 @@ function Footer({
           // When a dataset is created the response we get is its ID number
           const datasetId = response;
 
-          // Trigger background loading of the dataset to populate its cache
-          // This happens asynchronously in the background without blocking the UI
-          triggerBackgroundDatasetLoad(datasetId);
+          if (isDHIS2Dataset) {
+            // Only staged DHIS2 datasets should trigger background refresh/sync.
+            triggerBackgroundDatasetLoad(datasetId);
+          }
 
           if (createChart) {
             history.push(`/chart/add/?dataset=${datasetId}`);

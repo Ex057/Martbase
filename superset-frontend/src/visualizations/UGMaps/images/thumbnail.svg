@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- Background -->
+  <rect width="200" height="200" fill="#f0f4f8"/>
+
+  <!-- DHIS2 Blue accent -->
+  <rect x="0" y="0" width="200" height="4" fill="#0d47a1"/>
+
+  <!-- Map regions with choropleth colors -->
+  <path d="M30 60 L80 40 L120 50 L100 90 L50 100 Z" fill="#c8e6c9" stroke="#2e7d32" stroke-width="1.5"/>
+  <path d="M80 40 L140 30 L170 60 L150 100 L120 50 Z" fill="#81c784" stroke="#2e7d32" stroke-width="1.5"/>
+  <path d="M50 100 L100 90 L130 130 L90 150 L40 130 Z" fill="#4caf50" stroke="#2e7d32" stroke-width="1.5"/>
+  <path d="M100 90 L150 100 L160 140 L130 130 Z" fill="#388e3c" stroke="#2e7d32" stroke-width="1.5"/>
+  <path d="M130 130 L160 140 L170 170 L140 180 L100 160 L90 150 Z" fill="#2e7d32" stroke="#1b5e20" stroke-width="1.5"/>
+
+  <!-- Location markers -->
+  <circle cx="70" cy="70" r="4" fill="#1976d2"/>
+  <circle cx="130" cy="60" r="4" fill="#1976d2"/>
+  <circle cx="100" cy="120" r="4" fill="#1976d2"/>
+  <circle cx="145" cy="150" r="4" fill="#1976d2"/>
+
+  <!-- DHIS2 logo hint -->
+  <text x="100" y="190" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#0d47a1" font-weight="bold">DHIS2 Map</text>
+
+  <!-- Legend -->
+  <rect x="150" y="100" width="12" height="8" fill="#c8e6c9" stroke="#666" stroke-width="0.5"/>
+  <rect x="150" y="110" width="12" height="8" fill="#81c784" stroke="#666" stroke-width="0.5"/>
+  <rect x="150" y="120" width="12" height="8" fill="#4caf50" stroke="#666" stroke-width="0.5"/>
+  <rect x="150" y="130" width="12" height="8" fill="#2e7d32" stroke="#666" stroke-width="0.5"/>
+  <text x="165" y="107" font-family="Arial, sans-serif" font-size="6" fill="#333">Low</text>
+  <text x="165" y="137" font-family="Arial, sans-serif" font-size="6" fill="#333">High</text>
+</svg>
+

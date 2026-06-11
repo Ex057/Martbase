@@ -151,7 +151,7 @@ describe('Footer', () => {
         schema: 'public',
         table_name: 'Untitled',
       });
-      expect(refreshDatasetMetadata).toHaveBeenCalledWith(123);
+      expect(refreshDatasetMetadata).not.toHaveBeenCalled();
       expect(mockHistoryPush).toHaveBeenCalledWith('/chart/add/?dataset=123');
     });
   });

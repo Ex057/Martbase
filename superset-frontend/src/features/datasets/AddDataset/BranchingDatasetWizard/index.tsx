@@ -2342,7 +2342,7 @@ export default function BranchingDatasetWizard({ editDatasetId }: BranchingDatas
       }
     }
 
-    if (!isStagedLocalDatasetPayload(payload)) {
+    if (isStagedLocalDatasetPayload(payload)) {
       try {
         await refreshDatasetMetadata(result.id);
       } catch (error) {
@@ -3161,7 +3161,16 @@ export default function BranchingDatasetWizard({ editDatasetId }: BranchingDatas
                 payload: {
                   catalog: catalog ?? null,
                   schema: schema ?? null,
-                  tableName: typeof tableName === 'string' ? tableName : null,
+                  tableName:
+                    typeof tableName === 'string'
+                      ? tableName
+                      : typeof tableName === 'object' &&
+                          tableName !== null &&
+                          'value' in tableName &&
+                          typeof (tableName as { value?: unknown }).value ===
+                            'string'
+                        ? ((tableName as { value: string }).value ?? null)
+                        : null,
                 },
               })
             }
@@ -3423,9 +3432,13 @@ export default function BranchingDatasetWizard({ editDatasetId }: BranchingDatas
         <Card className="section-card">
           <Title level={4}>{t('Dataset Settings')}</Title>
           <Paragraph className="section-subtitle">
-            {t(
-              'Set the dataset name, add context for other users, and review the managed refresh schedule for staged serving.',
-            )}
+            {state.datasetType === 'dhis2'
+              ? t(
+                  'Set the dataset name, add context for other users, and review the managed refresh schedule for staged serving.',
+                )
+              : t(
+                  'Set the dataset name and add context for other users.',
+                )}
           </Paragraph>
           {errors.settings && (
             <Alert
@@ -3484,15 +3497,17 @@ export default function BranchingDatasetWizard({ editDatasetId }: BranchingDatas
             </div>
           </SettingsGrid>
         </Card>
-        <WizardStepSchedule
-          onChange={schedule =>
-            dispatch({
-              type: 'SET_SCHEDULE_CONFIG',
-              payload: schedule,
-            })
-          }
-          scheduleConfig={state.scheduleConfig}
-        />
+        {state.datasetType === 'dhis2' && (
+          <WizardStepSchedule
+            onChange={schedule =>
+              dispatch({
+                type: 'SET_SCHEDULE_CONFIG',
+                payload: schedule,
+              })
+            }
+            scheduleConfig={state.scheduleConfig}
+          />
+        )}
       </Space>
     );
   };
@@ -3502,9 +3517,13 @@ export default function BranchingDatasetWizard({ editDatasetId }: BranchingDatas
       <Card className="section-card">
         <Title level={4}>{t('Review & Create')}</Title>
         <Paragraph className="section-subtitle">
-          {t(
-            'Review the selected source, data scope, schedule, and staging behavior before creating the dataset.',
-          )}
+          {state.datasetType === 'dhis2'
+            ? t(
+                'Review the selected source, data scope, schedule, and staging behavior before creating the dataset.',
+              )
+            : t(
+                'Review the selected source and dataset settings before creating the dataset.',
+              )}
         </Paragraph>
         <ReviewGrid>
           <SourceMetric>
@@ -3519,10 +3538,12 @@ export default function BranchingDatasetWizard({ editDatasetId }: BranchingDatas
               {state.database?.database_name || t('Not selected')}
             </div>
           </SourceMetric>
-          <SourceMetric>
-            <div className="metric-label">{t('Schedule')}</div>
-            <div className="metric-value">{formatScheduleSummary(state.scheduleConfig)}</div>
-          </SourceMetric>
+          {state.datasetType === 'dhis2' && (
+            <SourceMetric>
+              <div className="metric-label">{t('Schedule')}</div>
+              <div className="metric-value">{formatScheduleSummary(state.scheduleConfig)}</div>
+            </SourceMetric>
+          )}
           <SourceMetric>
             <div className="metric-label">{t('Background processing')}</div>
             <div className="metric-value">{t('System-managed')}</div>
@@ -3631,14 +3652,16 @@ export default function BranchingDatasetWizard({ editDatasetId }: BranchingDatas
         </Card>
       )}
 
-      <Alert
-        type="info"
-        showIcon
-        message={t('Managed staging and refresh')}
-        description={t(
-          'Background processing is automatically enabled for staged datasets and is managed by the system. Users cannot disable it from the creation workflow.',
-        )}
-      />
+      {state.datasetType === 'dhis2' && (
+        <Alert
+          type="info"
+          showIcon
+          message={t('Managed staging and refresh')}
+          description={t(
+            'Background processing is automatically enabled for staged datasets and is managed by the system. Users cannot disable it from the creation workflow.',
+          )}
+        />
+      )}
     </Space>
   );
 
@@ -3732,10 +3755,12 @@ export default function BranchingDatasetWizard({ editDatasetId }: BranchingDatas
           {state.datasetSettings.name || state.tableName || t('Not set')}
         </div>
       </div>
-      <div className="summary-section">
-        <div className="summary-label">{t('Schedule')}</div>
-        <div className="summary-value">{formatScheduleSummary(state.scheduleConfig)}</div>
-      </div>
+      {state.datasetType === 'dhis2' && (
+        <div className="summary-section">
+          <div className="summary-label">{t('Schedule')}</div>
+          <div className="summary-value">{formatScheduleSummary(state.scheduleConfig)}</div>
+        </div>
+      )}
       <div className="summary-section">
         <div className="summary-label">{t('Serving mode')}</div>
         <div className="summary-value">

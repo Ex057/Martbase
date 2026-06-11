@@ -25,9 +25,7 @@ import {
 } from '@superset-ui/core';
 import {
   ControlPanelConfig,
-  sharedControls,
 } from '@superset-ui/chart-controls';
-import { getDatasourceBoundaryLevels } from './boundaryLevels';
 
 type DatasourceColumn = {
   column_name?: string;
@@ -142,6 +140,18 @@ function getDhis2SourceDatabaseId(datasource: any): number | undefined {
   return undefined;
 }
 
+function isDhis2Datasource(datasource: any): boolean {
+  const extra = parseColumnExtra(datasource?.extra) || {};
+  const sql = String(datasource?.sql || '');
+  return Boolean(
+    extra?.dhis2_params ||
+      extra?.dhis2_source_database_id ||
+      extra?.dhis2SourceDatabaseId ||
+      sql.includes('/* DHIS2:') ||
+      sql.includes('-- DHIS2:'),
+  );
+}
+
 function getLegendSetSelectionValue(legendSet: StagedLegendSet): string | null {
   const legendSetId = String(legendSet.id || '').trim();
   const legendSetName = String(
@@ -190,7 +200,7 @@ function getStagedLegendChoices(
   });
 
   legendSets.forEach(legendSet => {
-    const legendDefinition = legendSet.legendDefinition;
+    const { legendDefinition } = legendSet;
     if (
       !Array.isArray(legendDefinition?.items) ||
       !legendDefinition.items.length
@@ -217,415 +227,55 @@ const sequentialSchemeRegistry = getSequentialSchemeRegistry();
 const config: ControlPanelConfig = {
   controlPanelSections: [
     {
-      label: t('Map Configuration'),
+      label: t('Query'),
       expanded: true,
       controlSetRows: [
         [
           {
-            name: 'dhis2_staged_local_dataset',
-            config: {
-              type: 'HiddenControl',
-              hidden: true,
-              mapStateToProps: (state: any) => ({
-                value: String(
-                  parseColumnExtra(state.datasource?.extra)
-                    ?.dhis2_staged_local === true,
-                ),
-              }),
-            },
-          },
-          {
-            // Persist the DHIS2 source database ID into formData so that
-            // transformProps can read it in the dashboard context where
-            // datasource.extra fields may be absent.
-            name: 'dhis2_source_database_id',
-            config: {
-              type: 'HiddenControl',
-              hidden: true,
-              mapStateToProps: (state: any) => ({
-                value: getDhis2SourceDatabaseId(state.datasource),
-              }),
-            },
-          },
-          {
-            // Persist the DHIS2 source instance IDs into formData for
-            // the same reason — dashboard datasource may lack extra fields.
-            name: 'dhis2_source_instance_ids',
-            config: {
-              type: 'HiddenControl',
-              hidden: true,
-              mapStateToProps: (state: any) => {
-                const extra = parseColumnExtra(state.datasource?.extra);
-                const ids = Array.isArray(extra?.dhis2_source_instance_ids)
-                  ? extra.dhis2_source_instance_ids
-                  : Array.isArray(extra?.dhis2SourceInstanceIds)
-                    ? extra.dhis2SourceInstanceIds
-                    : [];
-                return { value: ids };
-              },
-            },
-          },
-          {
-            name: 'dhis2_hierarchy_columns',
-            config: {
-              type: 'HiddenControl',
-              hidden: true,
-              mapStateToProps: (state: any) => ({
-                value: getDatasourceBoundaryLevels(state.datasource?.columns)
-                  .map(level => level.columnName)
-                  .filter(Boolean),
-              }),
-            },
-          },
-        ],
-        [
-          {
-            name: 'org_unit_column',
+            name: 'select_country',
             config: {
               type: 'SelectControl',
-              label: t('Organisation Unit Column'),
-              description: t(
-                'Column containing org unit identifiers (shows only columns with OU tags)',
-              ),
-              mapStateToProps: (state: any) => ({
-                choices:
-                  state.datasource?.columns
-                    ?.filter((col: any) => {
-                      const extra = parseColumnExtra(col.extra);
-                      return (
-                        extra?.dhis2_is_ou_hierarchy === true ||
-                        extra?.dhis2IsOuHierarchy === true
-                      );
-                    })
-                    .map((col: any) => [
-                      col.column_name,
-                      col.verbose_name || col.column_name,
-                    ]) || [],
-              }),
-              validators: [],
+              label: t('Country'),
+              default: 'uganda',
+              clearable: false,
+              choices: [['uganda', t('Uganda')]],
+              description: t('Country boundary pack used for this map.'),
             },
           },
         ],
         [
           {
-            name: 'metric',
-            config: {
-              ...sharedControls.metric,
-              label: t('Metric to Display'),
-              description: t('The metric to visualize on the map'),
-            },
-          },
-        ],
-        [
-          {
-            name: 'aggregation_method',
+            name: 'geo_boundary_level',
             config: {
               type: 'SelectControl',
-              label: t('Aggregation Method'),
+              label: t('Area Geometry'),
+              default: 3,
+              choices: [[3, t('Uganda District Geometry')]],
+              clearable: false,
               description: t(
-                'How to aggregate values when multiple rows exist per org unit (e.g., multiple periods)',
-              ),
-              default: 'sum',
-              choices: [
-                ['none', t('None (as is)')],
-                ['sum', t('Sum')],
-                ['average', t('Average')],
-                ['max', t('Maximum')],
-                ['min', t('Minimum')],
-                ['count', t('Count')],
-                ['latest', t('Latest Value')],
-              ],
-            },
-          },
-        ],
-        [
-          {
-            // Hierarchy-aware null filtering: exclude rows where the selected
-            // OrgUnit hierarchy column is empty/null. Enabled by default.
-            // When ON: only rows where the selected OU column has a value are
-            //   included — prevents higher-level rows from mixing into the map.
-            // When OFF: all rows are included (may cause double-counting when
-            //   the serving table has data at multiple hierarchy levels).
-            name: 'filter_null_ou_column',
-            config: {
-              type: 'CheckboxControl',
-              label: t('Exclude rows where selected OrgUnit column is empty'),
-              default: true,
-              description: t(
-                'Filter out rows where the selected OrgUnit hierarchy column has no value. ' +
-                  'This prevents higher-level aggregation rows from appearing at the wrong map grain.',
+                'Geometry source used for rendering Uganda boundaries.',
               ),
             },
           },
         ],
         [
+        ],
+        ['entity'],
+        [
           {
-            name: 'granularity_sqla',
+            name: 'geo_join_feature_property',
             config: {
-              ...sharedControls.granularity_sqla,
-              label: t('Time Period Column'),
+              type: 'TextControl',
+              label: t('GeoJSON Property'),
               description: t(
-                'Select time period column for filtering (optional)',
+                'Feature property to join on (default: NAME_1).',
               ),
+              default: 'NAME_1',
             },
           },
         ],
-        [
-          {
-            name: 'boundary_levels',
-            config: {
-              type: 'SelectControl',
-              label: t('Boundary Levels'),
-              description: t(
-                'Select one or more organisation unit levels to display. Each level will have a distinct border color.',
-              ),
-              default: [2],
-              multi: true,
-              renderTrigger: true,
-              freeForm: false,
-              mapStateToProps: (state: any) => {
-                // Get original DHIS2 database ID from datasource
-                const databaseId = getDhis2SourceDatabaseId(state.datasource);
-                const datasourceLevels = getDatasourceBoundaryLevels(
-                  state.datasource?.columns,
-                );
-
-                // Check if we have cached org unit levels in localStorage
-                const cacheKey = `dhis2_org_unit_levels_db${databaseId}`;
-                let cachedLevels: any[] = [];
-
-                try {
-                  const cached = localStorage.getItem(cacheKey);
-                  if (cached) {
-                    const { data, timestamp } = JSON.parse(cached);
-                    // Cache valid for 1 hour
-                    if (Date.now() - timestamp < 3600000) {
-                      cachedLevels = data;
-                    }
-                  }
-                } catch (e) {
-                  // Ignore cache errors
-                }
-
-                if (datasourceLevels.length > 0) {
-                  return {
-                    choices: datasourceLevels.map(level => [
-                      level.level,
-                      `Level ${level.level} (${level.label})`,
-                    ]),
-                  };
-                }
-
-                // If we have cached levels, use them
-                if (cachedLevels.length > 0) {
-                  return {
-                    choices: cachedLevels.map((level: any) => [
-                      level.level,
-                      `Level ${level.level} (${level.displayName || level.name})`,
-                    ]),
-                  };
-                }
-
-                // If database ID is available, trigger async fetch
-                if (databaseId && typeof window !== 'undefined') {
-                  // Fetch org unit levels asynchronously and cache them
-                  // This runs in the background; next render will pick up cached data
-                  import('@superset-ui/core').then(({ SupersetClient }) => {
-                    SupersetClient.get({
-                      endpoint: `/api/v1/database/${databaseId}/dhis2_metadata/?type=organisationUnitLevels&staged=true`,
-                    })
-                      .then(response => {
-                        if (response.json?.result) {
-                          const levels = response.json.result.sort(
-                            (a: any, b: any) => a.level - b.level,
-                          );
-                          // Cache the results
-                          localStorage.setItem(
-                            cacheKey,
-                            JSON.stringify({
-                              data: levels,
-                              timestamp: Date.now(),
-                            }),
-                          );
-                          // Trigger re-render by dispatching an action if available
-                          // The next interaction will pick up the cached levels
-                        }
-                      })
-                      .catch(() => {
-                        // Silently fail - fallback choices will be used
-                      });
-                  });
-                }
-
-                // Fallback to default choices while loading or if no database
-                return {
-                  choices: [
-                    [1, t('Level 1')],
-                    [2, t('Level 2')],
-                    [3, t('Level 3')],
-                    [4, t('Level 4')],
-                    [5, t('Level 5')],
-                    [6, t('Level 6')],
-                  ],
-                };
-              },
-            },
-          },
-        ],
-        [
-          {
-            name: 'boundary_load_method',
-            config: {
-              type: 'SelectControl',
-              label: t('Boundary Load Method'),
-              description: t(
-                'Method to load geographic boundaries from DHIS2. ' +
-                  'GeoJSON: Uses the organisationUnits.geojson endpoint (recommended for multiple levels). ' +
-                  'geoFeatures: Uses the analytics geoFeatures API.',
-              ),
-              default: 'geoJSON',
-              choices: [
-                ['ug_geojson', t('ug-geojson (fast)')],
-                ['geoJSON', t('GeoJSON (recommended)')],
-                ['geoFeatures', t('geoFeatures')],
-              ],
-              renderTrigger: true,
-            },
-          },
-        ],
-        [
-          {
-            name: 'level_1_color',
-            config: {
-              type: 'ColorPickerControl',
-              label: t('Level 1 Border Color'),
-              description: t('Border color for level 1 boundaries'),
-              default: { r: 0, g: 0, b: 0, a: 1 },
-              renderTrigger: true,
-              visibility: ({ form_data }: any) => {
-                const levels = form_data?.boundary_levels;
-                if (Array.isArray(levels)) {
-                  return levels.includes(1);
-                }
-                return false;
-              },
-            },
-          },
-          {
-            name: 'level_2_color',
-            config: {
-              type: 'ColorPickerControl',
-              label: t('Level 2 Border Color'),
-              description: t('Border color for level 2 boundaries'),
-              default: { r: 220, g: 53, b: 69, a: 1 },
-              renderTrigger: true,
-              visibility: ({ form_data }: any) => {
-                const levels = form_data?.boundary_levels;
-                if (Array.isArray(levels)) {
-                  return levels.includes(2);
-                }
-                return false;
-              },
-            },
-          },
-        ],
-        [
-          {
-            name: 'level_3_color',
-            config: {
-              type: 'ColorPickerControl',
-              label: t('Level 3 Border Color'),
-              description: t('Border color for level 3 boundaries'),
-              default: { r: 40, g: 167, b: 69, a: 1 },
-              renderTrigger: true,
-              visibility: ({ form_data }: any) => {
-                const levels = form_data?.boundary_levels;
-                if (Array.isArray(levels)) {
-                  return levels.includes(3);
-                }
-                return false;
-              },
-            },
-          },
-          {
-            name: 'level_4_color',
-            config: {
-              type: 'ColorPickerControl',
-              label: t('Level 4 Border Color'),
-              description: t('Border color for level 4 boundaries'),
-              default: { r: 0, g: 123, b: 255, a: 1 },
-              renderTrigger: true,
-              visibility: ({ form_data }: any) => {
-                const levels = form_data?.boundary_levels;
-                if (Array.isArray(levels)) {
-                  return levels.includes(4);
-                }
-                return false;
-              },
-            },
-          },
-        ],
-        [
-          {
-            name: 'level_5_color',
-            config: {
-              type: 'ColorPickerControl',
-              label: t('Level 5 Border Color'),
-              description: t('Border color for level 5 boundaries'),
-              default: { r: 255, g: 193, b: 7, a: 1 },
-              renderTrigger: true,
-              visibility: ({ form_data }: any) => {
-                const levels = form_data?.boundary_levels;
-                if (Array.isArray(levels)) {
-                  return levels.includes(5);
-                }
-                return false;
-              },
-            },
-          },
-          {
-            name: 'level_6_color',
-            config: {
-              type: 'ColorPickerControl',
-              label: t('Level 6 Border Color'),
-              description: t('Border color for Level 6 boundaries'),
-              default: { r: 111, g: 66, b: 193, a: 1 },
-              renderTrigger: true,
-              visibility: ({ form_data }: any) => {
-                const levels = form_data?.boundary_levels;
-                if (Array.isArray(levels)) {
-                  return levels.includes(6);
-                }
-                return false;
-              },
-            },
-          },
-        ],
-        [
-          {
-            name: 'enable_drill',
-            config: {
-              type: 'CheckboxControl',
-              label: t('Enable Drill Down/Up'),
-              description: t(
-                'Allow clicking on regions to drill down to child org units',
-              ),
-              default: true,
-            },
-          },
-          {
-            name: 'focus_selected_boundary_with_children',
-            config: {
-              type: 'CheckboxControl',
-              label: t('Focus selected boundaries and show one level down'),
-              description: t(
-                'When the current map selection is only a subset of the level, zoom to those selected boundaries and render the next child level inside them.',
-              ),
-              default: false,
-              renderTrigger: true,
-            },
-          },
-        ],
+        ['metric'],
+        ['adhoc_filters'],
       ],
     },
     {
@@ -728,10 +378,11 @@ const config: ControlPanelConfig = {
                 const databaseId = getDhis2SourceDatabaseId(state.datasource);
                 const cachedLegendSets = readCachedLegendSets(databaseId);
                 const cacheKey = getLegendSetsCacheKey(databaseId);
+                const shouldSync =
+                  databaseId && cacheKey && isDhis2Datasource(state.datasource);
 
                 if (
-                  databaseId &&
-                  cacheKey &&
+                  shouldSync &&
                   typeof window !== 'undefined' &&
                   shouldFetchLegendSets(databaseId)
                 ) {
@@ -1309,6 +960,18 @@ const config: ControlPanelConfig = {
       ],
     },
   ],
+  controlOverrides: {
+    entity: {
+      label: t('Boundary Join Column'),
+      description: t(
+        'Column that matches Uganda GeoJSON boundary values (for example: district or region).',
+      ),
+    },
+    metric: {
+      label: t('Metric'),
+      description: t('Metric to color the map.'),
+    },
+  },
 };
 
 export default config;

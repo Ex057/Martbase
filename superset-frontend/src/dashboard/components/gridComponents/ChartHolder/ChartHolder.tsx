@@ -101,8 +101,10 @@ const ChartHolder = ({
       position: fixed !important;
       z-index: 3000;
       left: 0;
-      top: 0;
+      top: var(--dashboard-fullscreen-top-offset, 0);
       padding: ${theme.sizeUnit * 2}px;
+      max-height: calc(100vh - var(--dashboard-fullscreen-top-offset, 0px));
+      overflow: auto;
     }
   `;
   const { chartId } = component.meta;

@@ -83,6 +83,7 @@ import { FilterPlugins } from 'src/constants';
 import AgGridTableChartPlugin from '@superset-ui/plugin-chart-ag-grid-table';
 import TimeTableChartPlugin from '../TimeTable';
 import DHIS2MapChartPlugin from '../DHIS2Map';
+import UGMapsChartPlugin from '../UGMaps';
 import MarqueeChartPlugin from '../Marquee';
 import SlideshowChartPlugin from '../Slideshow';
 import VitalMapsChartPlugin from '@superset-ui/plugin-chart-vital-maps';
@@ -205,6 +206,7 @@ export default class MainPreset extends Preset {
           ],
         }).configure({ key: VizType.Cartodiagram }),
         new DHIS2MapChartPlugin().configure({ key: 'dhis2_map' }),
+        new UGMapsChartPlugin().configure({ key: 'ug_maps' }),
         new MarqueeChartPlugin().configure({ key: 'marquee_kpi' }),
         new SlideshowChartPlugin().configure({ key: 'slideshow' }),
         new VitalMapsChartPlugin().configure({ key: 'vital_maps' }),

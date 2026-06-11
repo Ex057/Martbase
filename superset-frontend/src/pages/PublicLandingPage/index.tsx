@@ -281,8 +281,18 @@ const PageContentShell = styled.div<{ $dashboardMode?: boolean }>`
   overflow-x: clip;
   position: relative;
   z-index: 1;
-  padding-top: var(--portal-header-height, 0px);
-  min-height: calc(100vh - var(--portal-header-height, 0px));
+  --portal-dashboard-top-gap: ${({ $dashboardMode }) =>
+    $dashboardMode ? '16px' : '0px'};
+  --dashboard-fullscreen-top-offset: ${({ $dashboardMode }) =>
+    $dashboardMode
+      ? 'calc(var(--portal-header-height, 0px) + var(--portal-dashboard-top-gap))'
+      : '0px'};
+  padding-top: calc(
+    var(--portal-header-height, 0px) + var(--portal-dashboard-top-gap)
+  );
+  min-height: calc(
+    100vh - var(--portal-header-height, 0px) - var(--portal-dashboard-top-gap)
+  );
   flex: 1 0 auto;
 `;
 
@@ -1457,6 +1467,7 @@ export default function PublicLandingPage() {
       </StickyHeader>
 
       <PageContentShell
+        $dashboardMode={Boolean(selectedDashboard)}
         className={joinClassNames(currentPage?.rendering?.scope_class)}
         style={pageContentStyle}
       >
