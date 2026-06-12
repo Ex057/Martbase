@@ -11,14 +11,8 @@
  *  • In-place updates: moving/resizing does NOT rebuild the grid — only
  *    adding/removing widgets triggers a full rebuild.
  */
-import {
-  useEffect,
-  useRef,
-  useMemo,
-  useState,
-  useCallback,
-  memo,
-} from 'react';
+import { useEffect, useRef, useMemo, useState, useCallback, memo } from 'react';
+import type { MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { css, styled, t } from '@superset-ui/core';
@@ -27,6 +21,7 @@ import { useDrop } from 'react-dnd';
 import 'gridstack/dist/gridstack.min.css';
 
 import DashboardComponent from '../containers/DashboardComponent';
+import DeleteComponentButton from './DeleteComponentButton';
 import {
   GRID_COLUMN_COUNT,
   GRID_BASE_UNIT,
@@ -42,10 +37,17 @@ import {
 import {
   updateComponents,
   handleComponentDrop,
+  deleteComponent as deleteDashboardComponent,
 } from '../actions/dashboardLayout';
 import { setUnsavedChanges } from '../actions/dashboardState';
 
 const CELL_HEIGHT = GRID_BASE_UNIT * 6; // 48px
+const DEFAULT_WIDGET_WIDTH_MULTIPLE = 4;
+
+const getFiniteNumber = (value: unknown, fallback: number) => {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+};
 
 interface GridStackGridProps {
   gridComponent: any;
@@ -150,7 +152,11 @@ const GridStackContainer = styled.div<{ $editMode: boolean }>`
       position: absolute;
       z-index: 50;
       pointer-events: none;
-      transition: top 0.1s ease, left 0.1s ease, height 0.1s ease, width 0.1s ease;
+      transition:
+        top 0.1s ease,
+        left 0.1s ease,
+        height 0.1s ease,
+        width 0.1s ease;
     }
     .gs-drop-indicator--horizontal {
       height: 3px;
@@ -213,7 +219,9 @@ const GridStackContainer = styled.div<{ $editMode: boolean }>`
       font-size: 14px;
       padding: 32px;
       text-align: center;
-      transition: border-color 0.2s ease, background 0.2s ease;
+      transition:
+        border-color 0.2s ease,
+        background 0.2s ease;
     }
     .gs-empty-placeholder.gs-empty-placeholder--active {
       border-color: ${theme.colorPrimary};
@@ -251,7 +259,7 @@ const GridStackContainer = styled.div<{ $editMode: boolean }>`
     /* Chart header — flat design aligned with Page Studio */
     .gs-widget-inner .slice-header,
     .gs-widget-inner .chart-header,
-    .gs-widget-inner [data-test="slice-header"] {
+    .gs-widget-inner [data-test='slice-header'] {
       min-height: 32px;
       flex-shrink: 0;
       padding: 6px 10px !important;
@@ -259,14 +267,14 @@ const GridStackContainer = styled.div<{ $editMode: boolean }>`
       background: ${theme.colorBgContainer};
       margin: 0 !important;
     }
-    .gs-widget-inner [data-test="slice-header"] .header-title {
+    .gs-widget-inner [data-test='slice-header'] .header-title {
       font-size: var(--pro-density-chart-title, 13px);
       font-weight: 600;
       color: var(--pro-navy, ${theme.colorText});
       letter-spacing: -0.01em;
     }
-    .gs-widget-inner [data-test="slice-header"] .editable-title input,
-    .gs-widget-inner [data-test="slice-header"] .editable-title span {
+    .gs-widget-inner [data-test='slice-header'] .editable-title input,
+    .gs-widget-inner [data-test='slice-header'] .editable-title span {
       font-weight: 600 !important;
       color: var(--pro-navy, ${theme.colorText}) !important;
     }
@@ -299,7 +307,7 @@ const GridStackContainer = styled.div<{ $editMode: boolean }>`
     /* BigNumber / summary charts — center content and balance spacing */
     .gs-widget-inner .superset-legacy-chart-big-number,
     .gs-widget-inner .superset-legacy-chart-big-number-total,
-    .gs-widget-inner [class*="BigNumber"] {
+    .gs-widget-inner [class*='BigNumber'] {
       display: flex !important;
       flex-direction: column !important;
       justify-content: center !important;
@@ -307,28 +315,64 @@ const GridStackContainer = styled.div<{ $editMode: boolean }>`
       width: 100% !important;
       padding: 0 !important;
     }
-    .gs-widget-inner [class*="BigNumber"] .text-container {
+    .gs-widget-inner [class*='BigNumber'] .text-container {
       align-items: center !important;
       width: 100% !important;
       text-align: center;
     }
-    .gs-widget-inner [class*="BigNumber"] .header-line {
+    .gs-widget-inner [class*='BigNumber'] .header-line {
       justify-content: center !important;
       text-align: center !important;
       width: 100% !important;
     }
-    .gs-widget-inner [class*="BigNumber"] .subheader-line,
-    .gs-widget-inner [class*="BigNumber"] .kicker,
-    .gs-widget-inner [class*="BigNumber"] .metric-name,
-    .gs-widget-inner [class*="BigNumber"] .subtitle-line {
+    .gs-widget-inner [class*='BigNumber'] .subheader-line,
+    .gs-widget-inner [class*='BigNumber'] .kicker,
+    .gs-widget-inner [class*='BigNumber'] .metric-name,
+    .gs-widget-inner [class*='BigNumber'] .subtitle-line {
       text-align: center !important;
       width: 100% !important;
     }
     /* Loading placeholder */
     .gs-widget-loading {
       display: flex;
+      position: relative;
       align-items: center;
       justify-content: center;
+    }
+    .gs-widget-loading-delete {
+      position: absolute;
+      top: ${theme.sizeUnit * 2}px;
+      right: ${theme.sizeUnit * 2}px;
+      z-index: 12;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: ${theme.sizeUnit}px;
+      border: 1px solid ${theme.colorBorder};
+      border-radius: ${theme.borderRadius}px;
+      background: ${theme.colorBgContainer};
+      box-shadow: ${theme.boxShadowSecondary};
+    }
+    .gs-widget-loading-message {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: ${theme.colorTextSecondary};
+      font-size: 13px;
+      padding: ${theme.sizeUnit * 4}px;
+      text-align: center;
+    }
+    .gs-widget-measuring {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      min-height: ${GRID_BASE_UNIT * 8}px;
+      color: ${theme.colorTextTertiary};
+      font-size: 12px;
+      padding: ${theme.sizeUnit * 4}px;
+      text-align: center;
     }
   `}
 `;
@@ -343,13 +387,16 @@ const WidgetContent = memo(
     depth,
     columnWidth,
     isComponentVisible,
+    editMode,
   }: {
     componentId: string;
     parentId: string;
     depth: number;
     columnWidth: number;
     isComponentVisible: boolean;
+    editMode: boolean;
   }) => {
+    const dispatch = useDispatch();
     const containerRef = useRef<HTMLDivElement>(null);
     const [ready, setReady] = useState(false);
     const [measuredWidth, setMeasuredWidth] = useState(0);
@@ -367,7 +414,7 @@ const WidgetContent = memo(
     useEffect(() => {
       const el = containerRef.current;
       if (!el || typeof ResizeObserver === 'undefined') return;
-      const ro = new ResizeObserver((entries) => {
+      const ro = new ResizeObserver(entries => {
         for (const entry of entries) {
           if (mountedRef.current) {
             setMeasuredWidth(entry.contentRect.width);
@@ -391,7 +438,11 @@ const WidgetContent = memo(
           timer = setTimeout(() => {
             if (!mountedRef.current) return;
             const retryEl = containerRef.current;
-            if (retryEl && retryEl.offsetWidth > 0 && retryEl.offsetHeight > 0) {
+            if (
+              retryEl &&
+              retryEl.offsetWidth > 0 &&
+              retryEl.offsetHeight > 0
+            ) {
               setMeasuredWidth(retryEl.offsetWidth);
               setReady(true);
             }
@@ -423,9 +474,7 @@ const WidgetContent = memo(
         if (!mountedRef.current) return;
         const el = containerRef.current;
         if (el && el.offsetWidth > 0) {
-          setMeasuredWidth(current =>
-            current > 0 ? current : el.offsetWidth,
-          );
+          setMeasuredWidth(current => (current > 0 ? current : el.offsetWidth));
           window.dispatchEvent(new Event('resize'));
         }
         attempts += 1;
@@ -454,6 +503,14 @@ const WidgetContent = memo(
     const sliceExists = useSelector(
       (state: any) => !chartId || !!state.sliceEntities?.slices?.[chartId],
     );
+    const handleDelete = useCallback(
+      (event: MouseEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        event.stopPropagation();
+        dispatch(deleteDashboardComponent(componentId, parentId) as any);
+      },
+      [componentId, dispatch, parentId],
+    );
 
     // Compute a corrected columnWidth that compensates for the GridStack
     // widget's actual size vs the standard grid math in ChartHolder.
@@ -464,12 +521,16 @@ const WidgetContent = memo(
     // For simplicity, assume widthMultiple = component?.meta?.width || 4
     const effectiveColumnWidth = useMemo(() => {
       if (!measuredWidth || measuredWidth < 50) return columnWidth;
-      const wm = component?.meta?.width || 4;
+      const wm = getFiniteNumber(
+        component?.meta?.width,
+        DEFAULT_WIDGET_WIDTH_MULTIPLE,
+      );
       // Target: chart should fill container minus 8px total padding
       const targetChartWidth = measuredWidth - 8;
       // Reverse ChartHolder's formula: width = wm*cw + (wm-1)*gutter - CHART_MARGIN
-      const corrected = (targetChartWidth + 64 - (wm - 1) * GRID_GUTTER_SIZE) / wm;
-      return Math.max(corrected, 10);
+      const corrected =
+        (targetChartWidth + 64 - (wm - 1) * GRID_GUTTER_SIZE) / wm;
+      return Number.isFinite(corrected) ? Math.max(corrected, 10) : columnWidth;
     }, [measuredWidth, columnWidth, component?.meta?.width]);
 
     if (!component) return null;
@@ -479,16 +540,17 @@ const WidgetContent = memo(
     if (chartId && (!chartExists || !sliceExists)) {
       return (
         <div className="gs-widget-inner gs-widget-loading" ref={containerRef}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100%',
-            color: 'var(--pro-text-secondary, #6B7280)',
-            fontSize: 13,
-            padding: 16,
-            textAlign: 'center',
-          }}>
+          {editMode && (
+            <div
+              className="gs-widget-loading-delete"
+              data-test="dashboard-delete-component-button"
+              role="presentation"
+              onMouseDown={event => event.stopPropagation()}
+            >
+              <DeleteComponentButton onDelete={handleDelete} iconSize="m" />
+            </div>
+          )}
+          <div className="gs-widget-loading-message">
             {t('Loading chart...')}
           </div>
         </div>
@@ -497,7 +559,7 @@ const WidgetContent = memo(
 
     return (
       <div className="gs-widget-inner" ref={containerRef}>
-        {ready && (
+        {ready ? (
           <DashboardComponent
             id={componentId}
             parentId={parentId}
@@ -511,6 +573,8 @@ const WidgetContent = memo(
             onResizeStop={() => {}}
             onChangeTab={() => {}}
           />
+        ) : (
+          <div className="gs-widget-measuring">{t('Preparing chart...')}</div>
         )}
       </div>
     );
@@ -623,9 +687,7 @@ export function calcDropPosition(
       indicator: {
         orientation: 'vertical',
         top: closest.top,
-        left: isRight
-          ? closest.left + closest.width
-          : closest.left,
+        left: isRight ? closest.left + closest.width : closest.left,
         height: closest.height,
       },
     };
@@ -649,7 +711,9 @@ export function calcDropPosition(
 
 /** Sorted, deduplicated set of widget IDs — order-independent key */
 export function stableIdKey(widgets: DashboardWidget[]): string {
-  return Array.from(new Set(widgets.map(w => w.id))).sort().join(',');
+  return Array.from(new Set(widgets.map(w => w.id)))
+    .sort()
+    .join(',');
 }
 
 /* ------------------------------------------------------------------ */
@@ -675,6 +739,7 @@ const GridStackGrid = ({
   // (destroying portal targets and charts).
   const knownWidgetIdsRef = useRef<Set<string>>(new Set());
   const [dropIndicator, setDropIndicator] = useState<DropIndicatorState>(null);
+  const [portalRevision, setPortalRevision] = useState(0);
 
   const layout = useSelector(
     (state: any) => state.dashboardLayout?.present || state.dashboardLayout,
@@ -811,22 +876,19 @@ const GridStackGrid = ({
   }, [isOver]);
 
   /* ---- Safely call methods on the GridStack instance ---- */
-  const safeGs = useCallback(
-    (fn: (gs: GridStack) => void) => {
-      const gs = gsRef.current;
-      if (!gs) return;
-      try {
-        // Ensure GridStack's internal engine is still alive.
-        // After gs.destroy() the engine is nulled; calling any
-        // method on that instance would throw.
-        if (!(gs as any).engine) return;
-        fn(gs);
-      } catch {
-        // Instance already torn down — ignore.
-      }
-    },
-    [],
-  );
+  const safeGs = useCallback((fn: (gs: GridStack) => void) => {
+    const gs = gsRef.current;
+    if (!gs) return;
+    try {
+      // Ensure GridStack's internal engine is still alive.
+      // After gs.destroy() the engine is nulled; calling any
+      // method on that instance would throw.
+      if (!(gs as any).engine) return;
+      fn(gs);
+    } catch {
+      // Instance already torn down — ignore.
+    }
+  }, []);
 
   /* ---- Sync gridstack → Redux (position / size only) ---- */
   const syncToRedux = useCallback(() => {
@@ -961,6 +1023,7 @@ const GridStackGrid = ({
       item.appendChild(content);
       container.appendChild(item);
     }
+    setPortalRevision(current => current + 1);
 
     // --- Initialise GridStack ---
     const gs = GridStack.init(
@@ -1039,7 +1102,11 @@ const GridStackGrid = ({
       isDraggingRef.current = false;
       // Guard: gsRef may have been cleared if a rebuild happened
       safeGs(g => {
-        try { g.compact('compact'); } catch { /* ignore */ }
+        try {
+          g.compact('compact');
+        } catch {
+          /* ignore */
+        }
       });
       syncToRedux();
     };
@@ -1048,7 +1115,11 @@ const GridStackGrid = ({
       // Skip sync during active drag/resize — we sync on stop
       if (isDraggingRef.current) return;
       safeGs(g => {
-        try { g.compact('compact'); } catch { /* ignore */ }
+        try {
+          g.compact('compact');
+        } catch {
+          /* ignore */
+        }
       });
       syncToRedux();
     };
@@ -1099,8 +1170,11 @@ const GridStackGrid = ({
       )}
 
       {/* Drop position indicator (horizontal or vertical) */}
-      {editMode && isOver && canDrop && dropIndicator && (
-        dropIndicator.orientation === 'horizontal' ? (
+      {editMode &&
+        isOver &&
+        canDrop &&
+        dropIndicator &&
+        (dropIndicator.orientation === 'horizontal' ? (
           <div
             className="gs-drop-indicator gs-drop-indicator--horizontal"
             style={{ top: dropIndicator.top }}
@@ -1114,8 +1188,7 @@ const GridStackGrid = ({
               height: dropIndicator.height,
             }}
           />
-        )
-      )}
+        ))}
 
       {/* React portals into gridstack DOM */}
       {widgets.map(w => {
@@ -1123,12 +1196,13 @@ const GridStackGrid = ({
         if (!target) return null;
         return createPortal(
           <WidgetContent
-            key={w.id}
+            key={`${w.id}-${portalRevision}`}
             componentId={w.id}
             parentId={w.parentRowId || gridComponent.id}
             depth={depth + 2}
             columnWidth={columnWidth}
             isComponentVisible={isComponentVisible}
+            editMode={editMode}
           />,
           target,
         );

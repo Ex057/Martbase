@@ -234,7 +234,8 @@ const Chart = props => {
 
   const getChartHeight = useCallback(() => {
     const headerHeight = getHeaderHeight();
-    return Math.max(height - headerHeight - descriptionHeight, 20);
+    const nextHeight = height - headerHeight - descriptionHeight;
+    return Number.isFinite(nextHeight) ? Math.max(nextHeight, 20) : 20;
   }, [getHeaderHeight, height, descriptionHeight]);
 
   const handleFilterMenuOpen = useCallback(

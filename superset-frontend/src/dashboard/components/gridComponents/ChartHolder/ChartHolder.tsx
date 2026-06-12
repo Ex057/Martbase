@@ -21,7 +21,7 @@ import { useState, useMemo, useCallback, useEffect, memo } from 'react';
 import { ResizeCallback, ResizeStartCallback } from 're-resizable';
 import cx from 'classnames';
 import { useSelector } from 'react-redux';
-import { css, useTheme } from '@superset-ui/core';
+import { css, styled, useTheme } from '@superset-ui/core';
 import { LayoutItem, RootState } from 'src/dashboard/types';
 import AnchorLink from 'src/dashboard/components/AnchorLink';
 import Chart from 'src/dashboard/components/gridComponents/Chart';
@@ -42,6 +42,27 @@ import {
 // Must match the total horizontal padding of .dashboard-component-chart-holder
 // (padding: theme.sizeUnit * 4 = 32px on each side = 64px total)
 export const CHART_MARGIN = 64;
+const DEFAULT_CHART_HEIGHT_MULTIPLE = 10;
+
+const getFiniteNumber = (value: unknown, fallback: number) => {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+};
+
+const PersistentDeleteMenu = styled.div`
+  position: absolute;
+  top: ${({ theme }) => theme.sizeUnit * 2}px;
+  right: ${({ theme }) => theme.sizeUnit * 2}px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: ${({ theme }) => theme.sizeUnit}px;
+  border: 1px solid ${({ theme }) => theme.colorBorder};
+  border-radius: ${({ theme }) => theme.borderRadius}px;
+  background: ${({ theme }) => theme.colorBgContainer};
+  box-shadow: ${({ theme }) => theme.boxShadowSecondary};
+`;
 
 interface ChartHolderProps {
   id: string;
@@ -109,6 +130,18 @@ const ChartHolder = ({
   `;
   const { chartId } = component.meta;
   const isFullSize = fullSizeChartId === chartId;
+  const chartEntity = useSelector(
+    (state: RootState) => (state as any).charts?.[chartId],
+  );
+  const sliceEntity = useSelector(
+    (state: RootState) => (state as any).sliceEntities?.slices?.[chartId],
+  );
+  const showPersistentDelete =
+    editMode &&
+    (!chartEntity ||
+      !sliceEntity ||
+      chartEntity.chartStatus === 'loading' ||
+      chartEntity.chartStatus === 'failed');
 
   const focusHighlightStyles = useFilterFocusHighlightStyles(chartId);
   const directPathToChild = useSelector(
@@ -172,9 +205,15 @@ const ChartHolder = ({
       parentComponent.parents?.find(parent => parent.startsWith(COLUMN_TYPE)),
     )?.meta?.width;
 
-    let widthMultiple = component.meta.width || GRID_MIN_COLUMN_COUNT;
+    let widthMultiple = getFiniteNumber(
+      component.meta.width,
+      GRID_MIN_COLUMN_COUNT,
+    );
     if (parentComponent.type === COLUMN_TYPE) {
-      widthMultiple = parentComponent.meta.width || GRID_MIN_COLUMN_COUNT;
+      widthMultiple = getFiniteNumber(
+        parentComponent.meta.width,
+        GRID_MIN_COLUMN_COUNT,
+      );
     } else if (columnParentWidth && widthMultiple > columnParentWidth) {
       widthMultiple = columnParentWidth;
     }
@@ -196,19 +235,21 @@ const ChartHolder = ({
       width = window.innerWidth - CHART_MARGIN;
       height = window.innerHeight - CHART_MARGIN;
     } else {
+      const heightMultiple = getFiniteNumber(
+        component.meta.height,
+        DEFAULT_CHART_HEIGHT_MULTIPLE,
+      );
       width = Math.floor(
         widthMultiple * columnWidth +
           (widthMultiple - 1) * GRID_GUTTER_SIZE -
           CHART_MARGIN,
       );
-      height = Math.floor(
-        component.meta.height * GRID_BASE_UNIT - CHART_MARGIN,
-      );
+      height = Math.floor(heightMultiple * GRID_BASE_UNIT - CHART_MARGIN);
     }
 
     return {
-      chartWidth: width,
-      chartHeight: height,
+      chartWidth: Number.isFinite(width) ? width : GRID_MIN_COLUMN_COUNT,
+      chartHeight: Number.isFinite(height) ? height : GRID_BASE_UNIT,
     };
   }, [columnWidth, component, isFullSize, widthMultiple]);
 
@@ -304,7 +345,15 @@ const ChartHolder = ({
             extraControls={extraControls}
             isInView={isInView}
           />
-          {editMode && (
+          {showPersistentDelete && (
+            <PersistentDeleteMenu data-test="dashboard-delete-component-button">
+              <DeleteComponentButton
+                onDelete={handleDeleteComponent}
+                iconSize="m"
+              />
+            </PersistentDeleteMenu>
+          )}
+          {editMode && !showPersistentDelete && (
             <HoverMenu position="top">
               <div data-test="dashboard-delete-component-button">
                 <DeleteComponentButton onDelete={handleDeleteComponent} />
@@ -344,6 +393,7 @@ const ChartHolder = ({
       extraControls,
       isInView,
       handleDeleteComponent,
+      showPersistentDelete,
     ],
   );
 

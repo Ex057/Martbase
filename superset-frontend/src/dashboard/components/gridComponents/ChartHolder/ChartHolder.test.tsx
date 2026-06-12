@@ -366,8 +366,11 @@ describe('ChartHolder', () => {
     const container = screen.getByTestId('chart-container');
 
     const computedWidth = parseInt(container.getAttribute('height') || '0', 10);
-    const expectedWidth = Math.floor(
-      heightMultiple * GRID_BASE_UNIT - CHART_MARGIN - DEFAULT_HEADER_HEIGHT,
+    const expectedWidth = Math.max(
+      Math.floor(
+        heightMultiple * GRID_BASE_UNIT - CHART_MARGIN - DEFAULT_HEADER_HEIGHT,
+      ),
+      20,
     );
 
     expect(computedWidth).toEqual(expectedWidth);
@@ -428,6 +431,32 @@ describe('ChartHolder', () => {
     ).toBeInTheDocument();
 
     userEvent.hover(screen.getByTestId('dashboard-component-chart-holder'));
+
+    fireEvent.click(
+      screen.getByTestId('dashboard-delete-component-button')
+        .firstElementChild!,
+    );
+    expect(deleteComponent.callCount).toBe(1);
+  });
+
+  test('should show a persistent delete button for unresolved chart holders', async () => {
+    const deleteComponent = sinon.spy();
+    const store = createMockStore({
+      charts: {},
+      sliceEntities: {
+        ...mockState.sliceEntities,
+        slices: {},
+      },
+    });
+    renderWrapper(store, {
+      deleteComponent,
+      editMode: true,
+      fullSizeChartId: null,
+    });
+
+    expect(
+      screen.getByTestId('dashboard-delete-component-button'),
+    ).toBeVisible();
 
     fireEvent.click(
       screen.getByTestId('dashboard-delete-component-button')

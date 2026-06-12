@@ -110,14 +110,23 @@ const AppShell = () => {
                     css={css`
                       display: flex;
                       flex-direction: column;
-                      padding-top: ${isPublicPortalRoute ? 0 : 'var(--pro-layout-navbar-height, 48px)'};
+                      --dashboard-fullscreen-top-offset: ${isPublicPortalRoute
+                        ? '0px'
+                        : 'var(--pro-layout-navbar-height, 48px)'};
+                      padding-top: ${isPublicPortalRoute
+                        ? 0
+                        : 'var(--pro-layout-navbar-height, 48px)'};
                       min-height: 100vh;
                     `}
                   >
                     <ErrorBoundary
                       css={css`
-                        margin: ${isPublicPortalRoute || isDashboardRoute ? 0 : 16}px;
-                        ${isDashboardRoute ? 'display: flex; flex-direction: column; flex: 1;' : ''}
+                        margin: ${isPublicPortalRoute || isDashboardRoute
+                          ? 0
+                          : 16}px;
+                        ${isDashboardRoute
+                          ? 'display: flex; flex-direction: column; flex: 1;'
+                          : ''}
                       `}
                     >
                       <Component user={bootstrapData.user} {...props} />
