@@ -1,223 +1,362 @@
-<!--
-Licensed to the Apache Software Foundation (ASF) under one
-or more contributor license agreements.  See the NOTICE file
-distributed with this work for additional information
-regarding copyright ownership.  The ASF licenses this file
-to you under the Apache License, Version 2.0 (the
-"License"); you may not use this file except in compliance
-with the License.  You may obtain a copy of the License at
+# Martbase DHIS2 Superset
 
-  http://www.apache.org/licenses/LICENSE-2.0
+Martbase is a DHIS2-focused Apache Superset distribution for deploying analytics, dashboards, public map experiences, and AI-assisted analysis on top of DHIS2 data. This fork adds DHIS2-specific dataset flows, public chart support, staged metadata handling, ClickHouse-backed serving paths, and operational tooling for local and server deployments.
 
-Unless required by applicable law or agreed to in writing,
-software distributed under the License is distributed on an
-"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-KIND, either express or implied.  See the License for the
-specific language governing permissions and limitations
-under the License.
--->
+This repository should be treated as an application distribution, not the upstream Superset project. The canonical setup and operations entrypoint is `superset-manager-v2.sh`.
 
-# Superset
+## What This Fork Includes
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/license/apache-2-0)
-[![Latest Release on Github](https://img.shields.io/github/v/release/apache/superset?sort=semver)](https://github.com/apache/superset/releases/latest)
-[![Build Status](https://github.com/apache/superset/actions/workflows/superset-python-unittest.yml/badge.svg)](https://github.com/apache/superset/actions)
-[![PyPI version](https://badge.fury.io/py/apache_superset.svg)](https://badge.fury.io/py/apache_superset)
-[![Coverage Status](https://codecov.io/github/apache/superset/coverage.svg?branch=master)](https://codecov.io/github/apache/superset)
-[![PyPI](https://img.shields.io/pypi/pyversions/apache_superset.svg?maxAge=2592000)](https://pypi.python.org/pypi/apache_superset)
-[![Get on Slack](https://img.shields.io/badge/slack-join-orange.svg)](http://bit.ly/join-superset-slack)
-[![Documentation](https://img.shields.io/badge/docs-apache.org-blue.svg)](https://superset.apache.org)
+- DHIS2 API connection and dataset workflows inside Superset
+- DHIS2-specific chart types, public dashboard handling, and map behavior
+- ClickHouse-backed staging and serving support
+- Background sync and metadata refresh tasks routed through Celery
+- Public metadata and public chart endpoints for DHIS2 use cases
+- AI Insights configuration with OpenAI-compatible providers
+- A deployment and operations script for local development, server install, and remote deployment
 
-<picture width="500">
-  <source
-    width="600"
-    media="(prefers-color-scheme: dark)"
-    src="https://superset.apache.org/img/superset-logo-horiz-dark.svg"
-    alt="Superset logo (dark)"
-  />
-  <img
-    width="600"
-    src="https://superset.apache.org/img/superset-logo-horiz-apache.svg"
-    alt="Superset logo (light)"
-  />
-</picture>
+## Architecture Overview
 
-A modern, enterprise-ready business intelligence web application.
+The standard deployment consists of:
 
-[**Why Superset?**](#why-superset) |
-[**Supported Databases**](#supported-databases) |
-[**Installation and Configuration**](#installation-and-configuration) |
-[**Release Notes**](https://github.com/apache/superset/blob/master/RELEASING/README.md#release-notes-for-recent-releases) |
-[**Get Involved**](#get-involved) |
-[**Contributor Guide**](#contributor-guide) |
-[**Resources**](#resources) |
-[**Organizations Using Superset**](https://github.com/apache/superset/blob/master/RESOURCES/INTHEWILD.md)
+- `superset-web`: the Superset web/API process
+- `superset-worker`: Celery worker for DHIS2 sync, cache, and metadata jobs
+- `superset-beat`: Celery beat scheduler for periodic DHIS2 sync and routine jobs
+- `postgresql`: Superset metadata database
+- `redis`: cache and Celery broker/backend
+- `clickhouse`: staging/serving engine when enabled
+- `nginx`: reverse proxy and TLS termination on server installs
 
-## Why Superset?
+Practical responsibilities:
 
-Superset is a modern data exploration and data visualization platform. Superset can replace or augment proprietary business intelligence tools for many teams. Superset integrates well with a variety of data sources.
+- The web server handles login, APIs, Explore, dashboards, public pages, and map rendering requests.
+- The Celery worker handles DHIS2 background tasks. If the worker is down, syncs, metadata refreshes, and other background work stall.
+- Celery beat triggers scheduled DHIS2 sync jobs. If beat is down, scheduled refreshes stop and the platform can drift stale.
+- ClickHouse supports DHIS2 staging/serving workloads when `CLICKHOUSE_ENABLED=1`.
 
-Superset provides:
+## Repository Layout
 
-- A **no-code interface** for building charts quickly
-- A powerful, web-based **SQL Editor** for advanced querying
-- A **lightweight semantic layer** for quickly defining custom dimensions and metrics
-- Out of the box support for **nearly any SQL** database or data engine
-- A wide array of **beautiful visualizations** to showcase your data, ranging from simple bar charts to geospatial visualizations
-- Lightweight, configurable **caching layer** to help ease database load
-- Highly extensible **security roles and authentication** options
-- An **API** for programmatic customization
-- A **cloud-native architecture** designed from the ground up for scale
+- `superset-manager-v2.sh`: primary setup, deploy, and operations script
+- `superset_config.py`: runtime Superset configuration for this fork
+- `superset/` and `superset-frontend/`: backend and frontend application code
+- `docs/dhis2-user-guide.md`: DHIS2 end-user implementation guide
+- `docs/dhis2-multi-instance/`: deeper technical runbooks and architecture notes
 
-## Screenshots & Gifs
+## System Requirements
 
-**Video Overview**
+Minimum practical requirements depend on data volume, but for a single production node:
 
-<!-- File hosted here https://github.com/apache/superset-site/raw/lfs/superset-video-4k.mp4 -->
+- Ubuntu/Debian-style Linux server for `install-server` or `deploy-remote`
+- 4+ CPU cores
+- 16+ GB RAM recommended for frontend builds and background jobs
+- 80+ GB disk recommended for app files, logs, metadata, and ClickHouse data
+- Public DNS record pointing at the server if TLS and public access are required
+- Open ports `80` and `443` for public deployments
 
-[superset-video-1080p.webm](https://github.com/user-attachments/assets/b37388f7-a971-409c-96a7-90c4e31322e6)
+Local development requirements:
 
-<br/>
+- `python3`
+- `node` and `npm` compatible with the repo defaults
+- `redis`
+- `postgresql`
+- optional `clickhouse` if you want to validate ClickHouse-backed paths locally
 
-**Large Gallery of Visualizations**
+The manager script defaults assume:
 
-<kbd><img title="Gallery" src="https://superset.apache.org/img/screenshots/gallery.jpg"/></kbd><br/>
+- `NODE_MAJOR=20`
+- `NPM_VERSION=10.8.2`
+- `CLICKHOUSE_ENABLED=1`
 
-**Craft Beautiful, Dynamic Dashboards**
+## General Requirements Before Setup
 
-<kbd><img title="View Dashboards" src="https://superset.apache.org/img/screenshots/slack_dash.jpg"/></kbd><br/>
+Collect these inputs before installing:
 
-**No-Code Chart Builder**
+- domain name for the deployment, for example `analytics.example.org`
+- admin account email and password
+- target server access for remote deployment
+- DHIS2 base URL and credentials for each source instance you plan to connect
+- outbound internet access from the browser to external basemap providers if using non-transparent map backgrounds
+- outbound internet access from the server for package installation and optional AI provider access
 
-<kbd><img title="Slice & dice your data" src="https://superset.apache.org/img/screenshots/explore.jpg"/></kbd><br/>
+For AI Insights with OpenAI-compatible providers, also prepare:
 
-**Powerful SQL Editor**
+- `OPENAI_API_KEY`
+- optional `OPENAI_BASE_URL`
+- optional `OPENAI_MODELS`
+- optional `OPENAI_DEFAULT_MODEL`
 
-<kbd><img title="SQL Lab" src="https://superset.apache.org/img/screenshots/sql_lab.jpg"/></kbd><br/>
+## Canonical Setup Path
 
-## Supported Databases
+Use `superset-manager-v2.sh` as the primary install and operations interface.
 
-Superset can query data from any SQL-speaking datastore or data engine (Presto, Trino, Athena, [and more](https://superset.apache.org/docs/configuration/databases)) that has a Python DB-API driver and a SQLAlchemy dialect.
+### Core Commands
 
-Here are some of the major database solutions that are supported:
+Local development:
 
-<p align="center">
-  <img src="https://superset.apache.org/img/databases/redshift.png" alt="redshift" border="0" width="200"/>
-  <img src="https://superset.apache.org/img/databases/google-biquery.png" alt="google-bigquery" border="0" width="200"/>
-  <img src="https://superset.apache.org/img/databases/snowflake.png" alt="snowflake" border="0" width="200"/>
-  <img src="https://superset.apache.org/img/databases/trino.png" alt="trino" border="0" width="150" />
-  <img src="https://superset.apache.org/img/databases/presto.png" alt="presto" border="0" width="200"/>
-  <img src="https://superset.apache.org/img/databases/databricks.png" alt="databricks" border="0" width="160" />
-  <img src="https://superset.apache.org/img/databases/druid.png" alt="druid" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/firebolt.png" alt="firebolt" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/timescale.png" alt="timescale" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/postgresql.png" alt="postgresql" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/mysql.png" alt="mysql" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/mssql-server.png" alt="mssql-server" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/ibm-db2.svg" alt="db2" border="0" width="220" />
-  <img src="https://superset.apache.org/img/databases/sqlite.png" alt="sqlite" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/sybase.png" alt="sybase" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/mariadb.png" alt="mariadb" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/vertica.png" alt="vertica" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/oracle.png" alt="oracle" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/firebird.png" alt="firebird" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/greenplum.png" alt="greenplum" border="0" width="200"  />
-  <img src="https://superset.apache.org/img/databases/clickhouse.png" alt="clickhouse" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/exasol.png" alt="exasol" border="0" width="160" />
-  <img src="https://superset.apache.org/img/databases/monet-db.png" alt="monet-db" border="0" width="200"  />
-  <img src="https://superset.apache.org/img/databases/apache-kylin.png" alt="apache-kylin" border="0" width="80"/>
-  <img src="https://superset.apache.org/img/databases/hologres.png" alt="hologres" border="0" width="80"/>
-  <img src="https://superset.apache.org/img/databases/netezza.png" alt="netezza" border="0" width="80"/>
-  <img src="https://superset.apache.org/img/databases/pinot.png" alt="pinot" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/teradata.png" alt="teradata" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/yugabyte.png" alt="yugabyte" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/databend.png" alt="databend" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/starrocks.png" alt="starrocks" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/doris.png" alt="doris" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/oceanbase.svg" alt="oceanbase" border="0" width="220" />
-  <img src="https://superset.apache.org/img/databases/sap-hana.png" alt="sap-hana" border="0" width="220" />
-  <img src="https://superset.apache.org/img/databases/denodo.png" alt="denodo" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/ydb.svg" alt="ydb" border="0" width="200" />
-  <img src="https://superset.apache.org/img/databases/tdengine.png" alt="TDengine" border="0" width="200" />
-</p>
+```bash
+./superset-manager-v2.sh install
+./superset-manager-v2.sh start-all
+./superset-manager-v2.sh status-all
+./superset-manager-v2.sh build-frontend
+./superset-manager-v2.sh create-admin
+./superset-manager-v2.sh db-upgrade
+```
 
-**A more comprehensive list of supported databases** along with the configuration instructions can be found [here](https://superset.apache.org/docs/configuration/databases).
+Production install on the current machine:
 
-Want to add support for your datastore or data engine? Read more [here](https://superset.apache.org/docs/frequently-asked-questions#does-superset-work-with-insert-database-engine-here) about the technical requirements.
+```bash
+DOMAIN=analytics.example.org \
+ADMIN_EMAIL=admin@example.org \
+ADMIN_PASSWORD='ChangeMeNow' \
+./superset-manager-v2.sh install-server
+```
 
-## Installation and Configuration
+Remote deployment from the current codebase:
 
-Try out Superset's [quickstart](https://superset.apache.org/docs/quickstart/) guide or learn about [the options for production deployments](https://superset.apache.org/docs/installation/architecture/).
+```bash
+CODEBASE_SOURCE=local \
+DOMAIN=analytics.example.org \
+ADMIN_EMAIL=admin@example.org \
+ADMIN_PASSWORD='ChangeMeNow' \
+REMOTE_HOST=203.0.113.10 \
+REMOTE_USER=root \
+./superset-manager-v2.sh deploy-remote
+```
 
-## Get Involved
+Remote deployment from Git:
 
-- Ask and answer questions on [StackOverflow](https://stackoverflow.com/questions/tagged/apache-superset) using the **apache-superset** tag
-- [Join our community's Slack](http://bit.ly/join-superset-slack)
-  and please read our [Slack Community Guidelines](https://github.com/apache/superset/blob/master/CODE_OF_CONDUCT.md#slack-community-guidelines)
-- [Join our dev@superset.apache.org Mailing list](https://lists.apache.org/list.html?dev@superset.apache.org). To join, simply send an email to [dev-subscribe@superset.apache.org](mailto:dev-subscribe@superset.apache.org)
-- If you want to help troubleshoot GitHub Issues involving the numerous database drivers that Superset supports, please consider adding your name and the databases you have access to on the [Superset Database Familiarity Rolodex](https://docs.google.com/spreadsheets/d/1U1qxiLvOX0kBTUGME1AHHi6Ywel6ECF8xk_Qy-V9R8c/edit#gid=0)
-- Join Superset's Town Hall and [Operational Model](https://preset.io/blog/the-superset-operational-model-wants-you/) recurring meetings. Meeting info is available on the [Superset Community Calendar](https://superset.apache.org/community)
+```bash
+CODEBASE_SOURCE=git \
+GIT_REPO_URL=https://github.com/HISP-Uganda/dhis2-superset.git \
+GIT_BRANCH=martbase \
+DOMAIN=analytics.example.org \
+REMOTE_HOST=203.0.113.10 \
+REMOTE_USER=root \
+./superset-manager-v2.sh deploy-remote
+```
 
-## Contributor Guide
+Upgrade an existing remote deployment:
 
-Interested in contributing? Check out our
-[CONTRIBUTING.md](https://github.com/apache/superset/blob/master/CONTRIBUTING.md)
-to find resources around contributing along with a detailed guide on
-how to set up a development environment.
+```bash
+CODEBASE_SOURCE=git \
+GIT_REPO_URL=https://github.com/HISP-Uganda/dhis2-superset.git \
+GIT_REF=martbase \
+DOMAIN=analytics.example.org \
+REMOTE_HOST=203.0.113.10 \
+REMOTE_USER=root \
+./superset-manager-v2.sh upgrade-remote
+```
 
-## Resources
+### Important Environment Variables
 
-- [Superset "In the Wild"](https://github.com/apache/superset/blob/master/RESOURCES/INTHEWILD.md) - open a PR to add your org to the list!
-- [Feature Flags](https://github.com/apache/superset/blob/master/RESOURCES/FEATURE_FLAGS.md) - the status of Superset's Feature Flags.
-- [Standard Roles](https://github.com/apache/superset/blob/master/RESOURCES/STANDARD_ROLES.md) - How RBAC permissions map to roles.
-- [Superset Wiki](https://github.com/apache/superset/wiki) - Tons of additional community resources: best practices, community content and other information.
-- [Superset SIPs](https://github.com/orgs/apache/projects/170) - The status of Superset's SIPs (Superset Improvement Proposals) for both consensus and implementation status.
+Required or commonly used:
 
-Understanding the Superset Points of View
+- `DOMAIN`
+- `CODEBASE_SOURCE=local|git`
+- `GIT_REPO_URL`
+- `GIT_BRANCH`
+- `GIT_REF`
+- `REMOTE_HOST`
+- `REMOTE_USER`
+- `REMOTE_APP_USER`
+- `INSTALL_DIR`
+- `ADMIN_EMAIL`
+- `ADMIN_PASSWORD`
+- `LETSENCRYPT_EMAIL`
+- `POSTGRES_PASSWORD`
 
-- [The Case for Dataset-Centric Visualization](https://preset.io/blog/dataset-centric-visualization/)
-- [Understanding the Superset Semantic Layer](https://preset.io/blog/understanding-superset-semantic-layer/)
+ClickHouse and data-engine behavior:
 
-- Getting Started with Superset
-  - [Superset in 2 Minutes using Docker Compose](https://superset.apache.org/docs/installation/docker-compose#installing-superset-locally-using-docker-compose)
-  - [Installing Database Drivers](https://superset.apache.org/docs/configuration/databases#installing-database-drivers)
-  - [Building New Database Connectors](https://preset.io/blog/building-database-connector/)
-  - [Create Your First Dashboard](https://superset.apache.org/docs/using-superset/creating-your-first-dashboard/)
-  - [Comprehensive Tutorial for Contributing Code to Apache Superset
-    ](https://preset.io/blog/tutorial-contributing-code-to-apache-superset/)
-- [Resources to master Superset by Preset](https://preset.io/resources/)
+- `CLICKHOUSE_ENABLED=1`
+- `DUCKDB_ENABLED=1`
+- `POSTGRES_ENABLED=1`
+- `EXPOSE_CLICKHOUSE_HTTP=0`
+- `EXPOSE_CLICKHOUSE_NATIVE=0`
 
-- Deploying Superset
+Frontend build controls:
 
-  - [Official Docker image](https://hub.docker.com/r/apache/superset)
-  - [Helm Chart](https://github.com/apache/superset/tree/master/helm/superset)
+- `FRONTEND_NODE_OLD_SPACE_SIZE_MB=auto`
+- `FRONTEND_FORK_TS_MEMORY_LIMIT_MB=auto`
+- `FRONTEND_BUILD_MAX_RETRIES=2`
+- `FRONTEND_TIMEOUT_MINUTES=90`
+- `FRONTEND_LOG_TAIL_LINES=200`
+- `FRONTEND_VERBOSE_LOGS=1`
 
-- Recordings of Past [Superset Community Events](https://preset.io/events)
+AI configuration:
 
-  - [Mixed Time Series Charts](https://preset.io/events/mixed-time-series-visualization-in-superset-workshop/)
-  - [How the Bing Team Customized Superset for the Internal Self-Serve Data & Analytics Platform](https://preset.io/events/how-the-bing-team-heavily-customized-superset-for-their-internal-data/)
-  - [Live Demo: Visualizing MongoDB and Pinot Data using Trino](https://preset.io/events/2021-04-13-visualizing-mongodb-and-pinot-data-using-trino/)
-  - [Introduction to the Superset API](https://preset.io/events/introduction-to-the-superset-api/)
-  - [Building a Database Connector for Superset](https://preset.io/events/2021-02-16-building-a-database-connector-for-superset/)
+- `OPENAI_API_KEY`
+- `OPENAI_BASE_URL=https://api.openai.com/v1`
+- `OPENAI_MODELS=gpt-4.1-mini`
+- `OPENAI_DEFAULT_MODEL=gpt-4.1-mini`
+- `AI_INSIGHTS_ENABLE_MOCK=1`
 
-- Visualizations
+## What The Manager Script Sets Up
 
-  - [Creating Viz Plugins](https://superset.apache.org/docs/contributing/creating-viz-plugins/)
-  - [Managing and Deploying Custom Viz Plugins](https://medium.com/nmc-techblog/apache-superset-manage-custom-viz-plugins-in-production-9fde1a708e55)
-  - [Why Apache Superset is Betting on Apache ECharts](https://preset.io/blog/2021-4-1-why-echarts/)
+The production install and deploy paths are designed to provision and configure:
 
-- [Superset API](https://superset.apache.org/docs/rest-api)
+- Python virtual environment and backend dependencies
+- frontend dependencies and built assets
+- Postgres metadata database
+- Redis
+- ClickHouse when enabled
+- generated runtime `.env`
+- generated `superset_config.py`
+- Nginx site configuration
+- systemd services for:
+  - `superset-web`
+  - `superset-worker`
+  - `superset-beat`
+- database migrations and DHIS2 metadata schema patching
+- initial admin user
 
-## Repo Activity
+The script also enables:
 
-<a href="https://next.ossinsight.io/widgets/official/compose-last-28-days-stats?repo_id=39464018" target="_blank" align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://next.ossinsight.io/widgets/official/compose-last-28-days-stats/thumbnail.png?repo_id=39464018&image_size=auto&color_scheme=dark" width="655" height="auto" />
-    <img alt="Performance Stats of apache/superset - Last 28 days" src="https://next.ossinsight.io/widgets/official/compose-last-28-days-stats/thumbnail.png?repo_id=39464018&image_size=auto&color_scheme=light" width="655" height="auto" />
-  </picture>
-</a>
+- DHIS2 task routing to the `dhis2` Celery queue
+- scheduled DHIS2 sync through Celery beat
+- AI Insights feature flags and provider config scaffolding
+- CSP allowances for DHIS2 external map tiles
 
-<!-- Made with [OSS Insight](https://ossinsight.io/) -->
+## ClickHouse Setup Notes
 
-<!-- telemetry/analytics pixel: -->
-<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=bc1c90cd-bc04-4e11-8c7b-289fb2839492" />
+ClickHouse is part of the expected stack for this fork.
+
+With `CLICKHOUSE_ENABLED=1`, the manager script is intended to:
+
+- install ClickHouse if missing on the target server
+- start and enable the ClickHouse service
+- bootstrap required ClickHouse databases and credentials
+- sync ClickHouse-related settings into the Superset runtime environment
+
+Operator expectations:
+
+- keep ClickHouse running for DHIS2 staging/serving paths that depend on it
+- do not expose ClickHouse ports publicly unless there is a specific need and network controls are in place
+- verify ClickHouse connectivity after install before onboarding DHIS2 datasets
+
+## First-Run Verification Checklist
+
+After installation or deployment:
+
+1. Confirm the site opens over the expected URL.
+2. Log in with the configured admin user.
+3. Confirm service health:
+   - `./superset-manager-v2.sh status-server`
+   - or `./superset-manager-v2.sh status-remote`
+4. Confirm the critical services are running:
+   - `superset-web`
+   - `superset-worker`
+   - `superset-beat`
+   - `postgresql`
+   - `redis`
+   - `clickhouse` when enabled
+5. Confirm migrations completed without error.
+6. Confirm frontend assets are present and pages load correctly.
+7. Confirm AI settings are loaded as expected if AI Insights is required.
+
+## Operations Guide
+
+Useful local commands:
+
+```bash
+./superset-manager-v2.sh status-all
+./superset-manager-v2.sh logs
+./superset-manager-v2.sh logs backend follow
+./superset-manager-v2.sh logs frontend follow
+./superset-manager-v2.sh health
+./superset-manager-v2.sh cache-all
+```
+
+Useful server commands:
+
+```bash
+./superset-manager-v2.sh start-server
+./superset-manager-v2.sh stop-server
+./superset-manager-v2.sh restart-server
+./superset-manager-v2.sh status-server
+./superset-manager-v2.sh show-config-paths
+```
+
+Useful remote commands:
+
+```bash
+./superset-manager-v2.sh status-remote
+./superset-manager-v2.sh start-remote
+./superset-manager-v2.sh stop-remote
+./superset-manager-v2.sh restart-remote
+./superset-manager-v2.sh shell-remote
+```
+
+## DHIS2 Workflow Guide
+
+The end-user implementation flow is documented in [docs/dhis2-user-guide.md](docs/dhis2-user-guide.md).
+
+That guide covers:
+
+- creating a DHIS2 API connection
+- creating a DHIS2 dataset
+- building DHIS2 charts and maps
+- adding them to dashboards
+- publishing and validating outputs
+- using AI Insights on top of configured datasets and dashboards
+
+## Troubleshooting
+
+### Web server issues
+
+- If the UI and APIs do not respond, inspect `superset-web` first.
+- Use `status-server` or `status-remote` and inspect Gunicorn logs.
+- If the web server is down, the application is unavailable regardless of worker state.
+
+### Worker or beat stopped
+
+- If `superset-worker` is stopped, DHIS2 background tasks, syncs, and metadata refreshes can stall.
+- If `superset-beat` is stopped, scheduled sync and recurring jobs stop.
+- These failures can lead to stale DHIS2 data, stale metadata, or incomplete background processing even when the web UI still loads.
+
+### ClickHouse issues
+
+- Confirm ClickHouse is running before troubleshooting staged/serving problems.
+- Re-check generated environment settings if datasets fail to build against ClickHouse-backed paths.
+- Verify firewall rules are not blocking required local connectivity between services.
+
+### Public DHIS2 maps show blank or broken basemap tiles
+
+- This is usually a browser-to-tile-provider access issue, not a DHIS2 data issue.
+- Verify CSP, proxy, and outbound access to tile providers such as:
+  - `*.basemaps.cartocdn.com`
+  - `*.tile.openstreetmap.org`
+  - `*.tile.opentopomap.org`
+  - `server.arcgisonline.com`
+- A safe production fallback is to use `Transparent Background` if external tiles are blocked.
+
+### Public DHIS2 maps do not show hover tooltips
+
+- Check the rendered page CSS for `.leaflet-overlay-pane svg` and `.leaflet-overlay-pane path`.
+- If either resolves to `pointer-events: none`, map hover and tooltip interaction will fail.
+- In this codebase, public-page styling for Leaflet is defined in `superset-frontend/src/pages/PublicLandingPage/PublicChartContainer.tsx`.
+
+### Map boundaries render but many regions show no values
+
+- This usually indicates a data-to-boundary matching issue rather than a tile-rendering issue.
+- Check:
+  - effective org unit column
+  - boundary level selection
+  - DHIS2 source instance selection
+  - cached boundaries versus current dataset rows
+  - worker/beat health for stale sync state
+
+### `legendSets` requests return `401`
+
+- This affects legend metadata retrieval, not raster basemap tile loading.
+- Public fallback behavior depends on chart/public-view context being passed correctly.
+- If a chart renders but logs `legendSets` auth failures, treat it as a separate metadata/auth issue from map tiles.
+
+## Additional Technical References
+
+- DHIS2 implementation guide: [docs/dhis2-user-guide.md](docs/dhis2-user-guide.md)
+- Multi-instance runbook: [docs/dhis2-multi-instance/runbook.md](docs/dhis2-multi-instance/runbook.md)
+- Multi-instance architecture: [docs/dhis2-multi-instance/architecture.md](docs/dhis2-multi-instance/architecture.md)
+- AI configuration notes: [docs/docs/configuration/ai-insights.mdx](docs/docs/configuration/ai-insights.mdx)
+
+## Support Expectations
+
+This README is the fork-specific operational entrypoint. If you are deploying or running this repository, start here first, then move to the DHIS2 guide and runbooks as needed.
