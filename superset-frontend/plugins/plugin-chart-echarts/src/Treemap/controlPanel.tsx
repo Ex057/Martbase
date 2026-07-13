@@ -26,6 +26,7 @@ import {
   D3_TIME_FORMAT_OPTIONS,
   getStandardizedControls,
 } from '@superset-ui/chart-controls';
+import { chartTitleSection } from '../controls';
 import { DEFAULT_FORM_DATA } from './types';
 
 const { labelType, numberFormat, showLabels, showUpperLabels, dateFormat } =
@@ -44,6 +45,7 @@ const config: ControlPanelConfig = {
         ['adhoc_filters'],
       ],
     },
+    chartTitleSection,
     {
       label: t('Chart Options'),
       expanded: true,

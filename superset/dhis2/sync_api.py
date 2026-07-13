@@ -68,6 +68,11 @@ class DHIS2SyncApi(BaseApi):
         Dispatches a Celery task immediately and returns the sync job ID so
         the caller can poll ``/job/<job_id>`` for progress.
 
+        The sync is incremental and CUMULATIVE: it upserts the periods it
+        fetches and never removes previously staged periods, so historical data
+        stays available even after it falls outside the dataset's relative
+        period window.
+
         ---
         post:
           summary: Trigger a manual dataset sync

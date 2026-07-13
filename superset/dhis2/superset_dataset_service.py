@@ -123,6 +123,18 @@ def register_metadata_dataset_as_superset_dataset(
         if isinstance(serving_database_id, int)
         else None
     )
+
+    # The metadata dataset must live on a real database that can execute queries.
+    # If the source database is a virtual DHIS2 connection (dhis2://), we must
+    # use the serving database instead so the SQL referencing serving tables works.
+    source_uri = str(getattr(source_db, "sqlalchemy_uri", "") or "")
+    if source_uri.startswith("dhis2://") and serving_db is not None:
+        effective_database_id = serving_db.id
+        effective_database = serving_db
+    else:
+        effective_database_id = source_database_id
+        effective_database = source_db
+
     metadata_sql = f"SELECT * FROM {serving_table_ref}"
 
     existing = None
@@ -132,7 +144,7 @@ def register_metadata_dataset_as_superset_dataset(
     for candidate in candidates:
         if getattr(candidate, "dataset_role", None) == DatasetRole.METADATA.value or _is_metadata_wrapper_candidate(
             candidate,
-            source_database_id=source_database_id,
+            source_database_id=effective_database_id,
             serving_table_ref=serving_table_ref,
         ):
             metadata_candidates.append(candidate)
@@ -142,12 +154,12 @@ def register_metadata_dataset_as_superset_dataset(
         metadata_candidates.sort(
             key=lambda candidate: (
                 0
-                if getattr(candidate, "database_id", None) == source_database_id
+                if getattr(candidate, "database_id", None) == effective_database_id
                 else 1,
                 0
                 if _is_metadata_wrapper_candidate(
                     candidate,
-                    source_database_id=source_database_id,
+                    source_database_id=effective_database_id,
                     serving_table_ref=serving_table_ref,
                 )
                 else 1,
@@ -169,7 +181,7 @@ def register_metadata_dataset_as_superset_dataset(
         logical_candidates = (
             db.session.query(SqlaTable)
             .filter(
-                SqlaTable.database_id == source_database_id,
+                SqlaTable.database_id == effective_database_id,
                 SqlaTable.schema.is_(None),
             )
             .all()
@@ -204,9 +216,9 @@ def register_metadata_dataset_as_superset_dataset(
                 db.session.delete(stale)
 
     if existing is not None:
-        if existing.database_id != source_database_id:
-            existing.database_id = source_database_id
-            existing.database = source_db
+        if existing.database_id != effective_database_id:
+            existing.database_id = effective_database_id
+            existing.database = effective_database
         if existing.schema is not None:
             existing.schema = None
         if existing.table_name != dataset_name:
@@ -257,8 +269,8 @@ def register_metadata_dataset_as_superset_dataset(
         table_name=dataset_name,
         schema=None,
         sql=metadata_sql,
-        database_id=source_database_id,
-        database=source_db,
+        database_id=effective_database_id,
+        database=effective_database,
         is_sqllab_view=True,
         is_managed_externally=False,
         extra=json.dumps(initial_extra),
@@ -290,14 +302,14 @@ def register_metadata_dataset_as_superset_dataset(
                         == DatasetRole.METADATA.value
                         or _is_metadata_wrapper_candidate(
                             candidate,
-                            source_database_id=source_database_id,
+                            source_database_id=effective_database_id,
                             serving_table_ref=serving_table_ref,
                         )
                     )
                 )
                 or _is_metadata_wrapper_candidate(
                     candidate,
-                    source_database_id=source_database_id,
+                    source_database_id=effective_database_id,
                     serving_table_ref=serving_table_ref,
                 )
             ]
@@ -306,7 +318,7 @@ def register_metadata_dataset_as_superset_dataset(
                     key=lambda candidate: (
                         0
                         if getattr(candidate, "database_id", None)
-                        == source_database_id
+                        == effective_database_id
                         else 1,
                         0
                         if str(getattr(candidate, "table_name", "") or "") == dataset_name
@@ -326,8 +338,8 @@ def register_metadata_dataset_as_superset_dataset(
                 existing.table_name = dataset_name
                 existing.schema = None
                 existing.sql = metadata_sql
-                existing.database_id = source_database_id
-                existing.database = source_db
+                existing.database_id = effective_database_id
+                existing.database = effective_database
                 existing.is_sqllab_view = True
                 existing.is_managed_externally = False
                 existing.dataset_role = DatasetRole.METADATA.value

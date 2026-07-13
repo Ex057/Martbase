@@ -45,6 +45,7 @@ import {
   SunburstTransformedProps,
 } from './types';
 import { getDefaultTooltip } from '../utils/tooltip';
+import { getChartTitleOption } from '../utils/chartTitle';
 
 export function getLinearDomain(
   treeData: TreeNode[],
@@ -332,7 +333,10 @@ export default function transformProps(
       return item;
     });
 
+  const { title: chartTitleOption } = getChartTitleOption(formData, theme, (chartProps.datasource as any)?.columns);
+
   const echartOptions: EChartsCoreOption = {
+    ...(chartTitleOption && { title: chartTitleOption }),
     grid: {
       ...defaultGrid,
     },

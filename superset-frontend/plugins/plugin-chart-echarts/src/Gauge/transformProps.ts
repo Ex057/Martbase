@@ -49,6 +49,7 @@ import { OpacityEnum } from '../constants';
 import { getDefaultTooltip } from '../utils/tooltip';
 import { Refs } from '../types';
 import { getColtypesMapping } from '../utils/series';
+import { getChartTitleOption } from '../utils/chartTitle';
 
 export const getIntervalBoundsAndColors = (
   intervals: string,
@@ -341,7 +342,10 @@ export default function transformProps(
     },
   ];
 
+  const { title: chartTitleOption } = getChartTitleOption(formData, theme, (chartProps.datasource as any)?.columns);
+
   const echartOptions: EChartsCoreOption = {
+    ...(chartTitleOption && { title: chartTitleOption }),
     tooltip: {
       ...getDefaultTooltip(refs),
       trigger: 'item',

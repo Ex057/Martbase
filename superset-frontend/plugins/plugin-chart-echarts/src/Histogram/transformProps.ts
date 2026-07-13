@@ -34,6 +34,7 @@ import { defaultGrid, defaultYAxis } from '../defaults';
 import { getLegendProps } from '../utils/series';
 import { getDefaultTooltip } from '../utils/tooltip';
 import { getPercentFormatter } from '../utils/formatters';
+import { getChartTitleOption } from '../utils/chartTitle';
 
 export default function transformProps(
   chartProps: HistogramChartProps,
@@ -152,12 +153,16 @@ export default function transformProps(
 
   type EChartsOption = ComposeOption<GridComponentOption | BarSeriesOption>;
 
+  const { title: chartTitleOption, topOffset: chartTitleTopOffset } =
+    getChartTitleOption(formData, theme, (chartProps.datasource as any)?.columns);
+
   const echartOptions: EChartsOption = {
+    ...(chartTitleOption && { title: chartTitleOption }),
     grid: {
       ...defaultGrid,
       left: '5%',
       right: '5%',
-      top: '10%',
+      top: chartTitleTopOffset || '10%',
       bottom: '10%',
     },
     xAxis: {

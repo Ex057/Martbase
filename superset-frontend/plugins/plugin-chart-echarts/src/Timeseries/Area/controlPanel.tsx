@@ -42,6 +42,7 @@ import {
   xAxisBounds,
   minorTicks,
   forceMaxInterval,
+  chartTitleSection,
 } from '../../controls';
 import { AreaChartStackControlOptions } from '../../constants';
 
@@ -60,6 +61,7 @@ const config: ControlPanelConfig = {
   controlPanelSections: [
     sections.echartsTimeSeriesQueryWithXAxisSort,
     sections.advancedAnalyticsControls,
+    chartTitleSection,
     sections.annotationsAndLayersControls,
     sections.forecastIntervalControls,
     sections.titleControls,

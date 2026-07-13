@@ -18,12 +18,22 @@
  */
 
 import { ChartProps, QueryFormData } from '@superset-ui/core';
+import { colorValueToCss } from 'src/utils/colorValue';
+import {
+  adhocFilterSegments,
+  buildAutoSubtitle,
+  datasourcePeriodColumns as readDatasourcePeriodColumns,
+  dhis2FilterSegments,
+  formatPeriodList,
+  looksLikeDHIS2Period,
+  makeColumnLabeller,
+  SubtitleFilter,
+} from 'src/utils/chartAutoSubtitle';
 import {
   sanitizeDHIS2ColumnName,
   findMetricColumn,
 } from '../../features/datasets/AddDataset/DHIS2ParameterBuilder/sanitize';
 import { resolveDHIS2MetricLabel } from '../../utils/dhis2MetricLabel';
-import { colorValueToCss } from 'src/utils/colorValue';
 import {
   DHIS2LegendDefinition,
   DHIS2MapProps,
@@ -86,7 +96,9 @@ function parseHexColorString(value: string): RGBAColor | null {
 function parseRgbColorString(value: string): RGBAColor | null {
   const match = value
     .trim()
-    .match(/rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*(?:,\s*([0-9.]+)\s*)?\)/i);
+    .match(
+      /rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*(?:,\s*([0-9.]+)\s*)?\)/i,
+    );
   if (!match) {
     return null;
   }
@@ -129,7 +141,6 @@ function applyOpacityToColor(value: unknown, opacity?: number): unknown {
 
   return value;
 }
-
 
 type StagedLegendColumnDefinition = {
   columnName: string;
@@ -588,6 +599,139 @@ function coercePositiveInteger(value: unknown): number | undefined {
   return undefined;
 }
 
+// Turn a raw boundary-level label (often a snake_case column name like
+// "distict_cities") into a human label: "Distict Cities". Levels typically read
+// as National / Regional / District once humanised.
+function humanizeLevelLabel(label: string): string {
+  const cleaned = String(label || '')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+  if (!cleaned) return '';
+  return cleaned.replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function pluralizeLevel(word: string, count: number): string {
+  if (count === 1 || !word) return word;
+  if (/s$/i.test(word)) return word; // already plural (e.g. "Cities")
+  if (/y$/i.test(word)) return word.replace(/y$/i, 'ies');
+  return `${word}s`;
+}
+
+// Fallback period detection: find a data column whose values all look like DHIS2
+// period codes, so the subtitle can show the period even when metadata doesn't
+// flag the column and no explicit period filter was set. Metric / org-unit
+// columns are excluded to avoid mistaking a 4-digit metric for a year.
+function detectPeriodColumnFromData(
+  data: Record<string, any>[],
+  excludeColumns: Set<string>,
+): string {
+  if (!data.length) return '';
+  const keys = Object.keys(data[0] || {}).filter(
+    key => !excludeColumns.has(key),
+  );
+  const sampleSize = Math.min(25, data.length);
+  return (
+    keys.find(key => {
+      const sample = data
+        .slice(0, sampleSize)
+        .map(row => String(row?.[key] ?? '').trim())
+        .filter(Boolean);
+      return (
+        sample.length >= Math.min(2, data.length) &&
+        sample.every(looksLikeDHIS2Period)
+      );
+    }) || ''
+  );
+}
+
+// Build the map's auto subtitle so it reads like a real heading:
+//   "<scope> <Level>s · <period> · <other filters>"
+//   e.g. "Uganda Districts · Last 4 quarters · Data element: Precipitation"
+//
+// The filter segments come from the shared builder in src/utils/chartAutoSubtitle
+// so they read identically on every chart type. What the map adds is the SCOPE
+// prefix — the nearest parent org unit that resolves to a single value (e.g. the
+// country), so many areas read as "Uganda Districts" rather than "146 districts"
+// — and a fallback to the periods present in the data when no period filter is
+// set, since a map without a period is ambiguous in a way a bar chart isn't.
+function buildMapAutoSubtitle(params: {
+  data: Record<string, any>[];
+  periodColumns: string[];
+  orgUnitColumn: string;
+  boundaryLevelLabels: Record<number, string>;
+  boundaryLevelColumns: Record<number, string>;
+  primaryBoundaryLevel?: number;
+  filters?: SubtitleFilter[];
+}): string {
+  const {
+    data,
+    periodColumns,
+    orgUnitColumn,
+    boundaryLevelLabels,
+    boundaryLevelColumns,
+    primaryBoundaryLevel,
+    filters,
+  } = params;
+  const parts: string[] = [];
+
+  const distinct = (column: string): string[] =>
+    column && data.length
+      ? Array.from(
+          new Set(
+            data.map(row => String(row?.[column] ?? '').trim()).filter(Boolean),
+          ),
+        )
+      : [];
+
+  const levelLabel = humanizeLevelLabel(
+    primaryBoundaryLevel != null
+      ? boundaryLevelLabels?.[primaryBoundaryLevel] || ''
+      : '',
+  );
+
+  // Nearest parent hierarchy level that resolves to a single value → the scope
+  // (e.g. "Uganda", or a single region when drilled in).
+  const scope = (() => {
+    if (primaryBoundaryLevel == null) return '';
+    const parentLevels = Object.keys(boundaryLevelColumns)
+      .map(Number)
+      .filter(level => Number.isFinite(level) && level < primaryBoundaryLevel)
+      .sort((a, b) => b - a);
+    // eslint-disable-next-line no-restricted-syntax
+    for (const level of parentLevels) {
+      const values = distinct(boundaryLevelColumns[level]);
+      if (values.length === 1) return values[0];
+    }
+    return '';
+  })();
+
+  // 1) Scope + boundary level.
+  const areas = distinct(orgUnitColumn);
+  if (areas.length === 1) {
+    parts.push(levelLabel ? `${areas[0]} (${levelLabel})` : areas[0]);
+  } else if (areas.length > 1) {
+    const levelPlural = levelLabel ? pluralizeLevel(levelLabel, 2) : 'areas';
+    parts.push(scope ? `${scope} ${levelPlural}` : levelPlural);
+  } else if (levelLabel) {
+    parts.push(levelLabel);
+  }
+
+  // 2) No period filter? Fall back to the periods present in the data, so the
+  // reader still knows what window they're looking at. It sits with the scope,
+  // ahead of the other filters.
+  const activeFilters = (filters || []).filter(
+    entry => entry.text || entry.values?.length,
+  );
+  if (!activeFilters.some(entry => entry.isPeriod)) {
+    const column = periodColumns.find(col => distinct(col).length);
+    const dataPeriods = column ? formatPeriodList(distinct(column)) : '';
+    if (dataPeriods) parts.push(dataPeriods);
+  }
+
+  // 3) The filter segments, rendered exactly as any other chart renders them.
+  return buildAutoSubtitle({ prefix: parts, filters: activeFilters });
+}
+
 export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
   const {
     width,
@@ -618,7 +762,8 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
   const use_linear_color_scheme =
     formDataAny?.useLinearColorScheme ?? formDataAny?.use_linear_color_scheme;
   const chart_background_opacity =
-    formDataAny?.chartBackgroundOpacity ?? formDataAny?.chart_background_opacity;
+    formDataAny?.chartBackgroundOpacity ??
+    formDataAny?.chart_background_opacity;
 
   const chart_background_color_hex =
     formDataAny?.chartBackgroundColorHex ||
@@ -724,6 +869,13 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
         allColumns.includes(c.column_name),
     )
     .map(c => c.column_name as string);
+
+  // Every period column the DATASOURCE declares, whether or not the query
+  // returned it. An aggregated map query groups `period` away, but the user's
+  // period filter still applies to it — so filter detection must not depend on
+  // the column surviving into the result set.
+  const datasourcePeriodColumns =
+    readDatasourcePeriodColumns(datasourceColumns);
 
   const extraRaw = datasourceAny?.extra;
   let extraParsed: any;
@@ -1130,6 +1282,46 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     return 'sum';
   })();
 
+  // The filters the user applied. ChartProps camelCases formData keys
+  // (rawFormData keeps the original), so the controls arrive as
+  // `dhis2ColumnFilters` / `adhocFilters` at runtime. Read both — the
+  // snake_case form is what tests and buildQuery see.
+  const rawColumnFilters =
+    formDataAny?.dhis2ColumnFilters ?? formDataAny?.dhis2_column_filters;
+  const rawAdhocFilters =
+    formDataAny?.adhocFilters ?? formDataAny?.adhoc_filters;
+  const timeColumn =
+    formDataAny?.granularitySqla ?? formDataAny?.granularity_sqla;
+
+  const columnLabel = makeColumnLabeller(datasourceAny?.columns || []);
+  const subtitleFilters: SubtitleFilter[] = [
+    ...dhis2FilterSegments(
+      Array.isArray(rawColumnFilters) ? rawColumnFilters : [],
+      {
+        columnLabel,
+        periodColumns: datasourcePeriodColumns,
+        timeColumn: typeof timeColumn === 'string' ? timeColumn : undefined,
+      },
+    ),
+    ...adhocFilterSegments(
+      Array.isArray(rawAdhocFilters) ? rawAdhocFilters : [],
+      columnLabel,
+    ),
+  ];
+
+  // Detect a period column from the data itself as a last resort, so the period
+  // shows in the subtitle even when it isn't flagged in metadata.
+  const detectedPeriodColumn = detectPeriodColumnFromData(
+    data,
+    new Set(
+      [
+        metricColumn,
+        hierarchyLevelColumn,
+        ...Object.values(boundaryLevelColumns),
+      ].filter(Boolean) as string[],
+    ),
+  );
+
   return {
     width,
     height,
@@ -1156,7 +1348,7 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     chartBackgroundColor: chart_background_color,
     transparentCardContainer: transparent_card_container === true,
     boundaryFocusMaskStyle: boundary_focus_mask_style || 'off',
-    basemapStyle: basemap_style || 'osmLight',
+    basemapStyle: basemap_style || 'none',
     opacity: opacity ?? 0.7,
     strokeColor: stroke_color || { r: 255, g: 255, b: 255, a: 1 },
     strokeWidth: stroke_width ?? 1,
@@ -1197,6 +1389,33 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     compassVisible: compass_visible === true,
     compassPosition: compass_position || 'topright',
     compassStyle: compass_style || 'north_badge',
+    chartTitle: formDataAny?.chartTitle ?? formDataAny?.chart_title ?? '',
+    chartSubtitle:
+      (formDataAny?.chartAutoSubtitle ?? formDataAny?.chart_auto_subtitle)
+        ? buildMapAutoSubtitle({
+            data,
+            // Prefer period columns detected from metadata; fall back to the
+            // selected Time Period Column so the period still shows.
+            periodColumns: [
+              ...periodColumns,
+              ...(typeof timeColumn === 'string' ? [timeColumn] : []),
+              ...(detectedPeriodColumn ? [detectedPeriodColumn] : []),
+            ],
+            orgUnitColumn: hierarchyLevelColumn,
+            boundaryLevelLabels,
+            boundaryLevelColumns,
+            primaryBoundaryLevel,
+            filters: subtitleFilters,
+          })
+        : (formDataAny?.chartSubtitle ?? formDataAny?.chart_subtitle ?? ''),
+    chartTitleColor:
+      formDataAny?.chartTitleColor ?? formDataAny?.chart_title_color,
+    chartSubtitleColor:
+      formDataAny?.chartSubtitleColor ?? formDataAny?.chart_subtitle_color,
+    chartTitleAlign:
+      formDataAny?.chartTitleAlign ??
+      formDataAny?.chart_title_align ??
+      'center',
     tooltipColumns: sanitizedTooltipColumns,
     hideQuickFilters: hide_quick_filters === true,
     setDataMask: hooks?.setDataMask,

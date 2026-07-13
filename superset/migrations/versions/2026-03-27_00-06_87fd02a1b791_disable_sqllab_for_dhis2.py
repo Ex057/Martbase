@@ -34,11 +34,11 @@ def upgrade():
     # Hide DHIS2 database connections from SQL Lab so users are directed to use
     # the DHIS2 Serving (ClickHouse) database which contains the high-performance MART tables.
     op.execute(
-        "UPDATE dbs SET expose_in_sqllab = 0 WHERE sqlalchemy_uri LIKE 'dhis2%'"
+        "UPDATE dbs SET expose_in_sqllab = FALSE WHERE sqlalchemy_uri LIKE 'dhis2%'"
     )
 
 
 def downgrade():
     op.execute(
-        "UPDATE dbs SET expose_in_sqllab = 1 WHERE sqlalchemy_uri LIKE 'dhis2%'"
+        "UPDATE dbs SET expose_in_sqllab = TRUE WHERE sqlalchemy_uri LIKE 'dhis2%'"
     )

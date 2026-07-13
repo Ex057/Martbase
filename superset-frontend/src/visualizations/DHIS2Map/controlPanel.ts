@@ -910,7 +910,9 @@ const config: ControlPanelConfig = {
               type: 'SelectControl',
               label: t('Basemap'),
               description: t('Tile layer shown under boundaries'),
-              default: 'osmLight',
+              // Default to a transparent background so the choropleth reads on
+              // its own; users can switch to a tile layer per chart.
+              default: 'none',
               choices: [
                 ['none', t('Transparent Background')],
                 ['osmLight', t('Light CARTO Positron')],
@@ -1303,6 +1305,89 @@ const config: ControlPanelConfig = {
                     col.column_name,
                   ]) || [],
               }),
+            },
+          },
+        ],
+      ],
+    },
+    {
+      label: t('Title & Subtitle'),
+      tabOverride: 'customize',
+      expanded: false,
+      controlSetRows: [
+        [
+          {
+            name: 'chart_title',
+            config: {
+              type: 'TextControl',
+              label: t('Title'),
+              renderTrigger: true,
+              default: '',
+              description: t('Title shown on the map, above the plot area.'),
+            },
+          },
+        ],
+        [
+          {
+            name: 'chart_subtitle',
+            config: {
+              type: 'TextControl',
+              label: t('Subtitle'),
+              renderTrigger: true,
+              default: '',
+              description: t('Optional subtitle shown beneath the title.'),
+              visibility: ({ controls }: any) =>
+                !controls?.chart_auto_subtitle?.value,
+            },
+          },
+        ],
+        [
+          {
+            name: 'chart_auto_subtitle',
+            config: {
+              type: 'CheckboxControl',
+              label: t('Auto subtitle'),
+              renderTrigger: true,
+              default: false,
+              description: t(
+                'Automatically build the subtitle from the active filter — the org unit(s) shown, their boundary level, and the selected period (e.g. "Uganda (District) · January 2024"). Uncheck to type your own subtitle.',
+              ),
+            },
+          },
+        ],
+        [
+          {
+            name: 'chart_title_color',
+            config: {
+              type: 'ColorPickerControl',
+              label: t('Title color'),
+              renderTrigger: true,
+              description: t('Text color for the title.'),
+            },
+          },
+          {
+            name: 'chart_subtitle_color',
+            config: {
+              type: 'ColorPickerControl',
+              label: t('Subtitle color'),
+              renderTrigger: true,
+              description: t('Text color for the subtitle.'),
+            },
+          },
+        ],
+        [
+          {
+            name: 'chart_title_align',
+            config: {
+              type: 'SelectControl',
+              label: t('Title alignment'),
+              renderTrigger: true,
+              clearable: false,
+              default: 'center',
+              choices: [
+                ['center', t('Center')],
+                ['left', t('Left')],
+              ],
             },
           },
         ],

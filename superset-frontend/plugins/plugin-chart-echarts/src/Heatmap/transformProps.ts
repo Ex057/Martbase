@@ -31,6 +31,21 @@ import {
   rgbToHex,
   tooltipHtml,
 } from '@superset-ui/core';
+import { GenericDataType } from '@apache-superset/core/api/core';
+import memoizeOne from 'memoize-one';
+import { maxBy, minBy } from 'lodash';
+import type { ComposeOption } from 'echarts/core';
+import type { HeatmapSeriesOption } from 'echarts/charts';
+import type { CallbackDataParams } from 'echarts/types/src/util/types';
+import { HeatmapChartProps, HeatmapTransformedProps } from './types';
+import { getDefaultTooltip } from '../utils/tooltip';
+import { Refs } from '../types';
+import { parseAxisBound } from '../utils/controls';
+import { NULL_STRING } from '../constants';
+import { getPercentFormatter } from '../utils/formatters';
+import { getChartTitleOption } from '../utils/chartTitle';
+
+type EChartsOption = ComposeOption<HeatmapSeriesOption>;
 
 const addAlpha = (color: string, opacity: number): string => {
   if (opacity > 1 || opacity < 0) {
@@ -44,19 +59,6 @@ const addAlpha = (color: string, opacity: number): string => {
     .toUpperCase()}`.slice(-2);
   return `${color}${alpha}`;
 };
-import { GenericDataType } from '@apache-superset/core/api/core';
-import memoizeOne from 'memoize-one';
-import { maxBy, minBy } from 'lodash';
-import type { ComposeOption } from 'echarts/core';
-import type { HeatmapSeriesOption } from 'echarts/charts';
-import type { CallbackDataParams } from 'echarts/types/src/util/types';
-import { HeatmapChartProps, HeatmapTransformedProps } from './types';
-import { getDefaultTooltip } from '../utils/tooltip';
-import { Refs } from '../types';
-import { parseAxisBound } from '../utils/controls';
-import { NULL_STRING } from '../constants';
-import { getPercentFormatter } from '../utils/formatters';
-type EChartsOption = ComposeOption<HeatmapSeriesOption>;
 
 const DEFAULT_ECHARTS_BOUNDS = [0, 200];
 
@@ -211,11 +213,16 @@ export default function transformProps(
     },
   ];
 
+  const { title: chartTitleOption, topOffset: chartTitleTopOffset } =
+    getChartTitleOption(formData, theme, (chartProps.datasource as any)?.columns);
+
   const echartOptions: EChartsOption = {
+    ...(chartTitleOption && { title: chartTitleOption }),
     grid: {
       containLabel: true,
       bottom: bottomMargin,
       left: leftMargin,
+      top: chartTitleTopOffset,
     },
     series,
     tooltip: {

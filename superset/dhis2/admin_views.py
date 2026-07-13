@@ -29,9 +29,10 @@ from __future__ import annotations
 
 from urllib.parse import quote
 
-from flask import Blueprint, current_app, g, redirect, request
+from flask import Blueprint, abort, current_app, g, redirect, request
 from flask_appbuilder import BaseView, expose, has_access
 
+from superset import security_manager
 from superset.superset_typing import FlaskResponse
 from superset.views.base import BaseSupersetView
 
@@ -98,6 +99,8 @@ def _render_authenticated_shell() -> FlaskResponse:
     if user is None or getattr(user, "is_anonymous", True):
         next_target = quote(request.full_path.rstrip("?"))
         return redirect(f"/login/?next={next_target}")
+    if not security_manager.can_access("can_list", "DHIS2AdminView"):
+        abort(403)
     from superset.extensions import appbuilder
 
     view = BaseSupersetView()

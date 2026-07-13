@@ -389,7 +389,10 @@ export const routes: Routes = [
     Component: LocalStagingSettings,
   },
   ...(isFeatureEnabled(FeatureFlag.AiInsights)
-    ? [{ path: '/superset/ai-management/', Component: AIManagement }]
+    ? [
+        { path: '/superset/ai-management/', Component: AIManagement },
+        { path: '/ai-management/', Component: AIManagement },
+      ]
     : []),
   {
     path: '/rowlevelsecurity/list',

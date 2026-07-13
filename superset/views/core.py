@@ -87,6 +87,7 @@ from superset.utils.core import (
     get_user_id,
     ReservedUrlParameters,
 )
+from superset.views.authenticated_home import get_authenticated_home_target
 from superset.views.base import (
     api,
     BaseSupersetView,
@@ -892,6 +893,9 @@ class Superset(BaseSupersetView):
         """Personalized welcome page"""
         if not g.user or not get_user_id():
             return redirect_to_login()
+
+        if home_target := get_authenticated_home_target():
+            return redirect(home_target)
 
         if welcome_dashboard_id := (
             db.session.query(UserAttribute.welcome_dashboard_id)

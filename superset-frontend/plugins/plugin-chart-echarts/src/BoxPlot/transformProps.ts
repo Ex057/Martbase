@@ -43,6 +43,7 @@ import { getPadding } from '../Timeseries/transformers';
 import { OpacityEnum } from '../constants';
 import { getDefaultTooltip } from '../utils/tooltip';
 import { Refs } from '../types';
+import { getChartTitleOption } from '../utils/chartTitle';
 
 export default function transformProps(
   chartProps: EchartsBoxPlotChartProps,
@@ -57,6 +58,7 @@ export default function transformProps(
     inContextMenu,
     emitCrossFilters,
     datasource,
+    theme,
   } = chartProps;
   const { data = [] } = queriesData[0];
   const { setDataMask = () => {}, onContextMenu } = hooks;
@@ -263,10 +265,15 @@ export default function transformProps(
     convertInteger(yAxisTitleMargin),
     convertInteger(xAxisTitleMargin),
   );
+  const { title: chartTitleOption, topOffset: chartTitleTopOffset } =
+    getChartTitleOption(formData, theme, (chartProps.datasource as any)?.columns);
+
   const echartOptions: EChartsCoreOption = {
+    ...(chartTitleOption && { title: chartTitleOption }),
     grid: {
       ...defaultGrid,
       ...chartPadding,
+      top: chartPadding.top + chartTitleTopOffset,
     },
     xAxis: {
       type: 'category',

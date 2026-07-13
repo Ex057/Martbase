@@ -75,12 +75,30 @@ interface BaseMapLayerProps {
 
 export function BaseMapLayer({ mapType }: BaseMapLayerProps): React.ReactElement | null {
   const config = BASE_MAPS[mapType];
+
+  // Debug logging
+  useEffect(() => {
+    console.info('[BaseMapLayer] Active map type:', mapType, config);
+  }, [mapType, config]);
+
   if (!config || !config.url) {
     return null;
   }
+
   // @ts-ignore - React 19 compatibility with react-leaflet
   // Key prop forces TileLayer to remount when mapType changes
-  return <TileLayer key={mapType} url={config.url} attribution={config.attribution} maxZoom={config.maxZoom} />;
+  // Added zIndex and opacity to ensure proper rendering
+  return (
+    <TileLayer
+      key={mapType}
+      url={config.url}
+      attribution={config.attribution}
+      maxZoom={config.maxZoom}
+      zIndex={1}
+      opacity={1}
+      className="dhis2-base-map-tiles"
+    />
+  );
 }
 
 /* eslint-disable theme-colors/no-literal-colors */

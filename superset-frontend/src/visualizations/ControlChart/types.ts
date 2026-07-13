@@ -17,6 +17,7 @@
  * under the License.
  */
 import { QueryFormData } from '@superset-ui/core';
+import { ResolvedChartTitle } from 'src/utils/chartAutoSubtitle';
 
 export type ThresholdMethod = 'mean_2sd' | 'mean_3sd' | 'q3' | 'csum';
 
@@ -65,4 +66,5 @@ export interface ControlChartChartProps {
   manualUcl: number | null;
   manualLcl: number | null;
   nullValueText: string;
+  title: ResolvedChartTitle;
 }

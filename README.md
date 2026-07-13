@@ -1,362 +1,218 @@
-# Martbase DHIS2 Superset
+# Martbase DHIS2 User Guide
 
-Martbase is a DHIS2-focused Apache Superset distribution for deploying analytics, dashboards, public map experiences, and AI-assisted analysis on top of DHIS2 data. This fork adds DHIS2-specific dataset flows, public chart support, staged metadata handling, ClickHouse-backed serving paths, and operational tooling for local and server deployments.
+Martbase is a DHIS2-focused Superset distribution for building datasets, charts, dashboards, maps, and AI-assisted analysis on top of DHIS2 data.
 
-This repository should be treated as an application distribution, not the upstream Superset project. The canonical setup and operations entrypoint is `superset-manager-v2.sh`.
+This README is the primary user guide for working with DHIS2 inside the platform.
 
-## What This Fork Includes
+If you need deployment, infrastructure, multi-instance, or deeper operational references, use these technical guides:
 
-- DHIS2 API connection and dataset workflows inside Superset
-- DHIS2-specific chart types, public dashboard handling, and map behavior
-- ClickHouse-backed staging and serving support
-- Background sync and metadata refresh tasks routed through Celery
-- Public metadata and public chart endpoints for DHIS2 use cases
-- AI Insights configuration with OpenAI-compatible providers
-- A deployment and operations script for local development, server install, and remote deployment
+- [DHIS2 implementation guide copy](docs/dhis2-user-guide.md)
+- [Multi-instance runbook](docs/dhis2-multi-instance/runbook.md)
+- [Multi-instance architecture](docs/dhis2-multi-instance/architecture.md)
+- [AI configuration reference](docs/docs/configuration/ai-insights.mdx)
 
-## Architecture Overview
+## Before You Start
 
-The standard deployment consists of:
+Before creating DHIS2 content, confirm:
 
-- `superset-web`: the Superset web/API process
-- `superset-worker`: Celery worker for DHIS2 sync, cache, and metadata jobs
-- `superset-beat`: Celery beat scheduler for periodic DHIS2 sync and routine jobs
-- `postgresql`: Superset metadata database
-- `redis`: cache and Celery broker/backend
-- `clickhouse`: staging/serving engine when enabled
-- `nginx`: reverse proxy and TLS termination on server installs
+- you can log in to Superset
+- the platform is already installed and accessible
+- your DHIS2 source instance URL and credentials are available
+- you know the org unit levels, indicators, data elements, and periods you want to analyze
 
-Practical responsibilities:
+If you are not responsible for platform setup, ask your implementer or administrator to confirm the environment is ready before you begin.
 
-- The web server handles login, APIs, Explore, dashboards, public pages, and map rendering requests.
-- The Celery worker handles DHIS2 background tasks. If the worker is down, syncs, metadata refreshes, and other background work stall.
-- Celery beat triggers scheduled DHIS2 sync jobs. If beat is down, scheduled refreshes stop and the platform can drift stale.
-- ClickHouse supports DHIS2 staging/serving workloads when `CLICKHOUSE_ENABLED=1`.
+## 1. Add a DHIS2 API Connection
 
-## Repository Layout
+Create the source connection first.
 
-- `superset-manager-v2.sh`: primary setup, deploy, and operations script
-- `superset_config.py`: runtime Superset configuration for this fork
-- `superset/` and `superset-frontend/`: backend and frontend application code
-- `docs/dhis2-user-guide.md`: DHIS2 end-user implementation guide
-- `docs/dhis2-multi-instance/`: deeper technical runbooks and architecture notes
+Typical flow:
 
-## System Requirements
+1. Open the database or DHIS2 connection area in Superset.
+2. Create a new DHIS2 connection.
+3. Enter the DHIS2 instance URL and credentials.
+4. Save the connection.
+5. Run any validation or metadata fetch available in the interface.
 
-Minimum practical requirements depend on data volume, but for a single production node:
-
-- Ubuntu/Debian-style Linux server for `install-server` or `deploy-remote`
-- 4+ CPU cores
-- 16+ GB RAM recommended for frontend builds and background jobs
-- 80+ GB disk recommended for app files, logs, metadata, and ClickHouse data
-- Public DNS record pointing at the server if TLS and public access are required
-- Open ports `80` and `443` for public deployments
+What to verify:
 
-Local development requirements:
+- the connection saves successfully
+- metadata loads without authentication errors
+- org unit levels are visible
+- the indicators or data elements you need are available
 
-- `python3`
-- `node` and `npm` compatible with the repo defaults
-- `redis`
-- `postgresql`
-- optional `clickhouse` if you want to validate ClickHouse-backed paths locally
-
-The manager script defaults assume:
-
-- `NODE_MAJOR=20`
-- `NPM_VERSION=10.8.2`
-- `CLICKHOUSE_ENABLED=1`
-
-## General Requirements Before Setup
-
-Collect these inputs before installing:
-
-- domain name for the deployment, for example `analytics.example.org`
-- admin account email and password
-- target server access for remote deployment
-- DHIS2 base URL and credentials for each source instance you plan to connect
-- outbound internet access from the browser to external basemap providers if using non-transparent map backgrounds
-- outbound internet access from the server for package installation and optional AI provider access
-
-For AI Insights with OpenAI-compatible providers, also prepare:
-
-- `OPENAI_API_KEY`
-- optional `OPENAI_BASE_URL`
-- optional `OPENAI_MODELS`
-- optional `OPENAI_DEFAULT_MODEL`
-
-## Canonical Setup Path
-
-Use `superset-manager-v2.sh` as the primary install and operations interface.
-
-### Core Commands
-
-Local development:
-
-```bash
-./superset-manager-v2.sh install
-./superset-manager-v2.sh start-all
-./superset-manager-v2.sh status-all
-./superset-manager-v2.sh build-frontend
-./superset-manager-v2.sh create-admin
-./superset-manager-v2.sh db-upgrade
-```
-
-Production install on the current machine:
-
-```bash
-DOMAIN=analytics.example.org \
-ADMIN_EMAIL=admin@example.org \
-ADMIN_PASSWORD='ChangeMeNow' \
-./superset-manager-v2.sh install-server
-```
-
-Remote deployment from the current codebase:
-
-```bash
-CODEBASE_SOURCE=local \
-DOMAIN=analytics.example.org \
-ADMIN_EMAIL=admin@example.org \
-ADMIN_PASSWORD='ChangeMeNow' \
-REMOTE_HOST=203.0.113.10 \
-REMOTE_USER=root \
-./superset-manager-v2.sh deploy-remote
-```
-
-Remote deployment from Git:
-
-```bash
-CODEBASE_SOURCE=git \
-GIT_REPO_URL=https://github.com/HISP-Uganda/dhis2-superset.git \
-GIT_BRANCH=martbase \
-DOMAIN=analytics.example.org \
-REMOTE_HOST=203.0.113.10 \
-REMOTE_USER=root \
-./superset-manager-v2.sh deploy-remote
-```
-
-Upgrade an existing remote deployment:
-
-```bash
-CODEBASE_SOURCE=git \
-GIT_REPO_URL=https://github.com/HISP-Uganda/dhis2-superset.git \
-GIT_REF=martbase \
-DOMAIN=analytics.example.org \
-REMOTE_HOST=203.0.113.10 \
-REMOTE_USER=root \
-./superset-manager-v2.sh upgrade-remote
-```
-
-### Important Environment Variables
-
-Required or commonly used:
-
-- `DOMAIN`
-- `CODEBASE_SOURCE=local|git`
-- `GIT_REPO_URL`
-- `GIT_BRANCH`
-- `GIT_REF`
-- `REMOTE_HOST`
-- `REMOTE_USER`
-- `REMOTE_APP_USER`
-- `INSTALL_DIR`
-- `ADMIN_EMAIL`
-- `ADMIN_PASSWORD`
-- `LETSENCRYPT_EMAIL`
-- `POSTGRES_PASSWORD`
-
-ClickHouse and data-engine behavior:
-
-- `CLICKHOUSE_ENABLED=1`
-- `DUCKDB_ENABLED=1`
-- `POSTGRES_ENABLED=1`
-- `EXPOSE_CLICKHOUSE_HTTP=0`
-- `EXPOSE_CLICKHOUSE_NATIVE=0`
-
-Frontend build controls:
-
-- `FRONTEND_NODE_OLD_SPACE_SIZE_MB=auto`
-- `FRONTEND_FORK_TS_MEMORY_LIMIT_MB=auto`
-- `FRONTEND_BUILD_MAX_RETRIES=2`
-- `FRONTEND_TIMEOUT_MINUTES=90`
-- `FRONTEND_LOG_TAIL_LINES=200`
-- `FRONTEND_VERBOSE_LOGS=1`
-
-AI configuration:
-
-- `OPENAI_API_KEY`
-- `OPENAI_BASE_URL=https://api.openai.com/v1`
-- `OPENAI_MODELS=gpt-4.1-mini`
-- `OPENAI_DEFAULT_MODEL=gpt-4.1-mini`
-- `AI_INSIGHTS_ENABLE_MOCK=1`
-
-## What The Manager Script Sets Up
-
-The production install and deploy paths are designed to provision and configure:
-
-- Python virtual environment and backend dependencies
-- frontend dependencies and built assets
-- Postgres metadata database
-- Redis
-- ClickHouse when enabled
-- generated runtime `.env`
-- generated `superset_config.py`
-- Nginx site configuration
-- systemd services for:
-  - `superset-web`
-  - `superset-worker`
-  - `superset-beat`
-- database migrations and DHIS2 metadata schema patching
-- initial admin user
-
-The script also enables:
-
-- DHIS2 task routing to the `dhis2` Celery queue
-- scheduled DHIS2 sync through Celery beat
-- AI Insights feature flags and provider config scaffolding
-- CSP allowances for DHIS2 external map tiles
-
-## ClickHouse Setup Notes
-
-ClickHouse is part of the expected stack for this fork.
-
-With `CLICKHOUSE_ENABLED=1`, the manager script is intended to:
-
-- install ClickHouse if missing on the target server
-- start and enable the ClickHouse service
-- bootstrap required ClickHouse databases and credentials
-- sync ClickHouse-related settings into the Superset runtime environment
-
-Operator expectations:
-
-- keep ClickHouse running for DHIS2 staging/serving paths that depend on it
-- do not expose ClickHouse ports publicly unless there is a specific need and network controls are in place
-- verify ClickHouse connectivity after install before onboarding DHIS2 datasets
-
-## First-Run Verification Checklist
-
-After installation or deployment:
-
-1. Confirm the site opens over the expected URL.
-2. Log in with the configured admin user.
-3. Confirm service health:
-   - `./superset-manager-v2.sh status-server`
-   - or `./superset-manager-v2.sh status-remote`
-4. Confirm the critical services are running:
-   - `superset-web`
-   - `superset-worker`
-   - `superset-beat`
-   - `postgresql`
-   - `redis`
-   - `clickhouse` when enabled
-5. Confirm migrations completed without error.
-6. Confirm frontend assets are present and pages load correctly.
-7. Confirm AI settings are loaded as expected if AI Insights is required.
-
-## Operations Guide
-
-Useful local commands:
-
-```bash
-./superset-manager-v2.sh status-all
-./superset-manager-v2.sh logs
-./superset-manager-v2.sh logs backend follow
-./superset-manager-v2.sh logs frontend follow
-./superset-manager-v2.sh health
-./superset-manager-v2.sh cache-all
-```
-
-Useful server commands:
-
-```bash
-./superset-manager-v2.sh start-server
-./superset-manager-v2.sh stop-server
-./superset-manager-v2.sh restart-server
-./superset-manager-v2.sh status-server
-./superset-manager-v2.sh show-config-paths
-```
-
-Useful remote commands:
-
-```bash
-./superset-manager-v2.sh status-remote
-./superset-manager-v2.sh start-remote
-./superset-manager-v2.sh stop-remote
-./superset-manager-v2.sh restart-remote
-./superset-manager-v2.sh shell-remote
-```
-
-## DHIS2 Workflow Guide
-
-The end-user implementation flow is documented in [docs/dhis2-user-guide.md](docs/dhis2-user-guide.md).
-
-That guide covers:
-
-- creating a DHIS2 API connection
-- creating a DHIS2 dataset
-- building DHIS2 charts and maps
-- adding them to dashboards
-- publishing and validating outputs
-- using AI Insights on top of configured datasets and dashboards
-
-## Troubleshooting
-
-### Web server issues
-
-- If the UI and APIs do not respond, inspect `superset-web` first.
-- Use `status-server` or `status-remote` and inspect Gunicorn logs.
-- If the web server is down, the application is unavailable regardless of worker state.
-
-### Worker or beat stopped
-
-- If `superset-worker` is stopped, DHIS2 background tasks, syncs, and metadata refreshes can stall.
-- If `superset-beat` is stopped, scheduled sync and recurring jobs stop.
-- These failures can lead to stale DHIS2 data, stale metadata, or incomplete background processing even when the web UI still loads.
-
-### ClickHouse issues
-
-- Confirm ClickHouse is running before troubleshooting staged/serving problems.
-- Re-check generated environment settings if datasets fail to build against ClickHouse-backed paths.
-- Verify firewall rules are not blocking required local connectivity between services.
-
-### Public DHIS2 maps show blank or broken basemap tiles
-
-- This is usually a browser-to-tile-provider access issue, not a DHIS2 data issue.
-- Verify CSP, proxy, and outbound access to tile providers such as:
-  - `*.basemaps.cartocdn.com`
-  - `*.tile.openstreetmap.org`
-  - `*.tile.opentopomap.org`
-  - `server.arcgisonline.com`
-- A safe production fallback is to use `Transparent Background` if external tiles are blocked.
-
-### Public DHIS2 maps do not show hover tooltips
-
-- Check the rendered page CSS for `.leaflet-overlay-pane svg` and `.leaflet-overlay-pane path`.
-- If either resolves to `pointer-events: none`, map hover and tooltip interaction will fail.
-- In this codebase, public-page styling for Leaflet is defined in `superset-frontend/src/pages/PublicLandingPage/PublicChartContainer.tsx`.
-
-### Map boundaries render but many regions show no values
-
-- This usually indicates a data-to-boundary matching issue rather than a tile-rendering issue.
-- Check:
-  - effective org unit column
-  - boundary level selection
-  - DHIS2 source instance selection
-  - cached boundaries versus current dataset rows
-  - worker/beat health for stale sync state
-
-### `legendSets` requests return `401`
-
-- This affects legend metadata retrieval, not raster basemap tile loading.
-- Public fallback behavior depends on chart/public-view context being passed correctly.
-- If a chart renders but logs `legendSets` auth failures, treat it as a separate metadata/auth issue from map tiles.
-
-## Additional Technical References
-
-- DHIS2 implementation guide: [docs/dhis2-user-guide.md](docs/dhis2-user-guide.md)
-- Multi-instance runbook: [docs/dhis2-multi-instance/runbook.md](docs/dhis2-multi-instance/runbook.md)
-- Multi-instance architecture: [docs/dhis2-multi-instance/architecture.md](docs/dhis2-multi-instance/architecture.md)
-- AI configuration notes: [docs/docs/configuration/ai-insights.mdx](docs/docs/configuration/ai-insights.mdx)
-
-## Support Expectations
-
-This README is the fork-specific operational entrypoint. If you are deploying or running this repository, start here first, then move to the DHIS2 guide and runbooks as needed.
+If it fails:
+
+- re-check the DHIS2 URL
+- re-check the credentials
+- confirm the source instance is reachable
+
+## 2. Create a DHIS2 Dataset
+
+After the connection is available, create a dataset that defines what DHIS2 data should be exposed in Superset.
+
+Typical workflow:
+
+1. Start a new dataset.
+2. Select the DHIS2 source connection.
+3. Choose the variables, indicators, or metrics to include.
+4. Choose the org unit dimensions and levels you need.
+5. Configure period handling.
+6. Save the dataset.
+
+Recommended checks after saving:
+
+- the dataset appears in Superset
+- preview or sample data loads
+- the expected org unit field is populated
+- the expected metric columns are populated
+- the selected period and source structure match your use case
+
+Good practice:
+
+- keep metric names clear and consistent
+- choose the org unit field carefully
+- use explicit level mapping where available
+
+## 3. Wait for the Dataset to Become Ready
+
+Some DHIS2 datasets require background processing before they are fully usable.
+
+Do not assume the dataset is ready the moment it is saved.
+
+What to watch for:
+
+- preview data loads correctly
+- metadata is available
+- map boundaries can be resolved where needed
+- values appear as expected
+
+If the dataset appears empty or incomplete immediately after creation, wait briefly and refresh before assuming there is a configuration problem.
+
+## 4. Build DHIS2 Charts
+
+Once the dataset is ready:
+
+1. Open Explore on the DHIS2 dataset.
+2. Choose a chart type.
+3. Configure metrics, dimensions, filters, and time settings.
+4. Save the chart.
+
+Good first chart types:
+
+- KPI summaries
+- time series
+- bar charts by district or region
+- DHIS2 maps
+
+For each chart, verify:
+
+- the row counts are sensible
+- filters behave as expected
+- labels use the intended org unit field
+- the metric values align with what you expect from DHIS2
+
+## 5. Build DHIS2 Maps
+
+For maps, pay close attention to org unit and boundary alignment.
+
+Checklist:
+
+1. Use the correct org unit dimension for the map.
+2. Select the intended boundary level.
+3. Confirm the dataset level matches the boundary level being rendered.
+4. Save and test hover, zoom, and labels.
+
+Common map observations:
+
+- If boundaries render but many areas show no value, the data rows and map boundaries may not be matching correctly.
+- If the basemap shows blank or broken tiles in production, `Transparent Background` is a safe fallback.
+- If hover tooltips do not appear on public pages, ask the implementer to check the public map CSS and pointer-events behavior.
+
+## 6. Add Charts to a Dashboard
+
+After saving charts:
+
+1. Create a dashboard or open an existing one.
+2. Add the DHIS2 charts.
+3. Arrange the layout.
+4. Add filters if needed.
+5. Save the dashboard.
+
+Validation steps:
+
+- every chart loads successfully
+- filters apply correctly
+- charts using the same dataset remain consistent with each other
+- maps behave correctly when zooming, hovering, and switching views
+
+## 7. Validate Public Usage
+
+If the dashboard or charts will be shared publicly:
+
+1. Confirm public access is enabled for the intended content.
+2. Test the public page in a logged-out browser session.
+3. Test map hover, filters, tooltips, and layout behavior in that public view.
+
+Public DHIS2 map notes:
+
+- external basemap providers may not always load in every environment
+- public map hover behavior should be tested directly in the public page, not only in the authenticated UI
+
+## 8. Use AI Insights
+
+If AI Insights is enabled in your environment, you can use it to help interpret configured datasets, charts, and dashboards.
+
+Typical usage:
+
+1. Open a dataset, chart, or dashboard where AI Insights is available.
+2. Ask focused analytical questions.
+3. Review the generated explanation carefully.
+4. Validate important conclusions against the underlying data.
+
+Best practice:
+
+- use AI to accelerate interpretation
+- do not treat AI output as a replacement for checking the chart or source data yourself
+
+## 9. Common Problems
+
+### The dataset exists but charts show little or no data
+
+Check:
+
+- selected periods
+- selected source instance
+- selected variables or indicators
+- whether the dataset has finished preparing
+
+### Maps show boundaries but not values
+
+Check:
+
+- selected org unit column
+- selected boundary level
+- whether the row labels match the boundary labels you expect
+
+### Maps show no hover tooltips
+
+This is usually an environment or rendering issue rather than a dataset creation issue. If it happens consistently, ask the implementer or administrator to inspect the map interaction settings in that environment.
+
+### Public maps show blank basemap areas
+
+Use `Transparent Background` if external basemap tiles are not loading reliably.
+
+## 10. Recommended First End-to-End Validation
+
+After a new environment or new DHIS2 source is introduced, validate with one small use case:
+
+1. Add one DHIS2 source connection.
+2. Create one small dataset with a known metric and known org unit level.
+3. Build one table or KPI chart.
+4. Build one map.
+5. Add both to one dashboard.
+6. Test in the authenticated UI.
+7. Test in the public UI if public access is required.
+8. Test AI Insights if it is enabled.
+
+This helps confirm the full user flow before you scale to many datasets, charts, and dashboards.

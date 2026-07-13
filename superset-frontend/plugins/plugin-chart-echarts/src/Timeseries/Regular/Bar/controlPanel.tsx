@@ -30,6 +30,7 @@ import {
   sharedControls,
 } from '@superset-ui/chart-controls';
 import {
+  chartTitleSection,
   legendSection,
   minorTicks,
   richTooltipSection,
@@ -284,6 +285,7 @@ const config: ControlPanelConfig = {
     sections.advancedAnalyticsControls,
     sections.annotationsAndLayersControls,
     sections.forecastIntervalControls,
+    chartTitleSection,
     {
       label: t('Chart Orientation'),
       expanded: true,

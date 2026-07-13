@@ -24,7 +24,7 @@ import {
   sharedControls,
 } from '@superset-ui/chart-controls';
 import { DEFAULT_FORM_DATA } from './types';
-import { legendSection } from '../controls';
+import { chartTitleSection, legendSection } from '../controls';
 
 const requiredEntity = {
   ...sharedControls.entity,
@@ -91,6 +91,7 @@ const controlPanel: ControlPanelConfig = {
         ['row_limit'],
       ],
     },
+    chartTitleSection,
     {
       label: t('Chart options'),
       expanded: true,

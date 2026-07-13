@@ -31,6 +31,7 @@ import { SankeyChartProps, SankeyTransformedProps } from './types';
 import { Refs } from '../types';
 import { getDefaultTooltip } from '../utils/tooltip';
 import { getPercentFormatter } from '../utils/formatters';
+import { getChartTitleOption } from '../utils/chartTitle';
 
 type Link = { source: string; target: string; value: number };
 type EChartsOption = ComposeOption<SankeySeriesOption>;
@@ -116,7 +117,10 @@ export default function transformProps(
     return tooltipHtml(rows, name);
   };
 
+  const { title: chartTitleOption } = getChartTitleOption(formData, theme, (chartProps.datasource as any)?.columns);
+
   const echartOptions: EChartsOption = {
+    ...(chartTitleOption && { title: chartTitleOption }),
     series: {
       animation: false,
       data: seriesData,

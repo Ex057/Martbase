@@ -18,6 +18,8 @@
  */
 /* eslint-disable theme-colors/no-literal-colors */
 import { getMetricLabel, getNumberFormatter } from '@superset-ui/core';
+import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
+import { periodToRange } from 'src/explore/components/controls/DHIS2ColumnFilterControl/relativePeriods';
 import { ControlChartFormData, ControlChartChartProps, ThresholdMethod } from './types';
 
 /* ── Statistical helpers ───────────────────────────── */
@@ -86,13 +88,40 @@ export default function transformProps(chartProps: any): ControlChartChartProps 
   const metricLabel = fd.metrics?.[0] ? getMetricLabel(fd.metrics[0]) : '';
   const yFmt = getNumberFormatter(fd.y_axis_format || 'SMART_NUMBER');
 
-  const xValues: string[] = data.map((r: any) => String(r[xCol] ?? ''));
-  const yValues: number[] = data.map((r: any) => (r[metricLabel] as number) ?? 0);
+  // Keep periods and observations paired, and DROP null observations rather
+  // than reading them as a real 0 — a missing period must not drag the mean
+  // down or inflate the SD. Values may arrive as numeric strings from the
+  // serving DB, so coerce explicitly.
+  const paired: { x: string; y: number }[] = data
+    .map((r: any) => ({
+      x: String(r[xCol] ?? ''),
+      y: r[metricLabel] == null ? NaN : Number(r[metricLabel]),
+    }))
+    .filter((p: { x: string; y: number }) => Number.isFinite(p.y));
 
-  const manualUclRaw = fd.manual_ucl ? parseFloat(String(fd.manual_ucl)) : null;
-  const manualLclRaw = fd.manual_lcl ? parseFloat(String(fd.manual_lcl)) : null;
-  const manualUcl = Number.isFinite(manualUclRaw) ? manualUclRaw : null;
-  const manualLcl = Number.isFinite(manualLclRaw) ? manualLclRaw : null;
+  // If every x is a DHIS2 period code, sort chronologically by its true start —
+  // correct even across granularities ("2024" vs "202401" vs "2024Q1"), which a
+  // lexical SQL sort gets wrong. Non-period axes keep the query's order.
+  const allPeriods =
+    paired.length > 0 && paired.every(p => periodToRange(p.x) !== undefined);
+  if (allPeriods) {
+    paired.sort(
+      (a, b) => periodToRange(a.x)!.startYM - periodToRange(b.x)!.startYM,
+    );
+  }
+
+  const xValues: string[] = paired.map(p => p.x);
+  const yValues: number[] = paired.map(p => p.y);
+
+  // parseFloat('0') is 0 (falsy) — test against '' so a manual limit of 0 holds.
+  const manualUclStr = fd.manual_ucl == null ? '' : String(fd.manual_ucl).trim();
+  const manualLclStr = fd.manual_lcl == null ? '' : String(fd.manual_lcl).trim();
+  const manualUclRaw = manualUclStr === '' ? null : parseFloat(manualUclStr);
+  const manualLclRaw = manualLclStr === '' ? null : parseFloat(manualLclStr);
+  const manualUcl =
+    manualUclRaw != null && Number.isFinite(manualUclRaw) ? manualUclRaw : null;
+  const manualLcl =
+    manualLclRaw != null && Number.isFinite(manualLclRaw) ? manualLclRaw : null;
 
   const computed = computeThresholds(
     yValues,
@@ -123,10 +152,11 @@ export default function transformProps(chartProps: any): ControlChartChartProps 
   const lclColor = '#F9A825';
   const meanColor = '#2E7D32';
 
-  // Breach detection
+  // Breach detection: above UCL always, and below LCL when the lower limit is
+  // shown (an epidemic channel flags both unusually high and unusually low).
   const breachIndices = new Set<number>();
   yValues.forEach((v, i) => {
-    if (v > ucl) breachIndices.add(i);
+    if (v > ucl || (fd.show_lcl && v < lcl)) breachIndices.add(i);
   });
 
   // Build scatter data for breach markers
@@ -176,6 +206,8 @@ export default function transformProps(chartProps: any): ControlChartChartProps 
   }
 
   if (fd.show_ucl !== false) {
+    // reduce, not Math.max(...spread): a long series would blow the call stack.
+    const dataMax = yValues.reduce((m, v) => (v > m ? v : m), ucl);
     series.push({
       name: 'UCL',
       type: 'line',
@@ -184,18 +216,16 @@ export default function transformProps(chartProps: any): ControlChartChartProps 
       itemStyle: { color: uclColor },
       symbol: 'none',
       z: 1,
+      // Shade the ALERT zone (above UCL) only. The previous areaStyle used
+      // origin:'start', which filled the safe zone below UCL — the opposite.
       ...(fd.shade_alert_zone !== false
         ? {
-            areaStyle: {
-              color: 'rgba(211, 47, 47, 0.06)',
-              origin: 'start',
-            },
             markArea: {
               silent: true,
               data: [
                 [
                   { yAxis: ucl, itemStyle: { color: 'rgba(211, 47, 47, 0.06)' } },
-                  { yAxis: Math.max(...yValues, ucl) * 1.2 },
+                  { yAxis: dataMax * 1.2 },
                 ],
               ],
             },
@@ -301,5 +331,6 @@ export default function transformProps(chartProps: any): ControlChartChartProps 
     manualUcl,
     manualLcl,
     nullValueText: fd.null_value_text || '–',
+    title: resolveChartTitle(chartProps.formData, chartProps.datasource?.columns),
   };
 }

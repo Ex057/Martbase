@@ -37,6 +37,7 @@ import {
 import { DEFAULT_FORM_DATA, DEFAULT_TREE_SERIES_OPTION } from './constants';
 import { Refs } from '../types';
 import { getDefaultTooltip } from '../utils/tooltip';
+import { getChartTitleOption } from '../utils/chartTitle';
 
 export function formatTooltip({
   params,
@@ -206,7 +207,10 @@ export default function transformProps(
     },
   ];
 
+  const { title: chartTitleOption } = getChartTitleOption(formData, theme, (chartProps.datasource as any)?.columns);
+
   const echartOptions: EChartsCoreOption = {
+    ...(chartTitleOption && { title: chartTitleOption }),
     animationDuration: DEFAULT_TREE_SERIES_OPTION.animationDuration,
     animationEasing: DEFAULT_TREE_SERIES_OPTION.animationEasing,
     series,

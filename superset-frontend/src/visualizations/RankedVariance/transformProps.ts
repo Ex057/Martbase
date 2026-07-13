@@ -18,6 +18,7 @@
  */
 /* eslint-disable theme-colors/no-literal-colors */
 import { getMetricLabel, getNumberFormatter } from '@superset-ui/core';
+import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
 import { RankedVarianceFormData, RankedVarianceChartProps, SortOrder } from './types';
 
 interface VarianceBand {
@@ -69,19 +70,38 @@ export default function transformProps(chartProps: any): RankedVarianceChartProp
   const benchmarkUpper = rawUpper !== '' && rawUpper != null ? Number(rawUpper) : null;
   const showLegend = (fd as any).show_legend ?? false;
 
-  // Compute variance for each entity
-  let entities = data.map((row: any) => {
-    const entity = String(row[entityCol] ?? '');
-    const actual = (row[actualLabel] as number) ?? 0;
-    const target = (row[targetLabel] as number) ?? 0;
-    let variance: number;
-    if (varianceMode === 'relative') {
-      variance = target !== 0 ? ((actual - target) / Math.abs(target)) * 100 : 0;
-    } else {
-      variance = actual - target;
-    }
-    return { entity, actual, target, variance };
-  });
+  // Compute variance for each entity. A missing ACTUAL means the entity has no
+  // data — drop it rather than read it as 0 (which would rank a no-data district
+  // as a huge shortfall). A missing target is kept but its % severity is
+  // undefined (see pctSeverity below).
+  let entities = data
+    .map((row: any) => {
+      const entity = String(row[entityCol] ?? '');
+      const actualRaw = row[actualLabel];
+      const targetRaw = row[targetLabel];
+      const actual = actualRaw == null ? NaN : Number(actualRaw);
+      const target = targetRaw == null ? NaN : Number(targetRaw);
+      return { entity, actual, target };
+    })
+    .filter((e: any) => Number.isFinite(e.actual))
+    .map((e: any) => {
+      const hasTarget = Number.isFinite(e.target);
+      const diff = e.actual - (hasTarget ? e.target : 0);
+      const variance =
+        varianceMode === 'relative'
+          ? hasTarget && e.target !== 0
+            ? (diff / Math.abs(e.target)) * 100
+            : 0
+          : diff;
+      // Colour by percentage deviation so the (percentage) severity bands apply
+      // regardless of display mode — the previous code coloured absolute mode by
+      // raw magnitude against percentage thresholds, painting everything green.
+      const pctSeverity =
+        hasTarget && e.target !== 0
+          ? Math.abs((diff / Math.abs(e.target)) * 100)
+          : Math.abs(diff);
+      return { entity: e.entity, actual: e.actual, target: e.target, variance, pctSeverity };
+    });
 
   // Sort
   const sortOrder: SortOrder = fd.sort_order || 'worst-first';
@@ -99,10 +119,7 @@ export default function transformProps(chartProps: any): RankedVarianceChartProp
 
   const entityNames = entities.map((e: any) => e.entity);
   const varianceValues = entities.map((e: any) => e.variance);
-  // In relative mode variance is already a percentage; in absolute mode pass raw abs value
-  const barColors = entities.map((e: any) =>
-    resolveColor(Math.abs(e.variance), bands),
-  );
+  const barColors = entities.map((e: any) => resolveColor(e.pctSeverity, bands));
 
   const echartOptions = {
     grid: {
@@ -217,5 +234,9 @@ export default function transformProps(chartProps: any): RankedVarianceChartProp
     benchmarkLower,
     benchmarkUpper,
     showLegend,
+    title: resolveChartTitle(
+      chartProps.formData,
+      chartProps.datasource?.columns,
+    ),
   };
 }

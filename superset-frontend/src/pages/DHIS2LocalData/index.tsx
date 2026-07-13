@@ -16,6 +16,7 @@ import {
   Tag,
 } from 'antd';
 import type { MenuProps } from 'antd';
+import { isEqual } from 'lodash';
 import { useHistory, useLocation } from 'react-router-dom';
 import { utils as XLSXUtils, write as writeXlsx } from 'xlsx';
 
@@ -200,7 +201,9 @@ export default function DHIS2LocalData() {
     [],
   );
   // Stable ref to loadDatasets so scheduleJobPoll can call it without stale closure issues
-  const loadDatasetsRef = useRef<() => Promise<void>>(async () => {});
+  const loadDatasetsRef = useRef<
+    (options?: { silent?: boolean }) => Promise<void>
+  >(async () => {});
   const [cleaningDatasetId, setCleaningDatasetId] = useState<number | null>(null);
   const [deletingDatasetId, setDeletingDatasetId] = useState<number | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -245,9 +248,10 @@ export default function DHIS2LocalData() {
           if (ACTIVE_SYNC_STATUSES.has(job.status)) {
             scheduleJobPoll(jobId);
           } else {
-            // Terminal — clear active job and refresh dataset list
+            // Terminal — clear active job and refresh dataset list in the
+            // background; the list is already on screen, so don't skeleton it.
             setActiveJobId(null);
-            void loadDatasetsRef.current();
+            void loadDatasetsRef.current({ silent: true });
           }
         } catch {
           if (isMountedRef.current) {
@@ -264,14 +268,16 @@ export default function DHIS2LocalData() {
   // Cleanup poll timer on unmount
   useEffect(() => () => stopJobPolling(), [stopJobPolling]);
 
-  const loadDatasets = async () => {
+  // `silent` skips the loading spinner. The 4s sync poll refetches this list
+  // constantly; without it, every tick flashes the page's skeleton Cards.
+  const loadDatasets = async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!selectedDatabaseId) {
       setDatasets([]);
       setActiveDatasetId(undefined);
       setQueryResult(null);
       return;
     }
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const response = await SupersetClient.get({
         endpoint:
@@ -280,7 +286,11 @@ export default function DHIS2LocalData() {
       });
       if (!isMountedRef.current) return;
       const nextDatasets = (response.json.result || []) as DHIS2StagedDatasetSummary[];
-      setDatasets(nextDatasets);
+      // Reuse the existing array when nothing changed, so `activeDataset` keeps
+      // its identity and the effects keyed on it don't refetch.
+      setDatasets(current =>
+        isEqual(current, nextDatasets) ? current : nextDatasets,
+      );
       setActiveDatasetId(currentId => {
         if (
           requestedDatasetId &&
@@ -301,7 +311,7 @@ export default function DHIS2LocalData() {
       setDatasets([]);
       setActiveDatasetId(undefined);
     } finally {
-      if (isMountedRef.current) setLoading(false);
+      if (isMountedRef.current && !silent) setLoading(false);
     }
   };
 
@@ -355,7 +365,7 @@ export default function DHIS2LocalData() {
     }
 
     const timeoutId = window.setTimeout(() => {
-      void loadDatasets();
+      void loadDatasets({ silent: true });
     }, DATASET_POLL_INTERVAL_MS);
     return () => {
       window.clearTimeout(timeoutId);
@@ -367,6 +377,8 @@ export default function DHIS2LocalData() {
     [datasets, activeDatasetId],
   );
 
+  // Depends on the columns alone, so a sync poll that only moves row counts
+  // doesn't invalidate every filter memo built on top of this.
   const parsedServingColumns = useMemo<ParsedServingColumn[]>(
     () =>
       (activeDataset?.serving_columns || []).map(column => ({
@@ -374,7 +386,7 @@ export default function DHIS2LocalData() {
         label: column.verbose_name || column.column_name,
         extra: parseColumnExtra(column.extra),
       })),
-    [activeDataset],
+    [activeDataset?.serving_columns],
   );
 
   const availableColumns = useMemo(
@@ -423,11 +435,13 @@ export default function DHIS2LocalData() {
       setQueryColumns([]);
       return;
     }
-    setQueryColumns(current =>
-      current.filter(column =>
+    setQueryColumns(current => {
+      // `filter` always allocates; returning `current` unchanged avoids a render.
+      const next = current.filter(column =>
         availableColumns.some(option => option.value === column),
-      ),
-    );
+      );
+      return next.length === current.length ? current : next;
+    });
   }, [availableColumns]);
 
   useEffect(() => {
@@ -440,18 +454,18 @@ export default function DHIS2LocalData() {
     setQueryPage(1);
   }, [activeDatasetId]);
 
+  // Keyed on the dataset id, not the dataset object: the sync poll hands back a
+  // new object whenever a row count ticks, and re-running this would re-flash
+  // the preview table every 4 seconds.
   const loadStagingPreview = useCallback(
-    async (
-      dataset: DHIS2StagedDatasetSummary = activeDataset!,
-      limit = stagingPreviewLimit,
-    ) => {
-      if (!dataset) {
+    async (datasetId = activeDatasetId, limit = stagingPreviewLimit) => {
+      if (!datasetId) {
         return;
       }
       setStagingPreviewLoading(true);
       try {
         const response = await SupersetClient.get({
-          endpoint: `/api/v1/dhis2/staged-datasets/${dataset.id}/preview?limit=${limit}`,
+          endpoint: `/api/v1/dhis2/staged-datasets/${datasetId}/preview?limit=${limit}`,
         });
         if (!isMountedRef.current) {
           return;
@@ -473,16 +487,16 @@ export default function DHIS2LocalData() {
         }
       }
     },
-    [activeDataset, addDangerToast, stagingPreviewLimit],
+    [activeDatasetId, addDangerToast, stagingPreviewLimit],
   );
 
   useEffect(() => {
-    if (!activeDataset) {
+    if (!activeDatasetId) {
       setStagingPreview(null);
       return;
     }
-    void loadStagingPreview(activeDataset, stagingPreviewLimit);
-  }, [activeDataset, loadStagingPreview, stagingPreviewLimit]);
+    void loadStagingPreview(activeDatasetId, stagingPreviewLimit);
+  }, [activeDatasetId, loadStagingPreview, stagingPreviewLimit]);
 
   const structuredFilters = useMemo<StructuredFilter[]>(() => {
     const nextFilters: StructuredFilter[] = [];
@@ -568,8 +582,10 @@ export default function DHIS2LocalData() {
     [queryColumns, availableColumns],
   );
 
+  // Also keyed on the id rather than the dataset object, for the same reason as
+  // loadStagingPreview above.
   useEffect(() => {
-    if (!activeDataset) {
+    if (!activeDatasetId) {
       return;
     }
     if (!orgUnitFilterDefinitions.length && !periodFilterDefinition) {
@@ -581,7 +597,7 @@ export default function DHIS2LocalData() {
       setLoadingLocalFilterOptions(true);
       try {
         const response = await SupersetClient.post({
-          endpoint: `/api/v1/dhis2/staged-datasets/${activeDataset.id}/filters`,
+          endpoint: `/api/v1/dhis2/staged-datasets/${activeDatasetId}/filters`,
           jsonPayload: {
             filters: combinedFilters,
           },
@@ -630,7 +646,7 @@ export default function DHIS2LocalData() {
 
     void loadLocalFilterOptions();
   }, [
-    activeDataset,
+    activeDatasetId,
     addDangerToast,
     combinedFilters,
     orgUnitFilterDefinitions,

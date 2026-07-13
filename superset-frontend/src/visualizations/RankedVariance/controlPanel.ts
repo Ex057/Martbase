@@ -22,6 +22,8 @@ import {
   D3_FORMAT_OPTIONS,
   sharedControls,
 } from '@superset-ui/chart-controls';
+import { chartAutoSubtitleSection } from 'src/components/ChartTitleBlock';
+import { dhis2DataFiltersSection } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 const config: ControlPanelConfig = {
   controlPanelSections: [
@@ -317,6 +319,8 @@ const config: ControlPanelConfig = {
         ],
       ],
     },
+    dhis2DataFiltersSection,
+    chartAutoSubtitleSection,
   ],
 };
 

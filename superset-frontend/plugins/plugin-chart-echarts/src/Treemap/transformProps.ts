@@ -51,6 +51,7 @@ import { OpacityEnum } from '../constants';
 import { getDefaultTooltip } from '../utils/tooltip';
 import { Refs } from '../types';
 import { treeBuilder, TreeNode } from '../utils/treeBuilder';
+import { getChartTitleOption } from '../utils/chartTitle';
 
 export function formatLabel({
   params,
@@ -292,7 +293,10 @@ export default function transformProps(
     },
   ];
 
+  const { title: chartTitleOption } = getChartTitleOption(formData, theme, (chartProps.datasource as any)?.columns);
+
   const echartOptions: EChartsCoreOption = {
+    ...(chartTitleOption && { title: chartTitleOption }),
     tooltip: {
       ...getDefaultTooltip(refs),
       show: !inContextMenu,

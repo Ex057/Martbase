@@ -202,6 +202,24 @@ DEFAULT_PORTAL_LAYOUT_CONFIG: dict[str, Any] = {
     "dashboardEmbedIntro": "",
     "dashboardBackLabel": "Back to page",
     "dashboardLoadingLabel": "Loading dashboard...",
+    "bodyFontFamily": "'Inter', 'Segoe UI', sans-serif",
+    "headingFontFamily": "'Public Sans', 'Segoe UI', sans-serif",
+    "baseFontSize": "16px",
+    "heroTitleSize": "clamp(2.5rem, 5vw, 4rem)",
+    "sectionTitleSize": "24px",
+    "cardTitleSize": "18px",
+    "linkDecoration": "none",
+    "linkHoverDecoration": "underline",
+    "appearance": {
+        "branding": {},
+        "typography": {},
+        "surfaces": {},
+        "links": {},
+    },
+    "authenticatedHomeMode": "welcome",
+    "authenticatedHomeDashboardId": None,
+    "authenticatedHomeDashboardPath": "",
+    "authenticatedHomeRoleDashboardPaths": {},
 }
 DEFAULT_WELCOME_PAGE_SUBTITLE = "Trusted public analytics for Uganda malaria surveillance"
 DEFAULT_WELCOME_PAGE_DESCRIPTION = (
@@ -262,6 +280,86 @@ def _merge_dicts(default: dict[str, Any], override: dict[str, Any]) -> dict[str,
         else:
             result[key] = value
     return result
+
+
+def _normalize_internal_dashboard_path(value: str | None) -> str:
+    candidate = (value or "").strip()
+    if not candidate:
+        return ""
+    if not candidate.startswith("/"):
+        raise ValidationError(
+            {
+                "config": [
+                    "Authenticated home dashboard path must start with '/'"
+                ]
+            }
+        )
+    if candidate.startswith("//"):
+        raise ValidationError(
+            {
+                "config": [
+                    "Authenticated home dashboard path must be a relative Superset URL"
+                ]
+            }
+        )
+    lowered = candidate.lower()
+    if lowered.startswith("/http:") or lowered.startswith("/https:"):
+        raise ValidationError(
+            {
+                "config": [
+                    "Authenticated home dashboard path must be a relative Superset URL"
+                ]
+            }
+        )
+    if not (
+        candidate.startswith("/superset/dashboard/")
+        or candidate.startswith("/dashboard/")
+    ):
+        raise ValidationError(
+            {
+                "config": [
+                    "Authenticated home dashboard path must point to a dashboard URL"
+                ]
+            }
+        )
+    return candidate
+
+
+def _normalize_internal_dashboard_path_map(value: Any) -> dict[str, str]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValidationError(
+            {
+                "config": [
+                    "Authenticated home role dashboard paths must be an object"
+                ]
+            }
+        )
+
+    normalized: dict[str, str] = {}
+    for raw_role_name, raw_path in value.items():
+        role_name = str(raw_role_name or "").strip()
+        if not role_name:
+            continue
+        normalized_path = _normalize_internal_dashboard_path(
+            str(raw_path or "").strip()
+        )
+        if normalized_path:
+            normalized[role_name] = normalized_path
+    return normalized
+
+
+def _normalize_dashboard_id(value: Any) -> int | None:
+    if value in (None, "", 0, "0"):
+        return None
+    try:
+        dashboard_id = int(value)
+    except (TypeError, ValueError) as ex:
+        raise ValidationError(
+            {"config": ["Authenticated home dashboard selection is invalid"]}
+        ) from ex
+    return dashboard_id if dashboard_id > 0 else None
 
 
 def _role_names() -> set[str]:
@@ -5085,9 +5183,36 @@ class PublicPageRestApi(BaseApi):
             return self.response(403, message="You do not have permission to manage layout")
         try:
             payload = PortalLayoutConfigSchema().load(request.json or {})
+            config = dict(payload.get("config") or {})
+            home_mode = str(
+                config.get("authenticatedHomeMode")
+                or DEFAULT_PORTAL_LAYOUT_CONFIG["authenticatedHomeMode"]
+            ).strip()
+            if home_mode not in {"welcome", "dashboard"}:
+                raise ValidationError(
+                    {
+                        "config": [
+                            "Authenticated home mode must be either 'welcome' or 'dashboard'"
+                        ]
+                    }
+                )
+            config["authenticatedHomeMode"] = home_mode
+            config["authenticatedHomeDashboardId"] = _normalize_dashboard_id(
+                config.get("authenticatedHomeDashboardId")
+            )
+            config["authenticatedHomeDashboardPath"] = _normalize_internal_dashboard_path(
+                config.get("authenticatedHomeDashboardPath")
+            )
+            config["authenticatedHomeRoleDashboardPaths"] = (
+                _normalize_internal_dashboard_path_map(
+                    config.get("authenticatedHomeRoleDashboardPaths")
+                )
+            )
+            appearance = config.get("appearance")
+            config["appearance"] = appearance if isinstance(appearance, dict) else {}
             layout_config = self._get_or_create_layout_config()
             layout_config.title = payload.get("title") or layout_config.title
-            layout_config.set_config(payload.get("config") or {})
+            layout_config.set_config(config)
             db.session.commit()
             return self.response(
                 200,

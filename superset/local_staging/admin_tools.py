@@ -161,6 +161,35 @@ def _read_running_pid(pid_file: str) -> int | None:
         return None
 
 
+def _check_systemd_service_running(service_name: str) -> tuple[bool, int | None]:
+    """Check if a systemd service is running. Returns (is_running, pid)."""
+    try:
+        result = subprocess.run(
+            ["systemctl", "is-active", "--quiet", service_name],
+            capture_output=True,
+            timeout=5,
+        )
+        is_running = result.returncode == 0
+        pid = None
+        if is_running:
+            pid_result = subprocess.run(
+                ["systemctl", "show", service_name, "--property=MainPID", "--value"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if pid_result.returncode == 0:
+                try:
+                    pid = int(pid_result.stdout.strip())
+                    if pid == 0:
+                        pid = None
+                except ValueError:
+                    pass
+        return is_running, pid
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        return False, None
+
+
 def _service_pid_paths() -> dict[str, dict[str, str]]:
     project_root = _project_root()
     return {
@@ -206,16 +235,28 @@ def _restart_command_for(service_name: str) -> str | None:
 def get_runtime_service_status() -> dict[str, Any]:
     pid_paths = _service_pid_paths()
 
+    # Try PID files first, fall back to systemd status check
     backend_pid = _read_running_pid(pid_paths["backend"]["pid_file"])
+    backend_running = backend_pid is not None
+    if not backend_running:
+        backend_running, backend_pid = _check_systemd_service_running("martbase-web")
+
     celery_worker_pid = _read_running_pid(pid_paths["celery"]["worker_pid_file"])
+    worker_running = celery_worker_pid is not None
+    if not worker_running:
+        worker_running, celery_worker_pid = _check_systemd_service_running("martbase-worker")
+
     celery_beat_pid = _read_running_pid(pid_paths["celery"]["beat_pid_file"])
+    beat_running = celery_beat_pid is not None
+    if not beat_running:
+        beat_running, celery_beat_pid = _check_systemd_service_running("martbase-beat")
 
     return {
         "services": {
             "backend": {
                 "name": "backend",
                 "label": "Web server",
-                "running": backend_pid is not None,
+                "running": backend_running,
                 "pid": backend_pid,
                 "pid_file": pid_paths["backend"]["pid_file"],
                 "restart_available": _restart_command_for("backend") is not None,
@@ -223,11 +264,11 @@ def get_runtime_service_status() -> dict[str, Any]:
             "celery": {
                 "name": "celery",
                 "label": "Celery worker + beat",
-                "running": celery_worker_pid is not None or celery_beat_pid is not None,
-                "worker_running": celery_worker_pid is not None,
+                "running": worker_running or beat_running,
+                "worker_running": worker_running,
                 "worker_pid": celery_worker_pid,
                 "worker_pid_file": pid_paths["celery"]["worker_pid_file"],
-                "beat_running": celery_beat_pid is not None,
+                "beat_running": beat_running,
                 "beat_pid": celery_beat_pid,
                 "beat_pid_file": pid_paths["celery"]["beat_pid_file"],
                 "restart_available": _restart_command_for("celery") is not None,

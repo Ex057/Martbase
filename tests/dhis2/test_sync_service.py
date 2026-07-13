@@ -1344,6 +1344,46 @@ def test_sync_staged_dataset_publishes_partial_serving_rows_while_running(mocker
     assert session.commit.call_count >= 3
 
 
+def test_full_refresh_does_not_wipe_staged_rows_when_instance_returns_nothing(
+    mocker,
+) -> None:
+    """An empty upstream response is usually a hiccup, not an empty window.
+
+    A full refresh replaces every staged row for the instance, so running it on
+    a zero-row fetch would delete the dataset's contents.
+    """
+    from superset.dhis2 import sync_service
+
+    dataset = _make_dataset(last_sync_status=None, last_sync_rows=None)
+    variable = _make_variable(instance_id=1)
+    instance = _make_instance(id=1, name="Uganda HMIS")
+
+    dataset_query = MagicMock()
+    dataset_query.filter_by.return_value.first.return_value = dataset
+    variables_query = MagicMock()
+    variables_query.filter_by.return_value.all.return_value = [variable]
+
+    session = mocker.patch("superset.dhis2.sync_service.db.session")
+    session.query.side_effect = [dataset_query, variables_query]
+    session.get.return_value = instance
+    session.commit = MagicMock()
+
+    mocker.patch("superset.dhis2.sync_service._sync_compat_dataset")
+    mocker.patch(
+        "superset.dhis2.sync_service.get_instances_with_legacy_fallback",
+        return_value=[instance],
+    )
+
+    svc = sync_service.DHIS2SyncService()
+    mocker.patch.object(svc, "_fetch_from_instance", return_value=[])
+    load_rows = mocker.patch.object(svc, "_load_rows", return_value=0)
+    mocker.patch.object(svc, "_materialize_serving_table")
+
+    svc.sync_staged_dataset(1, incremental=False)
+
+    load_rows.assert_not_called()
+
+
 def test_sync_staged_dataset_uses_dataset_config_variable_mappings_when_rows_missing(
     mocker,
 ) -> None:
@@ -1554,7 +1594,28 @@ class TestLoadRowsCompatibility:
             sync_job_id=11,
         )
 
-    def test_load_rows_uses_incremental_upsert_and_prunes_old_periods(self):
+    def test_load_rows_full_refresh_asks_the_engine_to_replace_all(self):
+        """Local staging engines only insert unless replace_all is passed.
+
+        Regression: without the flag a "full refresh" appended to the existing
+        staged rows instead of replacing them.
+        """
+        svc = self._svc()
+        dataset = _make_dataset()
+        instance = _make_instance()
+        rows = [{"dx_uid": "abc123", "pe": "2024Q1", "ou": "ou_xyz", "value": "10"}]
+
+        with patch("superset.dhis2.sync_service.DHIS2StagingEngine") as engine_cls:
+            with patch("superset.dhis2.sync_service.record_dhis2_stage_rows"):
+                engine = engine_cls.return_value
+                engine.replace_rows_for_instance.return_value = {"inserted": 1}
+                svc._load_rows(
+                    dataset, instance, rows, replace_instance_rows=True
+                )
+
+        assert engine.replace_rows_for_instance.call_args.kwargs["replace_all"] is True
+
+    def test_load_rows_uses_incremental_upsert(self):
         svc = self._svc()
         dataset = _make_dataset()
         instance = _make_instance()
@@ -1570,15 +1631,11 @@ class TestLoadRowsCompatibility:
                     rows,
                     sync_job_id=12,
                     replace_instance_rows=False,
-                    periods_to_prune=["2024Q1"],
                 )
 
         assert loaded == 1
-        engine.delete_rows_for_instance_periods.assert_called_once_with(
-            dataset,
-            instance.id,
-            ["2024Q1"],
-        )
+        # Staging is cumulative: an incremental load never deletes old periods.
+        engine.delete_rows_for_instance_periods.assert_not_called()
         engine.upsert_rows_for_instance.assert_called_once_with(
             dataset,
             instance_id=instance.id,

@@ -959,6 +959,73 @@ const config: ControlPanelConfig = {
         ],
       ],
     },
+    {
+      label: t('Title & Subtitle'),
+      tabOverride: 'customize',
+      expanded: false,
+      controlSetRows: [
+        [
+          {
+            name: 'chart_title',
+            config: {
+              type: 'TextControl',
+              label: t('Title'),
+              renderTrigger: true,
+              default: '',
+              description: t('Title shown on the map, above the plot area.'),
+            },
+          },
+        ],
+        [
+          {
+            name: 'chart_subtitle',
+            config: {
+              type: 'TextControl',
+              label: t('Subtitle'),
+              renderTrigger: true,
+              default: '',
+              description: t('Optional subtitle shown beneath the title.'),
+            },
+          },
+        ],
+        [
+          {
+            name: 'chart_title_color',
+            config: {
+              type: 'ColorPickerControl',
+              label: t('Title color'),
+              renderTrigger: true,
+              description: t('Text color for the title.'),
+            },
+          },
+          {
+            name: 'chart_subtitle_color',
+            config: {
+              type: 'ColorPickerControl',
+              label: t('Subtitle color'),
+              renderTrigger: true,
+              description: t('Text color for the subtitle.'),
+            },
+          },
+        ],
+        [
+          {
+            name: 'chart_title_align',
+            config: {
+              type: 'SelectControl',
+              label: t('Title alignment'),
+              renderTrigger: true,
+              clearable: false,
+              default: 'center',
+              choices: [
+                ['center', t('Center')],
+                ['left', t('Left')],
+              ],
+            },
+          },
+        ],
+      ],
+    },
   ],
   controlOverrides: {
     entity: {

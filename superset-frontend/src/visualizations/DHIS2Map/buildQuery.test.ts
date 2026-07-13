@@ -295,4 +295,52 @@ describe('DHIS2Map buildQuery', () => {
     );
     expect(nullExclusionFilter).toBeUndefined();
   });
+
+  const periodFilterOf = (formData: any): any => {
+    const [query] = buildQuery({
+      datasource: '4__table',
+      viz_type: 'dhis2_map',
+      metric: 'SUM(malaria_cases)',
+      org_unit_column: 'district_city',
+      dhis2_staged_local_dataset: 'true',
+      ...formData,
+    } as any).queries;
+    return (query.filters || []).find((f: any) => f.col === 'period');
+  };
+
+  test('passes concrete period codes through as an IN filter', () => {
+    expect(
+      periodFilterOf({
+        dhis2_column_filters: [
+          { column: 'period', values: ['2024Q1', '2024Q2'] },
+        ],
+      }),
+    ).toMatchObject({ op: 'IN', val: ['2024Q1', '2024Q2'] });
+  });
+
+  test('expands a relative period token at query time', () => {
+    jest.useFakeTimers().setSystemTime(new Date(2026, 6, 10));
+    try {
+      const filter = periodFilterOf({
+        dhis2_column_filters: [
+          { column: 'period', values: ['REL::LAST_12_MONTHS'] },
+        ],
+      });
+      expect(filter?.op).toBe('IN');
+      // The window the backend sync stages for the same day: 202507…202606.
+      expect(filter?.val).toEqual(expect.arrayContaining(['202507', '202606']));
+      expect(filter?.val).not.toContain('202607');
+      expect(filter?.val).not.toContain('REL::LAST_12_MONTHS');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('drops a filter whose token expands to nothing', () => {
+    expect(
+      periodFilterOf({
+        dhis2_column_filters: [{ column: 'period', values: ['REL::NONSENSE'] }],
+      }),
+    ).toBeUndefined();
+  });
 });

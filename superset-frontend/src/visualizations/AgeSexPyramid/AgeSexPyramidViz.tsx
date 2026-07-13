@@ -19,6 +19,7 @@
 import { useRef, useEffect } from 'react';
 import * as echarts from 'echarts';
 import { styled } from '@superset-ui/core';
+import { resolveCssVarColors } from 'src/utils/resolveCssVarColors';
 import { AgeSexPyramidChartProps } from './types';
 
 const Container = styled.div`
@@ -34,11 +35,15 @@ export default function AgeSexPyramidViz(props: AgeSexPyramidChartProps) {
   const instanceRef = useRef<echarts.ECharts | null>(null);
 
   useEffect(() => {
-    if (!chartRef.current) return;
+    if (!chartRef.current) return undefined;
     if (!instanceRef.current) {
       instanceRef.current = echarts.init(chartRef.current);
     }
-    instanceRef.current.setOption(echartOptions, true);
+    // Canvas can't parse var(--x); resolve to concrete themed colours first.
+    instanceRef.current.setOption(
+      resolveCssVarColors(echartOptions, chartRef.current),
+      true,
+    );
     return () => {
       instanceRef.current?.dispose();
       instanceRef.current = null;

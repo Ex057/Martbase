@@ -26,6 +26,7 @@ import {
   t,
 } from '@superset-ui/core';
 import rison from 'rison';
+import { Redirect } from 'react-router-dom';
 import { Collapse, ListViewCard } from '@superset-ui/core/components';
 import { User } from 'src/types/bootstrapTypes';
 import { reject } from 'lodash';
@@ -567,4 +568,14 @@ function Welcome({ user, addDangerToast }: WelcomeProps) {
   );
 }
 
-export default withToasts(Welcome);
+// The CMS "Authenticated Home" setting is enforced server-side on /superset/welcome/,
+// but client-side navigation to the same route never reaches Flask, so honor it here too.
+function AuthenticatedHome(props: WelcomeProps) {
+  const homeTarget = bootstrapData.common?.menu_data?.authenticated_home_target;
+  if (homeTarget) {
+    return <Redirect to={homeTarget} />;
+  }
+  return <Welcome {...props} />;
+}
+
+export default withToasts(AuthenticatedHome);

@@ -1119,7 +1119,10 @@ class AIManagementRestApi(BaseSupersetApi):
         stdout = command_result["stdout"]
         stderr = command_result["stderr"]
 
-        base_url = self._localai_base_url() or "http://127.0.0.1:39671"
+        base_url = self._localai_base_url() or os.environ.get(
+            "LOCALAI_BASE_URL",
+            "http://localai:39671",
+        )
         running = self._localai_health_check(base_url)
 
         if command_result["returncode"] == 0 and running:
@@ -1167,7 +1170,10 @@ class AIManagementRestApi(BaseSupersetApi):
         except FileNotFoundError as ex:
             return self.response_500(message=str(ex))
 
-        base_url = self._localai_base_url() or "http://127.0.0.1:39671"
+        base_url = self._localai_base_url() or os.environ.get(
+            "LOCALAI_BASE_URL",
+            "http://localai:39671",
+        )
         running = self._localai_health_check(base_url)
         success = command_result["returncode"] == 0 and not running
 

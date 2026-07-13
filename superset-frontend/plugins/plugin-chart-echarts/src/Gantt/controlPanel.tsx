@@ -25,6 +25,7 @@ import {
 import { t } from '@superset-ui/core';
 import { GenericDataType } from '@apache-superset/core/api/core';
 import {
+  chartTitleSection,
   legendSection,
   showExtraControls,
   tooltipTimeFormatControl,
@@ -94,6 +95,7 @@ const config: ControlPanelConfig = {
         ['row_limit'],
       ],
     },
+    chartTitleSection,
     {
       ...sections.titleControls,
       controlSetRows: [...sections.titleControls.controlSetRows.slice(0, -1)],

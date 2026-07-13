@@ -25,6 +25,7 @@ import {
   getStandardizedControls,
 } from '@superset-ui/chart-controls';
 import { DEFAULT_FORM_DATA } from './types';
+import { chartTitleSection } from '../controls';
 
 const config: ControlPanelConfig = {
   controlPanelSections: [
@@ -56,6 +57,7 @@ const config: ControlPanelConfig = {
         ['sort_by_metric'],
       ],
     },
+    chartTitleSection,
     {
       label: t('Chart Options'),
       expanded: true,

@@ -51,6 +51,7 @@ import { defaultGrid } from '../defaults';
 import { DEFAULT_LEGEND_FORM_DATA, OpacityEnum } from '../constants';
 import { getDefaultTooltip } from '../utils/tooltip';
 import { Refs } from '../types';
+import { getChartTitleOption } from '../utils/chartTitle';
 
 const percentFormatter = getNumberFormatter(NumberFormats.PERCENT_2_POINT);
 
@@ -271,7 +272,10 @@ export default function transformProps(
     },
   ];
 
+  const { title: chartTitleOption } = getChartTitleOption(formData, theme, (chartProps.datasource as any)?.columns);
+
   const echartOptions: EChartsCoreOption = {
+    ...(chartTitleOption && { title: chartTitleOption }),
     grid: {
       ...defaultGrid,
     },

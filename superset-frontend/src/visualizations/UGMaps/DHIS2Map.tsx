@@ -1300,6 +1300,11 @@ function DHIS2Map({
   data,
   width,
   height,
+  chartTitle,
+  chartSubtitle,
+  chartTitleColor,
+  chartSubtitleColor,
+  chartTitleAlign = 'center',
   databaseId,
   isStagedLocalDataset = false,
   stagedDatasetId,
@@ -3646,14 +3651,70 @@ function DHIS2Map({
     fetchBoundaries();
   }, [fetchBoundaries]);
 
+  const rgbaCss = (
+    c?: { r: number; g: number; b: number; a?: number },
+    fallback?: string,
+  ) =>
+    c && typeof c.r === 'number'
+      ? `rgba(${c.r}, ${c.g}, ${c.b}, ${c.a ?? 1})`
+      : fallback;
+  const titleColorCss = rgbaCss(chartTitleColor, '#1f2937');
+  const subtitleColorCss = rgbaCss(chartSubtitleColor, '#6b7280');
+  const hasChartTitle = Boolean(chartTitle || chartSubtitle);
+
   return (
     <MapWrapper
       $transparentCardContainer={transparentCardContainer}
       style={{ width, height }}
     >
       <MapCanvas $backgroundColor={chartBackgroundColor}>
+        {/*
+          Always render the overlay wrapper (toggled with `display`) so the
+          MapContainer keeps a stable child position — otherwise React would
+          remount the Leaflet map when the title appears/disappears, leaving the
+          tiles half-rendered.
+        */}
+        <div
+          className="dhis2-map-title-overlay"
+          style={{
+            position: 'absolute',
+            top: 8,
+            left: 0,
+            right: 0,
+            zIndex: 1000,
+            pointerEvents: 'none',
+            display: hasChartTitle ? 'block' : 'none',
+            textAlign: chartTitleAlign === 'left' ? 'left' : 'center',
+            padding: chartTitleAlign === 'left' ? '0 12px' : 0,
+          }}
+        >
+          {chartTitle && (
+            <div
+              style={{
+                fontSize: 16,
+                fontWeight: 600,
+                color: titleColorCss,
+                lineHeight: 1.3,
+              }}
+            >
+              {chartTitle}
+            </div>
+          )}
+          {chartSubtitle && (
+            <div
+              style={{
+                fontSize: 12,
+                color: subtitleColorCss,
+                lineHeight: 1.3,
+              }}
+            >
+              {chartSubtitle}
+            </div>
+          )}
+        </div>
         {/* @ts-ignore - React 19 compatibility */}
         <MapContainer
+          key="dhis2-map-container"
           center={[1.3733, 32.2903]}
           zoom={7}
           zoomSnap={0.25}

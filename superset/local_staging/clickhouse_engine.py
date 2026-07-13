@@ -594,9 +594,14 @@ class ClickHouseStagingEngine(LocalStagingEngineBase):
     ) -> dict[str, int]:
         table = f"`{self._database}`.`{_staging_table_name(staged_dataset)}`"
         if replace_all:
+            # Wait for the mutation: a full refresh must have cleared the old
+            # rows before the replacement rows are inserted, otherwise the
+            # "clear then load" contract holds only by accident of part
+            # versioning.
             self._cmd(
                 f"ALTER TABLE {table} DELETE WHERE source_instance_id = {{id:Int32}}",
                 parameters={"id": instance_id},
+                settings={"mutations_sync": 1},
             )
         elif periods:
             periods_list = ", ".join(f"'{p}'" for p in periods)

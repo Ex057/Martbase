@@ -133,6 +133,16 @@ const initialState = {
   dataMask: {},
 };
 
+beforeAll(() => {
+  Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+    value: jest.fn(() => ({
+      font: '',
+      measureText: () => ({ width: 0 }),
+    })),
+    configurable: true,
+  });
+});
+
 const createProps = (overrides: any = {}) => ({
   filters: {}, // is in typing but not being used
   editMode: false,
@@ -307,6 +317,74 @@ test('Should render title', () => {
     initialState,
   });
   expect(screen.getByText('Vaccine Candidates per Phase')).toBeInTheDocument();
+});
+
+test('Should render a dedicated auto title row without replacing the saved title', () => {
+  const props = createProps({
+    formData: {
+      ...createProps().formData,
+      auto_title: true,
+      metrics: ['Under 5 Cases'],
+      time_range: '2026-Q1',
+    },
+  });
+
+  render(<SliceHeader {...props} />, {
+    useRedux: true,
+    useRouter: true,
+    initialState,
+  });
+
+  expect(screen.getByTestId('chart-auto-title')).toHaveTextContent(
+    'Under 5 Cases · 2026-Q1',
+  );
+  expect(screen.getByText('Vaccine Candidates per Phase')).toBeInTheDocument();
+});
+
+test('Should use filter context in the auto title and hide the duplicate context row', () => {
+  const props = createProps({
+    formData: {
+      ...createProps().formData,
+      auto_title: true,
+      metrics: ['Confirmed Cases'],
+    },
+  });
+  const filterState = {
+    ...initialState,
+    nativeFilters: {
+      filters: {
+        orgUnitFilter: {
+          id: 'orgUnitFilter',
+          chartsInScope: [MOCKED_CHART_ID],
+          targets: [{ column: { name: 'org_unit_name' } }],
+        },
+        periodFilter: {
+          id: 'periodFilter',
+          chartsInScope: [MOCKED_CHART_ID],
+          targets: [{ column: { name: 'period' } }],
+        },
+      },
+    },
+    dataMask: {
+      orgUnitFilter: {
+        filterState: { label: 'Kampala' },
+      },
+      periodFilter: {
+        filterState: { label: '2026-Q2' },
+      },
+    },
+  };
+
+  render(<SliceHeader {...props} />, {
+    useRedux: true,
+    useRouter: true,
+    initialState: filterState,
+  });
+
+  expect(screen.getByTestId('chart-auto-title')).toHaveTextContent(
+    'Kampala · 2026-Q2 · Confirmed Cases',
+  );
+  expect(document.querySelector('.chart-filter-context')).not.toBeInTheDocument();
 });
 
 test('Should render click to edit prompt and run onExploreChart on click', async () => {
@@ -591,7 +669,9 @@ test('Should render RowCountLabel when row limit is hit, and hide it otherwise',
     initialState: rowCountState,
   });
 
-  expect(screen.getByTestId('warning')).toBeInTheDocument();
+  expect(
+    document.querySelector('[aria-describedby="tt-rowcount-tooltip"]'),
+  ).toBeInTheDocument();
   rerender(
     <SliceHeader
       {...props}
@@ -599,7 +679,9 @@ test('Should render RowCountLabel when row limit is hit, and hide it otherwise',
     />,
   );
 
-  expect(screen.queryByTestId('warning')).not.toBeInTheDocument();
+  expect(
+    document.querySelector('[aria-describedby="tt-rowcount-tooltip"]'),
+  ).not.toBeInTheDocument();
 });
 
 test('Should hide RowCountLabel in embedded by default', () => {
@@ -631,7 +713,9 @@ test('Should hide RowCountLabel in embedded by default', () => {
     initialState: rowCountState,
   });
 
-  expect(screen.queryByTestId('warning')).not.toBeInTheDocument();
+  expect(
+    document.querySelector('[aria-describedby="tt-rowcount-tooltip"]'),
+  ).not.toBeInTheDocument();
 
   mockIsEmbedded.mockRestore();
 });
@@ -677,7 +761,9 @@ test('Should show RowCountLabel in embedded when uiConfig.showRowLimitWarning is
     initialState: rowCountState,
   });
 
-  expect(screen.getByTestId('warning')).toBeInTheDocument();
+  expect(
+    document.querySelector('[aria-describedby="tt-rowcount-tooltip"]'),
+  ).toBeInTheDocument();
 
   mockIsEmbedded.mockRestore();
   mockUseUiConfig.mockRestore();

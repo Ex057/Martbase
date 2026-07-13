@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+import { ChartProps } from '@superset-ui/core';
 import transformProps from './transformProps';
 
 describe('DHIS2Map transformProps', () => {
@@ -849,5 +850,349 @@ describe('DHIS2Map transformProps', () => {
     const result = transformProps(chartProps);
 
     expect(result.chartBackgroundColor).toBe('rgba(242,235,235,0)');
+  });
+
+  test('auto subtitle builds from org unit + period when enabled', () => {
+    const chartProps = {
+      width: 800,
+      height: 600,
+      formData: {
+        metric: 'c_cases',
+        org_unit_column: 'region',
+        boundary_levels: [2],
+        chart_auto_subtitle: true,
+        chart_subtitle: 'manual text',
+      },
+      queriesData: [
+        { data: [{ region: 'Acholi', period: '202401', c_cases: 10 }] },
+      ],
+      datasource: {
+        id: 4,
+        database: { id: 3 },
+        columns: [
+          { column_name: 'region' },
+          {
+            column_name: 'period',
+            extra: JSON.stringify({ dhis2_is_period: true }),
+          },
+        ],
+      },
+      hooks: {},
+      filterState: {},
+    } as any;
+
+    const result = transformProps(chartProps);
+
+    expect(result.chartSubtitle).toContain('Acholi');
+    expect(result.chartSubtitle).toContain('2024');
+  });
+
+  test('auto subtitle summarises many areas and shows a period range', () => {
+    const chartProps = {
+      width: 800,
+      height: 600,
+      formData: {
+        metric: 'c_cases',
+        org_unit_column: 'region',
+        boundary_levels: [2],
+        chart_auto_subtitle: true,
+      },
+      queriesData: [
+        {
+          data: [
+            { region: 'Acholi', period: '202401', c_cases: 1 },
+            { region: 'Lango', period: '202402', c_cases: 1 },
+            { region: 'Teso', period: '202406', c_cases: 1 },
+          ],
+        },
+      ],
+      datasource: {
+        id: 4,
+        database: { id: 3 },
+        columns: [
+          { column_name: 'region' },
+          {
+            column_name: 'period',
+            extra: JSON.stringify({ dhis2_is_period: true }),
+          },
+        ],
+      },
+      hooks: {},
+      filterState: {},
+    } as any;
+
+    const result = transformProps(chartProps);
+
+    // Many areas read as a boundary level (no raw count)…
+    expect(result.chartSubtitle).not.toContain('3 ');
+    // …and the periods collapse to an earliest – latest range.
+    expect(result.chartSubtitle).toContain('–');
+    expect(result.chartSubtitle).toContain('2024');
+  });
+
+  const subtitleChartProps = (columnFilters: any[], extraColumns: any[] = []) =>
+    ({
+      width: 800,
+      height: 600,
+      formData: {
+        metric: 'c_cases',
+        org_unit_column: 'region',
+        boundary_levels: [2],
+        chart_auto_subtitle: true,
+        dhis2_column_filters: columnFilters,
+      },
+      queriesData: [
+        {
+          data: [
+            { region: 'Acholi', period: '2024Q1', c_cases: 1 },
+            { region: 'Lango', period: '2024Q4', c_cases: 1 },
+          ],
+        },
+      ],
+      datasource: {
+        id: 4,
+        database: { id: 3 },
+        columns: [
+          { column_name: 'region' },
+          {
+            column_name: 'period',
+            extra: JSON.stringify({ dhis2_is_period: true }),
+          },
+          ...extraColumns,
+        ],
+      },
+      hooks: {},
+      filterState: {},
+    }) as any;
+
+  test('auto subtitle reads the filters through a real ChartProps', () => {
+    // ChartProps camelCases formData keys, so at runtime the control arrives as
+    // `dhis2ColumnFilters`. Building chartProps by hand skips that conversion
+    // and hides the bug — go through the real class.
+    const chartProps = new ChartProps({
+      width: 800,
+      height: 600,
+      formData: {
+        metric: 'c_cases',
+        org_unit_column: 'region',
+        boundary_levels: [2],
+        chart_auto_subtitle: true,
+        dhis2_column_filters: [
+          { column: 'period', values: ['REL::LAST_12_MONTHS'] },
+          { column: 'region', values: ['Bukedi', 'Busoga', 'Karamoja'] },
+        ],
+      } as any,
+      queriesData: [
+        {
+          // Aggregated: no period column in the results, as the real map query.
+          data: [
+            { region: 'Bukedi', c_cases: 1 },
+            { region: 'Busoga', c_cases: 2 },
+          ],
+        },
+      ],
+      datasource: {
+        id: 4,
+        columns: [
+          { column_name: 'region', verbose_name: 'Region' },
+          {
+            column_name: 'period',
+            extra: JSON.stringify({ dhis2_is_period: true }),
+          },
+        ],
+      } as any,
+      hooks: {},
+      filterState: {},
+      theme: {} as any,
+    });
+
+    const result = transformProps(chartProps as any);
+
+    expect(result.chartSubtitle).toContain('Last 12 months');
+    expect(result.chartSubtitle).toContain('Region: Bukedi, Busoga, Karamoja');
+  });
+
+  test('auto subtitle describes non-period filters when no period filter exists', () => {
+    // The Data Filters control holds arbitrary columns; a period filter is
+    // optional. The period segment then comes from the data.
+    const result = transformProps(
+      subtitleChartProps(
+        [{ column: 'dx_name', values: ['NDVI'] }],
+        [{ column_name: 'dx_name', verbose_name: 'Data element' }],
+      ),
+    );
+
+    expect(result.chartSubtitle).toContain('Data element: NDVI');
+    // Period comes from the rows, and sorts ahead of the other filters.
+    expect(result.chartSubtitle).toMatch(/2024.*Data element/);
+  });
+
+  test('auto subtitle does not mistake a non-period filter for a period', () => {
+    // "2024" looks like a DHIS2 yearly code, but `region` is not a period column
+    // and the datasource does declare one, so it must stay a labelled filter.
+    const result = transformProps(
+      subtitleChartProps([{ column: 'region', values: ['2024'] }]),
+    );
+
+    expect(result.chartSubtitle).toContain('region: 2024');
+  });
+
+  test('auto subtitle finds the period filter when the query aggregated the period column away', () => {
+    // An aggregated map query groups `period` out of the result set, so the
+    // column only exists on the datasource. Detection must not depend on it
+    // coming back in the rows, nor on the filter values being recognisable as
+    // period codes.
+    const chartProps = subtitleChartProps([
+      { column: 'period', values: ['whatever-the-backend-stores'] },
+    ]);
+    chartProps.queriesData = [
+      {
+        data: [
+          { region: 'Acholi', c_cases: 1 },
+          { region: 'Lango', c_cases: 1 },
+        ],
+      },
+    ];
+
+    const result = transformProps(chartProps);
+
+    expect(result.chartSubtitle).toContain('whatever-the-backend-stores');
+  });
+
+  test('auto subtitle shows the relative period label, not the metric', () => {
+    const result = transformProps(
+      subtitleChartProps([
+        {
+          column: 'period',
+          values: ['2024Q1', '2024Q2', '2024Q3', '2024Q4'],
+          relativeLabel: 'Last 4 quarters',
+        },
+      ]),
+    );
+
+    // The relative label is shown verbatim rather than a list of quarters…
+    expect(result.chartSubtitle).toContain('Last 4 quarters');
+    // …and the metric is no longer appended.
+    expect(result.chartSubtitle).not.toContain('c_cases');
+  });
+
+  test('auto subtitle renders a stored relative token as its label', () => {
+    const result = transformProps(
+      // No `relativeLabel` — the label must come from the token itself.
+      subtitleChartProps([{ column: 'period', values: ['REL::LAST_QUARTER'] }]),
+    );
+
+    expect(result.chartSubtitle).toContain('Last quarter');
+    expect(result.chartSubtitle).not.toContain('REL::');
+  });
+
+  test('auto subtitle names a relative token AND any extra fixed periods', () => {
+    const result = transformProps(
+      subtitleChartProps([
+        { column: 'period', values: ['REL::LAST_QUARTER', '202401'] },
+      ]),
+    );
+
+    // The query filters on both, so the subtitle must mention both.
+    expect(result.chartSubtitle).toContain('Last quarter');
+    expect(result.chartSubtitle).toContain('January 2024');
+  });
+
+  test('auto subtitle falls back to periods present in the data', () => {
+    const result = transformProps(subtitleChartProps([]));
+
+    expect(result.chartSubtitle).toContain('2024');
+  });
+
+  test('auto subtitle appends non-period filters, truncating long lists', () => {
+    const result = transformProps(
+      subtitleChartProps(
+        [
+          { column: 'period', values: ['REL::LAST_QUARTER'] },
+          {
+            column: 'dx_name',
+            values: ['NDVI', 'Heat stress', 'Precipitation', 'Humidity', 'EVI'],
+          },
+        ],
+        [{ column_name: 'dx_name', verbose_name: 'Data element' }],
+      ),
+    );
+
+    expect(result.chartSubtitle).toContain(
+      'Data element: NDVI, Heat stress, Precipitation +2 more',
+    );
+  });
+
+  test('auto subtitle labels a non-period filter with its column name', () => {
+    const result = transformProps(
+      subtitleChartProps(
+        [
+          { column: 'period', values: ['REL::LAST_QUARTER'] },
+          { column: 'dx_name', values: ['NDVI'] },
+        ],
+        [{ column_name: 'dx_name' }],
+      ),
+    );
+
+    expect(result.chartSubtitle).toContain('dx_name: NDVI');
+  });
+
+  test('auto subtitle detects an unflagged period column from data values', () => {
+    const chartProps = {
+      width: 800,
+      height: 600,
+      formData: {
+        metric: 'c_cases',
+        org_unit_column: 'region',
+        boundary_levels: [2],
+        chart_auto_subtitle: true,
+      },
+      queriesData: [
+        {
+          data: [
+            { region: 'Acholi', pe: '202401', c_cases: 10 },
+            { region: 'Lango', pe: '202406', c_cases: 12 },
+          ],
+        },
+      ],
+      // Note: the "pe" column is NOT flagged with dhis2_is_period.
+      datasource: {
+        id: 4,
+        database: { id: 3 },
+        columns: [{ column_name: 'region' }, { column_name: 'pe' }],
+      },
+      hooks: {},
+      filterState: {},
+    } as any;
+
+    const result = transformProps(chartProps);
+
+    // Period is still shown (detected from the 202401 / 202406 values).
+    expect(result.chartSubtitle).toContain('2024');
+    expect(result.chartSubtitle).toContain('–');
+  });
+
+  test('auto subtitle off falls back to the manual subtitle', () => {
+    const chartProps = {
+      width: 800,
+      height: 600,
+      formData: {
+        metric: 'c_cases',
+        org_unit_column: 'region',
+        boundary_levels: [2],
+        chart_auto_subtitle: false,
+        chart_subtitle: 'manual text',
+      },
+      queriesData: [
+        { data: [{ region: 'Acholi', period: '202401', c_cases: 10 }] },
+      ],
+      datasource: { id: 4, database: { id: 3 }, columns: [] },
+      hooks: {},
+      filterState: {},
+    } as any;
+
+    const result = transformProps(chartProps);
+
+    expect(result.chartSubtitle).toBe('manual text');
   });
 });

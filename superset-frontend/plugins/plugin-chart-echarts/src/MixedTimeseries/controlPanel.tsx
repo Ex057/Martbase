@@ -35,6 +35,7 @@ import {
 import { DEFAULT_FORM_DATA } from './types';
 import { EchartsTimeseriesSeriesType } from '../Timeseries/types';
 import {
+  chartTitleSection,
   legendSection,
   minorTicks,
   richTooltipSection,
@@ -338,6 +339,7 @@ const config: ControlPanelConfig = {
       expanded: true,
       controlSetRows: [['x_axis'], ['time_grain_sqla']],
     },
+    chartTitleSection,
     createQuerySection(t('Query A'), ''),
     createAdvancedAnalyticsSection(t('Advanced analytics Query A'), ''),
     createQuerySection(t('Query B'), '_b'),

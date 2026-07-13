@@ -97,6 +97,11 @@ export type EchartsTimeseriesFormData = QueryFormData & {
   showExtraControls: boolean;
   percentageThreshold: number;
   orientation?: OrientationType;
+  chartTitle?: string;
+  chartSubtitle?: string;
+  chartTitleAlign?: 'left' | 'center';
+  chartTitleColor?: { r: number; g: number; b: number; a?: number };
+  chartSubtitleColor?: { r: number; g: number; b: number; a?: number };
 } & LegendFormData &
   TitleFormData;
 

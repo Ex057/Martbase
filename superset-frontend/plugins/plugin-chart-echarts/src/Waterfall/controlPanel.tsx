@@ -25,7 +25,7 @@ import {
   formatSelectOptions,
   sharedControls,
 } from '@superset-ui/chart-controls';
-import { showValueControl } from '../controls';
+import { chartTitleSection, showValueControl } from '../controls';
 
 const config: ControlPanelConfig = {
   controlPanelSections: [
@@ -41,6 +41,7 @@ const config: ControlPanelConfig = {
         ['row_limit'],
       ],
     },
+    chartTitleSection,
     {
       label: t('Chart Options'),
       expanded: true,

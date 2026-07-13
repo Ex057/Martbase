@@ -42,6 +42,7 @@ import {
   xAxisLabelRotation,
   xAxisLabelInterval,
   forceMaxInterval,
+  chartTitleSection,
 } from '../../../controls';
 
 const {
@@ -57,6 +58,7 @@ const config: ControlPanelConfig = {
   controlPanelSections: [
     sections.echartsTimeSeriesQueryWithXAxisSort,
     sections.advancedAnalyticsControls,
+    chartTitleSection,
     sections.annotationsAndLayersControls,
     sections.forecastIntervalControls,
     sections.titleControls,

@@ -109,6 +109,65 @@ class DatabaseCatalogSchema(NamedTuple):
     schema: str
 
 
+class CustomRoleSpec(NamedTuple):
+    name: str
+    base_role: str
+    grant: tuple[tuple[str, str], ...] = ()
+    revoke: tuple[tuple[str, str], ...] = ()
+
+
+PRODUCTION_CUSTOM_ROLE_SPECS: tuple[CustomRoleSpec, ...] = (
+    CustomRoleSpec(
+        name="Data Management",
+        base_role="Alpha",
+        grant=(
+            ("can_list", "AIManagement"),
+            ("can_read", "AIManagement"),
+            ("can_write", "AIManagement"),
+            ("can_list", "DHIS2AdminView"),
+        ),
+    ),
+    CustomRoleSpec(
+        name="Analytics",
+        base_role="Alpha",
+        grant=(
+            ("can_list", "AIManagement"),
+            ("can_read", "AIManagement"),
+            ("can_write", "AIManagement"),
+        ),
+        revoke=(
+            ("can_list", "DHIS2AdminView"),
+        ),
+    ),
+    CustomRoleSpec(
+        name="End user",
+        base_role="Gamma",
+        revoke=(
+            ("can_list", "AIManagement"),
+            ("can_read", "AIManagement"),
+            ("can_write", "AIManagement"),
+            ("can_list", "DHIS2AdminView"),
+            ("can_list", "DatabaseView"),
+            ("can_list", "TableModelView"),
+            ("can_sqllab", "Superset"),
+            ("can_sqllab_history", "Superset"),
+            ("cms.pages.view", "CMS"),
+            ("cms.pages.create", "CMS"),
+            ("cms.pages.edit", "CMS"),
+            ("cms.pages.delete", "CMS"),
+            ("cms.pages.publish", "CMS"),
+            ("cms.media.manage", "CMS"),
+            ("cms.menus.manage", "CMS"),
+            ("cms.charts.embed", "CMS"),
+            ("cms.layout.manage", "CMS"),
+            ("cms.themes.manage", "CMS"),
+            ("cms.templates.manage", "CMS"),
+            ("cms.styles.manage", "CMS"),
+        ),
+    ),
+)
+
+
 class SupersetSecurityListWidget(ListWidget):  # pylint: disable=too-few-public-methods
     """
     Redeclaring to avoid circular imports
@@ -1204,6 +1263,7 @@ class SupersetSecurityManager(  # pylint: disable=too-many-public-methods
         self.set_role("Alpha", self._is_alpha_pvm, pvms)
         self.set_role("Gamma", self._is_gamma_pvm, pvms)
         self.set_role("sql_lab", self._is_sql_lab_pvm, pvms)
+        self.sync_custom_production_roles()
 
         # Configure public role
         if get_conf()["PUBLIC_ROLE_LIKE"]:
@@ -1214,6 +1274,31 @@ class SupersetSecurityManager(  # pylint: disable=too-many-public-methods
             )
         self.create_missing_perms()
         self.clean_perms()
+
+    def sync_custom_production_roles(self) -> None:
+        """Create or update repo-defined production roles."""
+        for role_spec in PRODUCTION_CUSTOM_ROLE_SPECS:
+            logger.info("Syncing custom production role %s", role_spec.name)
+            self.copy_role(role_spec.base_role, role_spec.name, merge=False)
+            role = self.find_role(role_spec.name)
+            if role is None:
+                continue
+
+            permission_map = {
+                (pvm.permission.name, pvm.view_menu.name): pvm
+                for pvm in role.permissions
+                if pvm.permission and pvm.view_menu
+            }
+
+            for permission_name, view_menu_name in role_spec.grant:
+                pvm = self.find_permission_view_menu(permission_name, view_menu_name)
+                if pvm is not None:
+                    permission_map[(permission_name, view_menu_name)] = pvm
+
+            for permission_name, view_menu_name in role_spec.revoke:
+                permission_map.pop((permission_name, view_menu_name), None)
+
+            role.permissions = list(permission_map.values())
 
     def _get_all_pvms(self) -> list[PermissionView]:
         """

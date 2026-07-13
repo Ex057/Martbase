@@ -21,6 +21,7 @@
 import { CSSProperties, useMemo, useRef, useState } from 'react';
 import { SafeMarkdown } from '@superset-ui/core/components';
 import { sanitizeHtml, styled, t } from '@superset-ui/core';
+import { formatDHIS2Period } from '@superset-ui/core/utils/dhis2Period';
 import { Button, Dropdown, Empty, Tag } from 'antd';
 import type { MenuProps } from 'antd';
 import DashboardPage from 'src/dashboard/containers/DashboardPage';
@@ -1152,6 +1153,86 @@ function isGenericChartTitle(title: string, chartName?: string | null) {
   return Boolean(
     normalizedChartName && normalizedTitle === normalizedChartName,
   );
+}
+
+function chartFormDataFromUrl(url?: string | null): Record<string, any> {
+  if (!url) {
+    return {};
+  }
+  try {
+    const parsed = new URL(
+      url,
+      typeof window !== 'undefined' && window.location?.origin
+        ? window.location.origin
+        : 'http://localhost',
+    );
+    const rawFormData = parsed.searchParams.get('form_data');
+    if (!rawFormData) {
+      return {};
+    }
+    const formData = JSON.parse(rawFormData);
+    return formData && typeof formData === 'object' ? formData : {};
+  } catch {
+    return {};
+  }
+}
+
+function summarizeMetricLabel(formData: Record<string, any>): string {
+  const metrics = Array.isArray(formData.metrics)
+    ? formData.metrics.filter(Boolean)
+    : [];
+  const metric = metrics[0] || formData.metric;
+  if (!metric) {
+    return '';
+  }
+  if (typeof metric === 'string') {
+    return metric.trim();
+  }
+  if (typeof metric === 'object') {
+    return (
+      String(
+        metric.label ||
+          metric.metric_name ||
+          metric.column?.label ||
+          metric.column?.column_name ||
+          '',
+      ).trim() || ''
+    );
+  }
+  return '';
+}
+
+function generatedChartTitleFromFormData(
+  chartName: string,
+  formData: Record<string, any>,
+): string {
+  const orgUnit = String(
+    formData.entity_name ||
+      formData.org_unit_name ||
+      formData.district_city ||
+      '',
+  ).trim();
+
+  // Format period values using DHIS2 period formatter
+  let period = '';
+  if (Array.isArray(formData.dhis2_period_filter_values)) {
+    period = formData.dhis2_period_filter_values
+      .map((p: string) => formatDHIS2Period(p) || p)
+      .join(', ')
+      .trim();
+  } else {
+    const periodValue = formData.dhis2_period_label || formData.time_range || '';
+    period = formatDHIS2Period(String(periodValue)) || String(periodValue).trim();
+  }
+
+  const metric = summarizeMetricLabel(formData);
+  const segments = [orgUnit, period].filter(Boolean);
+  if (metric && segments.length < 2) {
+    segments.unshift(metric);
+  } else if (metric && segments.length >= 2) {
+    segments.push(metric);
+  }
+  return segments.join(' · ').trim() || chartName;
 }
 
 function contentFieldHtml(block: PortalPageBlock, field: string) {
@@ -2848,6 +2929,8 @@ export function RenderBlockTree({
         );
       case 'chart': {
         const chart = lookupChart(block, charts);
+        const chartFormData = chartFormDataFromUrl(chart?.url);
+        const chartAutoTitleEnabled = Boolean(chartFormData.auto_title);
         const chartTopGap = normalizedSpacingOffset(
           block.settings?.sectionTopGap ?? block.settings?.section_top_gap,
           '--portal-block-gap',
@@ -2879,7 +2962,17 @@ export function RenderBlockTree({
             : 'default';
         const legendPreset = explicitLegendPreset;
         const borderlessContainer = surfacePreset !== 'default';
-        const headerTitleText = meaningfulTextValue(title, titleHtml);
+        const generatedChartTitle =
+          chart && chartAutoTitleEnabled
+            ? generatedChartTitleFromFormData(chart.slice_name, chartFormData)
+            : '';
+        const hasExplicitCustomTitle = !isGenericChartTitle(
+          meaningfulTextValue(title, titleHtml),
+          chart?.slice_name,
+        );
+        const headerTitleText = hasExplicitCustomTitle
+          ? meaningfulTextValue(title, titleHtml)
+          : generatedChartTitle || meaningfulTextValue(title, titleHtml);
         const headerCaptionText = meaningfulTextValue(
           block.content?.caption,
           captionHtml,
@@ -2888,7 +2981,8 @@ export function RenderBlockTree({
           (block.settings?.show_header ?? true) &&
           (headerCaptionText ||
             (headerTitleText &&
-              (!chartIsMapLike ||
+              (chartAutoTitleEnabled ||
+                !chartIsMapLike ||
                 !isGenericChartTitle(headerTitleText, chart?.slice_name))));
         const mapOpacityOverride = Number(block.settings?.mapOpacity);
         const hasExplicitMapOpacityOverride =
@@ -2939,7 +3033,9 @@ export function RenderBlockTree({
               >
                 {headerTitleText ? (
                   <CardTitle>
-                    {renderInlineRichContent(titleHtml, title)}
+                    {hasExplicitCustomTitle
+                      ? renderInlineRichContent(titleHtml, title)
+                      : headerTitleText}
                   </CardTitle>
                 ) : null}
                 {headerCaptionText ? (

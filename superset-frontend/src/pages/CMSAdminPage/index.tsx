@@ -28,23 +28,19 @@ import {
 import {
   AppstoreOutlined,
   ArrowLeftOutlined,
-  BgColorsOutlined,
   CopyOutlined,
   DeleteOutlined,
   EyeOutlined,
   FileImageOutlined,
   FileTextOutlined,
   FilterOutlined,
-  FundProjectionScreenOutlined,
   GlobalOutlined,
   LayoutOutlined,
-  MenuOutlined,
   PlusOutlined,
   RocketOutlined,
   SaveOutlined,
   SearchOutlined,
   SettingOutlined,
-  SkinOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons';
 import {
@@ -100,7 +96,8 @@ type AdminTab =
   | 'portal'
   | 'themes'
   | 'templates'
-  | 'styles';
+  | 'styles'
+  | 'settings';
 
 const PAGE_QUERY_PARAM = 'page';
 const TAB_QUERY_PARAM = 'tab';
@@ -742,6 +739,92 @@ function serializeMenuItems(
   }));
 }
 
+function normalizePortalLayoutConfig(config?: Record<string, any> | null): Record<string, any> {
+  const appearance = (config?.appearance as Record<string, any> | undefined) || {};
+  const branding = (appearance.branding as Record<string, any> | undefined) || {};
+  const typography =
+    (appearance.typography as Record<string, any> | undefined) || {};
+  const surfaces = (appearance.surfaces as Record<string, any> | undefined) || {};
+  const links = (appearance.links as Record<string, any> | undefined) || {};
+
+  return {
+    ...(config || {}),
+    authenticatedHomeDashboardId: config?.authenticatedHomeDashboardId || null,
+    authenticatedHomeDashboardPath: config?.authenticatedHomeDashboardPath || '',
+    authenticatedHomeMode: config?.authenticatedHomeMode || 'welcome',
+    authenticatedHomeRoleDashboardPaths: config?.authenticatedHomeRoleDashboardPaths || {},
+    accentColor: config?.accentColor || branding.accentColor || '',
+    secondaryColor: config?.secondaryColor || branding.secondaryColor || '',
+    surfaceColor: config?.surfaceColor || branding.surfaceColor || '',
+    cardBackground: config?.cardBackground || branding.cardBackground || '',
+    cardBorderColor: config?.cardBorderColor || branding.cardBorderColor || '',
+    strongBorderColor:
+      config?.strongBorderColor || branding.strongBorderColor || '',
+    heroBackground: config?.heroBackground || branding.heroBackground || '',
+    bodyFontFamily: config?.bodyFontFamily || typography.bodyFontFamily || '',
+    headingFontFamily:
+      config?.headingFontFamily || typography.headingFontFamily || '',
+    baseFontSize: config?.baseFontSize || typography.baseFontSize || '',
+    heroTitleSize: config?.heroTitleSize || typography.heroTitleSize || '',
+    sectionTitleSize:
+      config?.sectionTitleSize || typography.sectionTitleSize || '',
+    cardTitleSize: config?.cardTitleSize || typography.cardTitleSize || '',
+    radiusMd: config?.radiusMd || surfaces.radiusMd || '',
+    radiusLg: config?.radiusLg || surfaces.radiusLg || '',
+    blockGap: config?.blockGap || surfaces.blockGap || '',
+    sectionGap: config?.sectionGap || surfaces.sectionGap || '',
+    cardPadding: config?.cardPadding || surfaces.cardPadding || '',
+    heroPadding: config?.heroPadding || surfaces.heroPadding || '',
+    shadowCard: config?.shadowCard || surfaces.shadowCard || '',
+    surfaceBackdropFilter:
+      config?.surfaceBackdropFilter || surfaces.surfaceBackdropFilter || '',
+    heroOverlayRgb: config?.heroOverlayRgb || surfaces.heroOverlayRgb || '',
+    pageMaxWidth: config?.pageMaxWidth || surfaces.pageMaxWidth || '',
+    linkDecoration: config?.linkDecoration || links.linkDecoration || '',
+    linkHoverDecoration:
+      config?.linkHoverDecoration || links.linkHoverDecoration || '',
+    appearance,
+  };
+}
+
+function buildPortalAppearanceConfig(layout: Record<string, any>) {
+  return {
+    branding: {
+      accentColor: layout.accentColor || '',
+      secondaryColor: layout.secondaryColor || '',
+      surfaceColor: layout.surfaceColor || '',
+      cardBackground: layout.cardBackground || '',
+      cardBorderColor: layout.cardBorderColor || '',
+      strongBorderColor: layout.strongBorderColor || '',
+      heroBackground: layout.heroBackground || '',
+    },
+    typography: {
+      bodyFontFamily: layout.bodyFontFamily || '',
+      headingFontFamily: layout.headingFontFamily || '',
+      baseFontSize: layout.baseFontSize || '',
+      heroTitleSize: layout.heroTitleSize || '',
+      sectionTitleSize: layout.sectionTitleSize || '',
+      cardTitleSize: layout.cardTitleSize || '',
+    },
+    surfaces: {
+      radiusMd: layout.radiusMd || '',
+      radiusLg: layout.radiusLg || '',
+      blockGap: layout.blockGap || '',
+      sectionGap: layout.sectionGap || '',
+      cardPadding: layout.cardPadding || '',
+      heroPadding: layout.heroPadding || '',
+      shadowCard: layout.shadowCard || '',
+      surfaceBackdropFilter: layout.surfaceBackdropFilter || '',
+      heroOverlayRgb: layout.heroOverlayRgb || '',
+      pageMaxWidth: Number(layout.pageMaxWidth) || 1280,
+    },
+    links: {
+      linkDecoration: layout.linkDecoration || '',
+      linkHoverDecoration: layout.linkHoverDecoration || '',
+    },
+  };
+}
+
 function appendChildAtPath(
   items: PortalNavigationItem[],
   path: number[],
@@ -750,6 +833,65 @@ function appendChildAtPath(
     ...item,
     children: [...(item.children || []), defaultMenuItem()],
   }));
+}
+
+function renderDynamicPagesGuide() {
+  return (
+    <Panel>
+      <PanelHeader>
+        <PanelTitle>{t('Dynamic Pages Guide')}</PanelTitle>
+      </PanelHeader>
+      <Stack>
+        <TinyMeta>
+          {t(
+            'Use this quick guide to create, style, preview, and publish your own portal pages without code changes.',
+          )}
+        </TinyMeta>
+        <SectionList>
+          <div>
+            <strong>{t('1. Start with Pages')}</strong>
+            <TinyMeta>
+              {t(
+                'Create a new page, define its title, slug, visibility, and publish state from the Pages workspace.',
+              )}
+            </TinyMeta>
+          </div>
+          <div>
+            <strong>{t('2. Build in Page Studio')}</strong>
+            <TinyMeta>
+              {t(
+                'Open Page Studio to arrange blocks, choose layouts, attach dashboards or charts, and tune content section by section.',
+              )}
+            </TinyMeta>
+          </div>
+          <div>
+            <strong>{t('3. Use Portal Settings for shared defaults')}</strong>
+            <TinyMeta>
+              {t(
+                'Set the beginner home dashboard, typography, colors, spacing, and other global defaults once so new pages inherit them.',
+              )}
+            </TinyMeta>
+          </div>
+          <div>
+            <strong>{t('4. Link pages from Menus')}</strong>
+            <TinyMeta>
+              {t(
+                'Add pages to the header or footer navigation so users can discover them quickly from the live portal.',
+              )}
+            </TinyMeta>
+          </div>
+          <div>
+            <strong>{t('5. Preview and publish carefully')}</strong>
+            <TinyMeta>
+              {t(
+                'Save drafts while iterating, preview public pages, and publish only after checking layout, links, and dashboard visibility.',
+              )}
+            </TinyMeta>
+          </div>
+        </SectionList>
+      </Stack>
+    </Panel>
+  );
 }
 
 export default function CMSAdminPage() {
@@ -827,6 +969,14 @@ export default function CMSAdminPage() {
     alt_text: '',
     caption: '',
   });
+  const authenticatedHomeDashboardOptions = useMemo(
+    () =>
+      (data?.dashboards || []).map(dashboard => ({
+        value: dashboard.id,
+        label: dashboard.dashboard_title,
+      })),
+    [data?.dashboards],
+  );
 
   async function loadBootstrap(pageSlug = requestedPageSlug) {
     if (!canViewCms) {
@@ -857,10 +1007,25 @@ export default function CMSAdminPage() {
       const payload = response.json?.result as PortalAdminPayload;
       setData(payload);
       setMenus(payload.menus);
-      setPortalLayout({
+      const nextLayout: Record<string, any> = normalizePortalLayoutConfig({
         title: payload.portal_layout.title,
         ...(payload.portal_layout.config || {}),
       });
+      if (
+        !nextLayout.authenticatedHomeDashboardId &&
+        nextLayout.authenticatedHomeDashboardPath
+      ) {
+        const matchingDashboard = (payload.dashboards || []).find(
+          (dashboard: any) =>
+            dashboard.url === nextLayout.authenticatedHomeDashboardPath ||
+            `/superset/dashboard/${dashboard.id}/` ===
+              nextLayout.authenticatedHomeDashboardPath,
+        );
+        if (matchingDashboard) {
+          nextLayout.authenticatedHomeDashboardId = matchingDashboard.id;
+        }
+      }
+      setPortalLayout(nextLayout);
       setDraftPage(
         payload.current_page
           ? sanitizePageMediaReferences(
@@ -1374,6 +1539,11 @@ export default function CMSAdminPage() {
 
   function savePortalLayout() {
     setSavingLayout(true);
+    const selectedHomeDashboard =
+      (data?.dashboards || []).find(
+        dashboard =>
+          dashboard.id === Number(portalLayout.authenticatedHomeDashboardId),
+      ) || null;
     SupersetClient.post({
       endpoint: '/api/v1/public_page/admin/layout',
       jsonPayload: {
@@ -1401,6 +1571,15 @@ export default function CMSAdminPage() {
           heroOverlayRgb: portalLayout.heroOverlayRgb || '',
           customCss: portalLayout.customCss || '',
           pageMaxWidth: Number(portalLayout.pageMaxWidth) || 1280,
+          bodyFontFamily: portalLayout.bodyFontFamily || '',
+          headingFontFamily: portalLayout.headingFontFamily || '',
+          baseFontSize: portalLayout.baseFontSize || '',
+          heroTitleSize: portalLayout.heroTitleSize || '',
+          sectionTitleSize: portalLayout.sectionTitleSize || '',
+          cardTitleSize: portalLayout.cardTitleSize || '',
+          linkDecoration: portalLayout.linkDecoration || '',
+          linkHoverDecoration: portalLayout.linkHoverDecoration || '',
+          appearance: buildPortalAppearanceConfig(portalLayout),
           showThemeToggle: portalLayout.showThemeToggle !== false,
           lightModeLabel: portalLayout.lightModeLabel || '',
           darkModeLabel: portalLayout.darkModeLabel || '',
@@ -1414,6 +1593,13 @@ export default function CMSAdminPage() {
           dashboardEmbedIntro: portalLayout.dashboardEmbedIntro || '',
           dashboardBackLabel: portalLayout.dashboardBackLabel || '',
           dashboardLoadingLabel: portalLayout.dashboardLoadingLabel || '',
+          authenticatedHomeMode:
+            portalLayout.authenticatedHomeMode || 'welcome',
+          authenticatedHomeDashboardId:
+            Number(portalLayout.authenticatedHomeDashboardId) || null,
+          authenticatedHomeDashboardPath:
+            selectedHomeDashboard?.url || '',
+          authenticatedHomeRoleDashboardPaths: {},
         },
       },
     })
@@ -2910,34 +3096,20 @@ export default function CMSAdminPage() {
     },
     {
       key: 'studio' as const,
-      label: t('Page Studio'),
+      label: t('Studio'),
       icon: <LayoutOutlined />,
     },
     {
       key: 'media' as const,
-      label: t('Media Library'),
+      label: t('Media'),
       icon: <FileImageOutlined />,
       hidden: !data?.permissions.can_manage_media,
     },
-    { key: 'menus' as const, label: t('Menus'), icon: <MenuOutlined /> },
-    { key: 'portal' as const, label: t('Portal'), icon: <SettingOutlined /> },
     {
-      key: 'themes' as const,
-      label: t('Themes'),
-      icon: <SkinOutlined />,
-      hidden: !data?.permissions.can_manage_themes,
-    },
-    {
-      key: 'templates' as const,
-      label: t('Templates'),
-      icon: <BgColorsOutlined />,
-      hidden: !data?.permissions.can_manage_templates,
-    },
-    {
-      key: 'styles' as const,
-      label: t('Styles'),
-      icon: <FundProjectionScreenOutlined />,
-      hidden: !data?.permissions.can_manage_styles,
+      key: 'settings' as const,
+      label: t('Settings'),
+      icon: <SettingOutlined />,
+      // Settings tab contains: Portal, Menus, Themes, Templates, Styles
     },
   ].filter(item => !item.hidden);
 
@@ -2945,6 +3117,7 @@ export default function CMSAdminPage() {
     if (requestedTab === 'overview') {
       return (
         <Stack>
+          {renderDynamicPagesGuide()}
           <StatsGrid>
             <StatCard>
               <StatValue>{data?.stats.total_pages || 0}</StatValue>
@@ -3021,6 +3194,7 @@ export default function CMSAdminPage() {
     if (requestedTab === 'studio') {
       return (
         <ContentStack>
+          {renderDynamicPagesGuide()}
           <BlockStudio
             draftPage={draftPage}
             pages={data?.pages || []}
@@ -3038,8 +3212,8 @@ export default function CMSAdminPage() {
             search={search}
             onSearchChange={setSearch}
             onNewPage={loadNewPage}
-            onSelectPage={pageSlug => openStudioPage(pageSlug)}
-            onChangeDraftPage={nextPage => {
+            onSelectPage={(pageSlug: string) => openStudioPage(pageSlug)}
+            onChangeDraftPage={(nextPage: PortalPage) => {
               setDraftPage(nextPage);
             }}
             onChangePortalLayout={setPortalLayout}
@@ -3388,7 +3562,7 @@ export default function CMSAdminPage() {
       );
     }
 
-    if (requestedTab === 'portal') {
+    if (requestedTab === 'settings' || requestedTab === 'portal') {
       return (
         <Panel>
           <Stack>
@@ -3485,6 +3659,196 @@ export default function CMSAdminPage() {
             </FieldGrid>
             <FieldGrid>
               <FieldBlock>
+                <FieldLabel>{t('Authenticated Home')}</FieldLabel>
+                <Select
+                  value={portalLayout.authenticatedHomeMode || 'welcome'}
+                  options={[
+                    { value: 'welcome', label: t('Default Welcome Page') },
+                    { value: 'dashboard', label: t('Redirect to Dashboard') },
+                  ]}
+                  onChange={value =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      authenticatedHomeMode: value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Beginner Home Dashboard')}</FieldLabel>
+                <Select
+                  value={
+                    portalLayout.authenticatedHomeDashboardId
+                      ? Number(portalLayout.authenticatedHomeDashboardId)
+                      : undefined
+                  }
+                  placeholder={t('Select a dashboard')}
+                  options={authenticatedHomeDashboardOptions}
+                  showSearch
+                  optionFilterProp="label"
+                  disabled={
+                    (portalLayout.authenticatedHomeMode || 'welcome') !==
+                    'dashboard'
+                  }
+                  onChange={value =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      authenticatedHomeDashboardId: value || null,
+                    }))
+                  }
+                />
+              </FieldBlock>
+            </FieldGrid>
+            {(portalLayout.authenticatedHomeMode || 'welcome') === 'dashboard' ? (
+              <>
+                <TinyMeta>
+                  {t(
+                    'Authenticated users will land on the selected dashboard after login when they have access to it. If they do not, the standard welcome page is used.',
+                  )}
+                </TinyMeta>
+                <PanelTitle style={{ marginTop: 16, marginBottom: 8 }}>
+                  {t('Role-Based Home Dashboards (Optional)')}
+                </PanelTitle>
+                <TinyMeta style={{ marginBottom: 12 }}>
+                  {t(
+                    'Configure specific home dashboards for different user roles. These override the general home dashboard for users with matching roles.',
+                  )}
+                </TinyMeta>
+                <FieldGrid>
+                  <FieldBlock>
+                    <FieldLabel>{t('End User Role Dashboard')}</FieldLabel>
+                    <Select
+                      value={
+                        portalLayout.authenticatedHomeRoleDashboardPaths?.['End user']
+                          ? data?.dashboards.find(
+                              d =>
+                                `/superset/dashboard/${d.id}/` ===
+                                portalLayout.authenticatedHomeRoleDashboardPaths?.[
+                                  'End user'
+                                ],
+                            )?.id
+                          : undefined
+                      }
+                      placeholder={t('Use general home dashboard')}
+                      options={authenticatedHomeDashboardOptions}
+                      showSearch
+                      optionFilterProp="label"
+                      allowClear
+                      onChange={value => {
+                        setPortalLayout(previous => ({
+                          ...previous,
+                          authenticatedHomeRoleDashboardPaths: {
+                            ...(previous.authenticatedHomeRoleDashboardPaths || {}),
+                            'End user': value ? `/superset/dashboard/${value}/` : '',
+                          },
+                        }));
+                      }}
+                    />
+                  </FieldBlock>
+                  <FieldBlock>
+                    <FieldLabel>{t('Analytics Role Dashboard')}</FieldLabel>
+                    <Select
+                      value={
+                        portalLayout.authenticatedHomeRoleDashboardPaths?.Analytics
+                          ? data?.dashboards.find(
+                              d =>
+                                `/superset/dashboard/${d.id}/` ===
+                                portalLayout.authenticatedHomeRoleDashboardPaths
+                                  ?.Analytics,
+                            )?.id
+                          : undefined
+                      }
+                      placeholder={t('Use general home dashboard')}
+                      options={authenticatedHomeDashboardOptions}
+                      showSearch
+                      optionFilterProp="label"
+                      allowClear
+                      onChange={value => {
+                        setPortalLayout(previous => ({
+                          ...previous,
+                          authenticatedHomeRoleDashboardPaths: {
+                            ...(previous.authenticatedHomeRoleDashboardPaths || {}),
+                            Analytics: value ? `/superset/dashboard/${value}/` : '',
+                          },
+                        }));
+                      }}
+                    />
+                  </FieldBlock>
+                </FieldGrid>
+                <FieldGrid>
+                  <FieldBlock>
+                    <FieldLabel>{t('Data Management Role Dashboard')}</FieldLabel>
+                    <Select
+                      value={
+                        portalLayout.authenticatedHomeRoleDashboardPaths?.[
+                          'Data Management'
+                        ]
+                          ? data?.dashboards.find(
+                              d =>
+                                `/superset/dashboard/${d.id}/` ===
+                                portalLayout.authenticatedHomeRoleDashboardPaths?.[
+                                  'Data Management'
+                                ],
+                            )?.id
+                          : undefined
+                      }
+                      placeholder={t('Use general home dashboard')}
+                      options={authenticatedHomeDashboardOptions}
+                      showSearch
+                      optionFilterProp="label"
+                      allowClear
+                      onChange={value => {
+                        setPortalLayout(previous => ({
+                          ...previous,
+                          authenticatedHomeRoleDashboardPaths: {
+                            ...(previous.authenticatedHomeRoleDashboardPaths || {}),
+                            'Data Management': value ? `/superset/dashboard/${value}/` : '',
+                          },
+                        }));
+                      }}
+                    />
+                  </FieldBlock>
+                  <FieldBlock>
+                    <FieldLabel>{t('Admin Role Dashboard')}</FieldLabel>
+                    <Select
+                      value={
+                        portalLayout.authenticatedHomeRoleDashboardPaths?.Admin
+                          ? data?.dashboards.find(
+                              d =>
+                                `/superset/dashboard/${d.id}/` ===
+                                portalLayout.authenticatedHomeRoleDashboardPaths?.Admin,
+                            )?.id
+                          : undefined
+                      }
+                      placeholder={t('Use general home dashboard')}
+                      options={authenticatedHomeDashboardOptions}
+                      showSearch
+                      optionFilterProp="label"
+                      allowClear
+                      onChange={value => {
+                        setPortalLayout(previous => ({
+                          ...previous,
+                          authenticatedHomeRoleDashboardPaths: {
+                            ...(previous.authenticatedHomeRoleDashboardPaths || {}),
+                            Admin: value ? `/superset/dashboard/${value}/` : '',
+                          },
+                        }));
+                      }}
+                    />
+                  </FieldBlock>
+                </FieldGrid>
+              </>
+            ) : null}
+            <PanelTitle style={{ marginTop: 16 }}>
+              {t('Appearance Settings')}
+            </PanelTitle>
+            <TinyMeta>
+              {t(
+                'These controls set the default visual language for public pages and authenticated portal views. Page Studio can still override them per page or block.',
+              )}
+            </TinyMeta>
+            <FieldGrid>
+              <FieldBlock>
                 <FieldLabel>{t('Accent Color')}</FieldLabel>
                 <Input
                   value={portalLayout.accentColor || ''}
@@ -3504,6 +3868,90 @@ export default function CMSAdminPage() {
                     setPortalLayout(previous => ({
                       ...previous,
                       secondaryColor: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+            </FieldGrid>
+            <FieldGrid>
+              <FieldBlock>
+                <FieldLabel>{t('Body Font Family')}</FieldLabel>
+                <Input
+                  value={portalLayout.bodyFontFamily || ''}
+                  placeholder="'Inter', 'Segoe UI', sans-serif"
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      bodyFontFamily: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Heading Font Family')}</FieldLabel>
+                <Input
+                  value={portalLayout.headingFontFamily || ''}
+                  placeholder="'Public Sans', 'Segoe UI', sans-serif"
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      headingFontFamily: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+            </FieldGrid>
+            <FieldGrid>
+              <FieldBlock>
+                <FieldLabel>{t('Base Font Size')}</FieldLabel>
+                <Input
+                  value={portalLayout.baseFontSize || ''}
+                  placeholder="16px"
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      baseFontSize: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Hero Title Size')}</FieldLabel>
+                <Input
+                  value={portalLayout.heroTitleSize || ''}
+                  placeholder="clamp(2.5rem, 5vw, 4rem)"
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      heroTitleSize: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+            </FieldGrid>
+            <FieldGrid>
+              <FieldBlock>
+                <FieldLabel>{t('Section Title Size')}</FieldLabel>
+                <Input
+                  value={portalLayout.sectionTitleSize || ''}
+                  placeholder="24px"
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      sectionTitleSize: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Card Title Size')}</FieldLabel>
+                <Input
+                  value={portalLayout.cardTitleSize || ''}
+                  placeholder="18px"
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      cardTitleSize: event.target.value,
                     }))
                   }
                 />
@@ -3556,6 +4004,40 @@ export default function CMSAdminPage() {
                     setPortalLayout(previous => ({
                       ...previous,
                       heroBackground: event.target.value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+            </FieldGrid>
+            <FieldGrid>
+              <FieldBlock>
+                <FieldLabel>{t('Link Decoration')}</FieldLabel>
+                <Select
+                  value={portalLayout.linkDecoration || 'none'}
+                  options={[
+                    { value: 'none', label: t('None') },
+                    { value: 'underline', label: t('Underline') },
+                  ]}
+                  onChange={value =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      linkDecoration: value,
+                    }))
+                  }
+                />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Link Hover Decoration')}</FieldLabel>
+                <Select
+                  value={portalLayout.linkHoverDecoration || 'underline'}
+                  options={[
+                    { value: 'underline', label: t('Underline') },
+                    { value: 'none', label: t('None') },
+                  ]}
+                  onChange={value =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      linkHoverDecoration: value,
                     }))
                   }
                 />
@@ -3896,6 +4378,7 @@ export default function CMSAdminPage() {
     themes: t('Themes'),
     templates: t('Templates'),
     styles: t('Styles'),
+    settings: t('Settings'),
   };
   const tabSubtitleMap: Record<AdminTab, string> = {
     overview: t(
@@ -3924,6 +4407,9 @@ export default function CMSAdminPage() {
     ),
     styles: t(
       'Control shared style bundles, CSS variables, and scoped presentation overrides.',
+    ),
+    settings: t(
+      'Configure portal settings, navigation menus, themes, templates, and style bundles.',
     ),
   };
   const adminActions =

@@ -27,6 +27,7 @@ import {
 
 import { DEFAULT_FORM_DATA } from './constants';
 import {
+  chartTitleSection,
   legendSection,
   truncateXAxis,
   xAxisBounds,
@@ -62,6 +63,7 @@ const config: ControlPanelConfig = {
         ['row_limit'],
       ],
     },
+    chartTitleSection,
     {
       label: t('Chart Options'),
       expanded: true,

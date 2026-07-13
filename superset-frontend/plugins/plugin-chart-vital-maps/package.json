@@ -13,8 +13,8 @@
   "peerDependencies": {
     "@superset-ui/core": "*",
     "@superset-ui/chart-controls": "*",
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0"
+    "react": "^17.0.0 || ^18.0.0",
+    "react-dom": "^17.0.0 || ^18.0.0"
   },
   "devDependencies": {
     "@types/lodash": "^4.14.200",

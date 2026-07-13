@@ -51,6 +51,7 @@ import { defaultGrid } from '../defaults';
 import { getPadding } from '../Timeseries/transformers';
 import { convertInteger } from '../utils/convertInteger';
 import { getTooltipLabels } from '../utils/tooltip';
+import { getChartTitleOption } from '../utils/chartTitle';
 import { Dimension, ELEMENT_HEIGHT_SCALE } from './constants';
 
 const renderItem: CustomSeriesRenderItem = (params, api) => {
@@ -351,7 +352,10 @@ export default function transformProps(chartProps: EchartsGanttChartProps) {
     [GenericDataType.Boolean]: undefined,
   };
 
+  const { title: chartTitleOption, topOffset: chartTitleTopOffset } =
+    getChartTitleOption(formData, theme, (chartProps.datasource as any)?.columns);
   const echartOptions: EChartsCoreOption = {
+    ...(chartTitleOption && { title: chartTitleOption }),
     useUTC: true,
     tooltip: {
       formatter: (params: CallbackDataParams) =>
@@ -384,6 +388,7 @@ export default function transformProps(chartProps: EchartsGanttChartProps) {
     grid: {
       ...defaultGrid,
       ...padding,
+      top: padding.top + chartTitleTopOffset,
     },
     dataZoom: zoomable && [
       {

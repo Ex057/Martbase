@@ -35,6 +35,7 @@ import { Refs } from '../types';
 import { parseAxisBound } from '../utils/controls';
 import { getDefaultTooltip } from '../utils/tooltip';
 import { getPadding } from '../Timeseries/transformers';
+import { getChartTitleOption } from '../utils/chartTitle';
 import { convertInteger } from '../utils/convertInteger';
 import { NULL_STRING } from '../constants';
 
@@ -189,7 +190,10 @@ export default function transformProps(chartProps: EchartsBubbleChartProps) {
   );
 
   const xAxisType = logXAxis ? AxisType.Log : AxisType.Value;
+  const { title: chartTitleOption, topOffset: chartTitleTopOffset } =
+    getChartTitleOption(formData, theme, (chartProps.datasource as any)?.columns);
   const echartOptions: EChartsCoreOption = {
+    ...(chartTitleOption && { title: chartTitleOption }),
     series,
     xAxis: {
       axisLabel: { formatter: xAxisFormatter },
@@ -250,7 +254,11 @@ export default function transformProps(chartProps: EchartsBubbleChartProps) {
           tooltipSizeFormatter,
         ),
     },
-    grid: { ...defaultGrid, ...padding },
+    grid: {
+      ...defaultGrid,
+      ...padding,
+      top: padding.top + chartTitleTopOffset,
+    },
   };
 
   const { onContextMenu, setDataMask = () => {} } = hooks;

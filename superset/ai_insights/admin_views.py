@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from urllib.parse import quote
 
-from flask import Blueprint, current_app, g, redirect, request
+from flask import Blueprint, current_app, g, redirect, request, abort
 from flask_appbuilder import BaseView, expose, has_access
 
 from superset.constants import MODEL_VIEW_RW_METHOD_PERMISSION_MAP
+from superset import security_manager
 from superset.superset_typing import FlaskResponse
 from superset.views.base import BaseSupersetView
 
@@ -31,6 +32,11 @@ ai_management_frontend_blueprint = Blueprint(
     __name__,
     url_prefix="/superset/ai-management",
 )
+ai_management_alias_blueprint = Blueprint(
+    "ai_management_alias_frontend",
+    __name__,
+    url_prefix="/ai-management",
+)
 
 
 def _render_authenticated_shell() -> FlaskResponse:
@@ -38,6 +44,11 @@ def _render_authenticated_shell() -> FlaskResponse:
     if user is None or getattr(user, "is_anonymous", True):
         next_target = quote(request.full_path.rstrip("?"))
         return redirect(f"/login/?next={next_target}")
+    if not (
+        security_manager.is_admin()
+        or security_manager.can_access("can_list", "AIManagement")
+    ):
+        abort(403)
     from superset.extensions import appbuilder
 
     view = BaseSupersetView()
@@ -47,4 +58,9 @@ def _render_authenticated_shell() -> FlaskResponse:
 
 @ai_management_frontend_blueprint.route("/")
 def ai_management() -> FlaskResponse:
+    return _render_authenticated_shell()
+
+
+@ai_management_alias_blueprint.route("/")
+def ai_management_alias() -> FlaskResponse:
     return _render_authenticated_shell()

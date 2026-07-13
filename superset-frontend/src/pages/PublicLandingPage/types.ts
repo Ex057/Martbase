@@ -54,6 +54,24 @@ export type PortalLayoutSettings = {
   dashboardEmbedIntro?: string;
   dashboardBackLabel?: string;
   dashboardLoadingLabel?: string;
+  authenticatedHomeDashboardId?: number | null;
+  bodyFontFamily?: string;
+  headingFontFamily?: string;
+  baseFontSize?: string;
+  heroTitleSize?: string;
+  sectionTitleSize?: string;
+  cardTitleSize?: string;
+  linkDecoration?: string;
+  linkHoverDecoration?: string;
+  appearance?: {
+    branding?: Record<string, any>;
+    typography?: Record<string, any>;
+    surfaces?: Record<string, any>;
+    links?: Record<string, any>;
+  };
+  authenticatedHomeMode?: 'welcome' | 'dashboard';
+  authenticatedHomeDashboardPath?: string;
+  authenticatedHomeRoleDashboardPaths?: Record<string, string>;
 };
 
 export type PortalUserRef = {

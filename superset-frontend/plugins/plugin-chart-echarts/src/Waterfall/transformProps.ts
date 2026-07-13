@@ -41,6 +41,7 @@ import { getDefaultTooltip } from '../utils/tooltip';
 import { defaultGrid, defaultYAxis } from '../defaults';
 import { ASSIST_MARK, LEGEND, TOKEN, TOTAL_MARK } from './constants';
 import { getColtypesMapping } from '../utils/series';
+import { getChartTitleOption } from '../utils/chartTitle';
 import { Refs } from '../types';
 import { NULL_STRING } from '../constants';
 
@@ -421,10 +422,13 @@ export default function transformProps(
     },
   ];
 
+  const { title: chartTitleOption, topOffset: chartTitleTopOffset } =
+    getChartTitleOption(formData, theme, (chartProps.datasource as any)?.columns);
   const echartOptions: EChartsOption = {
+    ...(chartTitleOption && { title: chartTitleOption }),
     grid: {
       ...defaultGrid,
-      top: theme.sizeUnit * 7,
+      top: theme.sizeUnit * 7 + chartTitleTopOffset,
       bottom: theme.sizeUnit * 7,
       left: theme.sizeUnit * 5,
       right: theme.sizeUnit * 7,

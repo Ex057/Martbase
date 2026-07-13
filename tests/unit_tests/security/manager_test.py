@@ -18,6 +18,7 @@
 # pylint: disable=invalid-name, unused-argument, redefined-outer-name
 
 import json  # noqa: TID251
+from unittest.mock import call, MagicMock
 
 import pytest
 from flask_appbuilder.security.sqla.models import Role, User
@@ -29,6 +30,7 @@ from superset.exceptions import SupersetSecurityException
 from superset.extensions import appbuilder
 from superset.models.slice import Slice
 from superset.security.manager import (
+    PRODUCTION_CUSTOM_ROLE_SPECS,
     query_context_modified,
     SupersetSecurityManager,
 )
@@ -232,6 +234,109 @@ def test_raise_for_access_guest_user_tampered_form_data_columns(
     }
     with pytest.raises(SupersetSecurityException):
         sm.raise_for_access(query_context=query_context)
+
+
+def test_sync_custom_production_roles_adds_expected_permissions(
+    mocker: MockerFixture,
+    app_context: None,
+) -> None:
+    sm = SupersetSecurityManager(appbuilder)
+
+    def make_pvm(permission_name: str, view_menu_name: str) -> MagicMock:
+        pvm = MagicMock()
+        pvm.permission.name = permission_name
+        pvm.view_menu.name = view_menu_name
+        return pvm
+
+    base_alpha_pvms = [
+        make_pvm("can_list", "DatabaseView"),
+        make_pvm("can_list", "TableModelView"),
+        make_pvm("can_list", "DHIS2AdminView"),
+    ]
+    base_gamma_pvms = [
+        make_pvm("can_read", "Dashboard"),
+        make_pvm("can_list", "DatabaseView"),
+        make_pvm("can_sqllab", "Superset"),
+    ]
+    ai_list = make_pvm("can_list", "AIManagement")
+    ai_read = make_pvm("can_read", "AIManagement")
+    ai_write = make_pvm("can_write", "AIManagement")
+    cms_view = make_pvm("cms.pages.view", "CMS")
+
+    role_map = {
+        "Data Management": MagicMock(permissions=list(base_alpha_pvms)),
+        "Analytics": MagicMock(
+            permissions=list(base_alpha_pvms) + [ai_list, ai_read, ai_write]
+        ),
+        "End user": MagicMock(
+            permissions=list(base_gamma_pvms) + [ai_list, ai_read, ai_write, cms_view]
+        ),
+    }
+
+    def copy_role(role_from_name: str, role_to_name: str, merge: bool = True) -> None:
+        del merge
+        source = base_alpha_pvms if role_from_name == "Alpha" else base_gamma_pvms
+        role_map[role_to_name].permissions = list(source)
+
+    def find_pvm(permission_name: str, view_menu_name: str) -> MagicMock | None:
+        lookup = {
+            ("can_list", "AIManagement"): ai_list,
+            ("can_read", "AIManagement"): ai_read,
+            ("can_write", "AIManagement"): ai_write,
+            ("can_list", "DHIS2AdminView"): make_pvm(
+                "can_list",
+                "DHIS2AdminView",
+            ),
+            ("can_sqllab", "Superset"): make_pvm("can_sqllab", "Superset"),
+            ("cms.pages.view", "CMS"): cms_view,
+        }
+        return lookup.get((permission_name, view_menu_name))
+
+    copy_role_mock = mocker.patch.object(sm, "copy_role", side_effect=copy_role)
+    mocker.patch.object(sm, "find_role", side_effect=lambda name: role_map.get(name))
+    mocker.patch.object(
+        sm,
+        "find_permission_view_menu",
+        side_effect=find_pvm,
+    )
+
+    sm.sync_custom_production_roles()
+
+    copy_role_mock.assert_has_calls(
+        [
+            call(spec.base_role, spec.name, merge=False)
+            for spec in PRODUCTION_CUSTOM_ROLE_SPECS
+        ]
+    )
+    assert {
+        (pvm.permission.name, pvm.view_menu.name)
+        for pvm in role_map["Data Management"].permissions
+    } >= {
+        ("can_list", "AIManagement"),
+        ("can_read", "AIManagement"),
+        ("can_write", "AIManagement"),
+        ("can_list", "DHIS2AdminView"),
+    }
+    assert ("can_list", "AIManagement") in {
+        (pvm.permission.name, pvm.view_menu.name)
+        for pvm in role_map["Analytics"].permissions
+    }
+    assert ("can_list", "AIManagement") not in {
+        (pvm.permission.name, pvm.view_menu.name)
+        for pvm in role_map["End user"].permissions
+    }
+    assert ("can_list", "DatabaseView") not in {
+        (pvm.permission.name, pvm.view_menu.name)
+        for pvm in role_map["End user"].permissions
+    }
+    assert ("can_sqllab", "Superset") not in {
+        (pvm.permission.name, pvm.view_menu.name)
+        for pvm in role_map["End user"].permissions
+    }
+    assert ("cms.pages.view", "CMS") not in {
+        (pvm.permission.name, pvm.view_menu.name)
+        for pvm in role_map["End user"].permissions
+    }
 
 
 def test_raise_for_access_guest_user_tampered_form_data_groupby(

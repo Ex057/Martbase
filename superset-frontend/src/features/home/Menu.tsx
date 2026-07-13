@@ -40,6 +40,7 @@ import {
   MenuData,
 } from 'src/types/bootstrapTypes';
 import RightMenu from './RightMenu';
+import { useDashboardShortcuts } from './useDashboardShortcuts';
 
 interface MenuProps {
   data: MenuData;
@@ -333,6 +334,9 @@ export function Menu({
       case path.startsWith(Paths.Datasets):
         setActiveTabs(['Datasets']);
         break;
+      case path.startsWith('/databaseview'):
+        setActiveTabs(['Databases']);
+        break;
       default:
         setActiveTabs(defaultTabSelection);
     }
@@ -341,6 +345,44 @@ export function Menu({
   const standalone = getUrlParam(URL_PARAMS.standalone);
   if (standalone || uiConfig.hideNav) return <></>;
 
+  const renderMenuLabel = (
+    label: string,
+    url: string,
+    isFrontendRoute?: boolean,
+  ) =>
+    isFrontendRoute ? (
+      <NavLink role="button" to={url} activeClassName="is-active">
+        {label}
+      </NavLink>
+    ) : (
+      <Typography.Link href={url}>{label}</Typography.Link>
+    );
+
+  const renderMenuChildren = (
+    label: string,
+    childs: (MenuObjectChildProps | string)[],
+  ) =>
+    childs
+      .map((child: MenuObjectChildProps | string, index1: number) => {
+        if (typeof child === 'string' && child === '-') {
+          return { type: 'divider' as const };
+        }
+        if (typeof child !== 'string') {
+          return {
+            key: child.key ?? `${label}-${child.label}-${index1}`,
+            label: child.isFrontendRoute ? (
+              <NavLink to={child.url || ''} exact activeClassName="is-active">
+                {child.label}
+              </NavLink>
+            ) : (
+              <Typography.Link href={child.url}>{child.label}</Typography.Link>
+            ),
+          };
+        }
+        return null;
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+
   const renderMenuItem = ({
     label,
     childs,
@@ -348,51 +390,33 @@ export function Menu({
     index,
     isFrontendRoute,
   }: MenuObjectProps): MenuItem => {
-    if (url && isFrontendRoute) {
+    const caret =
+      showMenu === 'inline' ? undefined : (
+        <Icons.CaretDownOutlined iconSize="xs" />
+      );
+
+    // A top-level entry can be both a link and a dropdown (e.g. "Dashboards").
+    // Its key differs from `label` so that the first child can claim that key
+    // and keep the submenu highlighted via `selectedKeys`.
+    if (url && childs?.length) {
       return {
-        key: label,
-        label: (
-          <NavLink role="button" to={url} activeClassName="is-active">
-            {label}
-          </NavLink>
-        ),
+        key: `${label}-submenu`,
+        label: renderMenuLabel(label, url, isFrontendRoute),
+        icon: caret,
+        children: renderMenuChildren(label, childs),
       };
     }
     if (url) {
       return {
         key: label,
-        label: <Typography.Link href={url}>{label}</Typography.Link>,
+        label: renderMenuLabel(label, url, isFrontendRoute),
       };
     }
     return {
       key: String(index ?? label),
       label,
-      icon:
-        showMenu === 'inline' ? undefined : (
-          <Icons.CaretDownOutlined iconSize="xs" />
-        ),
-      children: childs
-        ?.map((child: MenuObjectChildProps | string, index1: number) => {
-          if (typeof child === 'string' && child === '-') {
-            return { type: 'divider' as const };
-          }
-          if (typeof child !== 'string') {
-            return {
-              key: `${label}-${child.label}-${index1}`,
-              label: child.isFrontendRoute ? (
-                <NavLink to={child.url || ''} exact activeClassName="is-active">
-                  {child.label}
-                </NavLink>
-              ) : (
-                <Typography.Link href={child.url}>
-                  {child.label}
-                </Typography.Link>
-              ),
-            };
-          }
-          return null;
-        })
-        .filter((item): item is NonNullable<typeof item> => item !== null),
+      icon: caret,
+      children: childs && renderMenuChildren(label, childs),
     };
   };
   const renderBrand = () =>
@@ -421,7 +445,11 @@ export function Menu({
   return (
     <StyledHeader className="top" id="main-menu" role="navigation">
       <Row style={{ flexWrap: 'wrap' }}>
-        <Col md={18} xs={24} style={{ display: 'flex', minWidth: 0, overflow: 'visible' }}>
+        <Col
+          md={18}
+          xs={24}
+          style={{ display: 'flex', minWidth: 0, overflow: 'visible' }}
+        >
           <Tooltip
             id="brand-tooltip"
             placement="bottomLeft"
@@ -462,51 +490,77 @@ export function Menu({
 export default function MenuWrapper({ data, ...rest }: MenuProps) {
   const sqlLabSeparator = '-' as const;
   const CMS_PAGES_MENU_LABEL = 'Dynamic Pages';
+  const AI_MANAGEMENT_MENU_LABEL = 'AI Management';
   const bootstrapData = getBootstrapData();
-  const canViewCms = userHasPermission(
-    bootstrapData.user || {},
-    'CMS',
-    'cms.pages.view',
+  const currentUser = bootstrapData.user || {};
+  const dashboardShortcuts = useDashboardShortcuts(
+    !data.navbar_right.user_is_anonymous,
   );
+  const canViewCms = userHasPermission(currentUser, 'CMS', 'cms.pages.view');
+  const canViewDatabases = userHasPermission(
+    currentUser,
+    'DatabaseView',
+    'can_list',
+  );
+  const canViewDatasets = userHasPermission(
+    currentUser,
+    'TableModelView',
+    'can_list',
+  );
+  const canViewDhis2Admin = userHasPermission(
+    currentUser,
+    'DHIS2AdminView',
+    'can_list',
+  );
+  const canUseSqlLab = userHasPermission(currentUser, 'Superset', 'can_sqllab');
+  const canViewAiManagement = userHasPermission(
+    currentUser,
+    'AIManagement',
+    'can_list',
+  );
+  const canViewDataMenu =
+    canViewDatabases || canViewDatasets || canViewDhis2Admin || canUseSqlLab;
 
-  const dataWorkspaceChildren: MenuObjectChildProps[] = [
-    {
-      name: 'DHIS2 Health',
-      label: 'DHIS2 Health',
-      url: '/superset/dhis2/health/',
-    },
-    {
-      name: 'Staged Datasets',
-      label: 'Staged Datasets',
-      url: '/superset/dhis2/local-data/',
-    },
-    {
-      name: 'Download Datasets',
-      label: 'Download Datasets',
-      url: '/superset/dhis2/downloads/',
-    },
-    {
-      name: 'Local Metadata',
-      label: 'Local Metadata',
-      url: '/superset/dhis2/local-metadata/',
-    },
-    {
-      name: 'Sync History',
-      label: 'Sync History',
-      url: '/superset/dhis2/sync-history/',
-    },
-    {
-      name: 'DHIS2 Instances',
-      label: 'DHIS2 Instances',
-      url: '/superset/dhis2/instances/',
-    },
-    {
-      name: 'Staging Engine',
-      label: 'Staging Engine',
-      url: '/superset/local-staging/',
-    },
-    // SQL Lab is appended after the separator (see normalizedDataMenu.childs below)
-  ];
+  const dataWorkspaceChildren: MenuObjectChildProps[] = canViewDhis2Admin
+    ? [
+        {
+          name: 'DHIS2 Health',
+          label: 'DHIS2 Health',
+          url: '/superset/dhis2/health/',
+        },
+        {
+          name: 'Staged Datasets',
+          label: 'Staged Datasets',
+          url: '/superset/dhis2/local-data/',
+        },
+        {
+          name: 'Download Datasets',
+          label: 'Download Datasets',
+          url: '/superset/dhis2/downloads/',
+        },
+        {
+          name: 'Local Metadata',
+          label: 'Local Metadata',
+          url: '/superset/dhis2/local-metadata/',
+        },
+        {
+          name: 'Sync History',
+          label: 'Sync History',
+          url: '/superset/dhis2/sync-history/',
+        },
+        {
+          name: 'DHIS2 Instances',
+          label: 'DHIS2 Instances',
+          url: '/superset/dhis2/instances/',
+        },
+        {
+          name: 'Staging Engine',
+          label: 'Staging Engine',
+          url: '/superset/local-staging/',
+        },
+        // SQL Lab is appended after the separator (see normalizedDataMenu.childs below)
+      ]
+    : [];
 
   const newMenuData = {
     ...data,
@@ -514,6 +568,11 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
       ...data.brand,
       text: 'Uganda Malaria Data Repository',
     },
+    menu: data.menu.map(item =>
+      item.name === 'Home' || item.label === 'Home'
+        ? { ...item, url: '/superset/welcome/' }
+        : item,
+    ),
   };
 
   // Menu items that should go into settings dropdown (removed from main nav)
@@ -527,6 +586,9 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
     item.name === 'Data' || item.label === 'Data';
   const isCmsPagesMenu = (item: MenuObjectProps) =>
     item.name === CMS_PAGES_MENU_LABEL || item.label === CMS_PAGES_MENU_LABEL;
+  const isAiManagementMenu = (item: MenuObjectProps) =>
+    item.name === AI_MANAGEMENT_MENU_LABEL ||
+    item.label === AI_MANAGEMENT_MENU_LABEL;
 
   const isSqlMenu = (item: MenuObjectProps) =>
     item.url?.startsWith('/sqllab') ||
@@ -607,6 +669,48 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
           child.label?.startsWith('DHIS2 ')),
     );
 
+  const isDashboardsItem = (item: MenuObjectProps) =>
+    item.url?.startsWith('/dashboard/list') ||
+    item.name === 'Dashboards' ||
+    item.label === 'Dashboards';
+
+  const isDatasetsItem = (item: MenuObjectProps | MenuObjectChildProps) =>
+    item.url?.startsWith('/tablemodelview') ||
+    item.url?.startsWith('/dataset') ||
+    item.name === 'Datasets' ||
+    item.label === 'Datasets';
+
+  const isDatabasesItem = (item: MenuObjectProps | MenuObjectChildProps) =>
+    item.url?.startsWith('/databaseview') ||
+    item.name === 'Databases' ||
+    item.label === 'Databases';
+
+  const canIncludeDataChild = (
+    item: MenuObjectProps | MenuObjectChildProps,
+  ): boolean => {
+    if (isDHIS2Menu(item as MenuObjectProps) || isDHIS2Url(item.url)) {
+      return canViewDhis2Admin;
+    }
+    if (isSqlMenu(item as MenuObjectProps)) {
+      return canUseSqlLab;
+    }
+    if (isDatasetsItem(item)) {
+      return canViewDatasets;
+    }
+    if (isDatabasesItem(item)) {
+      return canViewDatabases;
+    }
+    return true;
+  };
+  const dataRelatedUrls = [
+    '/databaseview',
+    '/tablemodelview',
+    '/rowlevelsecurity',
+    '/dataset',
+  ];
+  const isDataRelatedChild = (child: MenuObjectChildProps) =>
+    dataRelatedUrls.some(prefix => child.url?.startsWith(prefix));
+
   const dedupeChildren = (children: (MenuObjectChildProps | string)[]) =>
     children.filter((child, index, array) => {
       if (typeof child === 'string') {
@@ -630,6 +734,8 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
         }) === index
       );
     });
+  const hasVisibleChildren = (children?: (MenuObjectChildProps | string)[]) =>
+    Boolean(children?.some(child => typeof child !== 'string'));
 
   const cmsPagesMenu: MenuObjectProps | null =
     data.navbar_right.user_is_anonymous || !canViewCms
@@ -665,6 +771,15 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
             },
           ],
         };
+  const aiManagementMenu: MenuObjectProps | null =
+    data.navbar_right.user_is_anonymous || !canViewAiManagement
+      ? null
+      : {
+          name: AI_MANAGEMENT_MENU_LABEL,
+          label: AI_MANAGEMENT_MENU_LABEL,
+          icon: 'fa-robot',
+          url: '/superset/ai-management/',
+        };
 
   const toDataChild = (item: MenuObjectChildProps): MenuObjectChildProps =>
     item;
@@ -677,38 +792,87 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
     if (!item) {
       return;
     }
+    if (isDataMenu(item) && !canViewDataMenu) {
+      return;
+    }
 
     const children: (MenuObjectProps | string)[] = [];
     const newItem = {
       ...item,
     };
 
+    if (isAiManagementMenu(newItem)) {
+      cleanedMenu.push(newItem);
+      return;
+    }
+
     // Filter childs
     if (item.childs) {
       item.childs.forEach((child: MenuObjectChildProps | string) => {
         if (typeof child === 'string') {
           children.push(child);
-        } else if ((child as MenuObjectChildProps).label) {
+        } else if (
+          (child as MenuObjectChildProps).label &&
+          (!isDataMenu(item) || canIncludeDataChild(child))
+        ) {
           children.push(child);
         }
       });
 
       newItem.childs = children;
+      if (!isDataMenu(newItem)) {
+        const remainingChildren: (MenuObjectChildProps | string)[] = [];
+        (newItem.childs || []).forEach(
+          (child: MenuObjectChildProps | string) => {
+            if (typeof child === 'string') {
+              remainingChildren.push(child);
+              return;
+            }
+            if (isDHIS2Url(child.url)) {
+              if (canViewDhis2Admin) {
+                movedDataChildren.push(normalizeDHIS2Child(child));
+              }
+              return;
+            }
+            if (isDataRelatedChild(child) && canIncludeDataChild(child)) {
+              movedDataChildren.push(child);
+              return;
+            }
+            if (!isDataRelatedChild(child)) {
+              remainingChildren.push(child);
+            }
+          },
+        );
+        newItem.childs = dedupeChildren(remainingChildren);
+      }
+    }
+
+    if (!newItem.url && !hasVisibleChildren(newItem.childs)) {
+      return;
     }
 
     if (isSqlMenu(newItem)) {
-      movedDataChildren.push(
-        toDataChild({
-          name: newItem.name,
-          label: newItem.label,
-          url: newItem.url,
-        }),
-      );
+      if (canUseSqlLab) {
+        movedDataChildren.push(
+          toDataChild({
+            name: newItem.name,
+            label: newItem.label,
+            url: newItem.url,
+          }),
+        );
+      }
+      return;
+    }
+
+    if (isDatasetsItem(newItem) || isDatabasesItem(newItem)) {
+      if (canIncludeDataChild(newItem)) {
+        cleanedMenu.push(newItem);
+      }
       return;
     }
 
     if (isDHIS2Menu(newItem) && !isDataMenu(newItem)) {
-      if (newItem.url) {
+      if (newItem.url && canViewDhis2Admin) {
         movedDataChildren.push({
           name: newItem.name,
           label: normalizeDHIS2MenuLabel(newItem.label) || newItem.label,
@@ -717,7 +881,11 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
       }
       if (newItem.childs) {
         newItem.childs.forEach((child: MenuObjectChildProps | string) => {
-          if (typeof child !== 'string' && isDHIS2Url(child.url)) {
+          if (
+            typeof child !== 'string' &&
+            isDHIS2Url(child.url) &&
+            canViewDhis2Admin
+          ) {
             movedDataChildren.push(normalizeDHIS2Child(child));
           }
         });
@@ -743,16 +911,6 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
     }
   });
 
-  // URLs that belong in the Data menu rather than Settings
-  const dataRelatedUrls = [
-    '/databaseview',
-    '/tablemodelview',
-    '/rowlevelsecurity',
-    '/dataset',
-  ];
-  const isDataRelatedChild = (child: MenuObjectChildProps) =>
-    dataRelatedUrls.some(prefix => child.url?.startsWith(prefix));
-
   settings.forEach(item => {
     // Move DHIS2 children to Data
     if (isDHIS2Menu(item)) {
@@ -764,7 +922,11 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
         });
       }
       item.childs?.forEach(child => {
-        if (typeof child !== 'string' && isDHIS2Url(child.url)) {
+        if (
+          typeof child !== 'string' &&
+          isDHIS2Url(child.url) &&
+          canViewDhis2Admin
+        ) {
           movedDataChildren.push(normalizeDHIS2Child(child));
         }
       });
@@ -772,7 +934,11 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
 
     // Move any data-related children (Databases, Datasets) from Settings → Data
     item.childs?.forEach(child => {
-      if (typeof child !== 'string' && isDataRelatedChild(child)) {
+      if (
+        typeof child !== 'string' &&
+        isDataRelatedChild(child) &&
+        canIncludeDataChild(child)
+      ) {
         movedDataChildren.push(child);
       }
     });
@@ -790,11 +956,19 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
             !isDHIS2Menu(child as MenuObjectProps)),
       ),
     }))
-    .filter(item => item.childs?.some(child => typeof child !== 'string'));
+    .filter(item => hasVisibleChildren(item.childs));
   const existingDataMenu = cleanedMenu.find(isDataMenu);
-  const cleanedMenuWithoutData = cleanedMenu.filter(
-    item => !isDataMenu(item) && !isCmsPagesMenu(item),
-  );
+  const cleanedMenuWithoutData = cleanedMenu.filter(item => {
+    if (isDataMenu(item) || isCmsPagesMenu(item)) {
+      return false;
+    }
+    if (!item.url && !hasVisibleChildren(item.childs)) {
+      return false;
+    }
+    return true;
+  });
+  const hasTopLevelDatasets = cleanedMenuWithoutData.some(isDatasetsItem);
+  const hasTopLevelDatabases = cleanedMenuWithoutData.some(isDatabasesItem);
 
   const normalizedDataMenu = existingDataMenu || {
     name: 'Data',
@@ -811,14 +985,38 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
     url: '/sqllab/',
   };
 
+  // Add Database Connections menu item
+  const databaseConnectionsChild: MenuObjectChildProps | null = canViewDatabases
+    ? {
+        name: 'Database Connections',
+        label: 'Database Connections',
+        url: '/databaseview/list/',
+      }
+    : null;
+
   normalizedDataMenu.childs = dedupeChildren([
-    ...dataWorkspaceChildren,
+    ...(canViewDhis2Admin ? dataWorkspaceChildren : []),
     '-',
+    ...(databaseConnectionsChild ? [databaseConnectionsChild] : []),
     ...movedDataChildren.map(toDataChild),
     ...(normalizedDataMenu.childs || []),
-    sqlLabSeparator,
-    sqlLabChild,
-  ]);
+    ...(canUseSqlLab ? [sqlLabSeparator, sqlLabChild] : []),
+  ]).filter(child => {
+    if (typeof child === 'string') {
+      return true;
+    }
+    if (hasTopLevelDatasets && isDatasetsItem(child)) {
+      return false;
+    }
+    // Don't filter out database connections from Data menu - we explicitly added it
+    if (isDatabasesItem(child) && child.name === 'Database Connections') {
+      return true;
+    }
+    if (hasTopLevelDatabases && isDatabasesItem(child)) {
+      return false;
+    }
+    return true;
+  });
 
   const datasetsIndex = cleanedMenuWithoutData.findIndex(
     item => item.name === 'Datasets' || item.label === 'Datasets',
@@ -836,13 +1034,61 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
         : sourcesIndex >= 0
           ? sourcesIndex + 1
           : cleanedMenuWithoutData.length;
+  const injectedDatasets = canViewDatasets && !hasTopLevelDatasets;
 
-  cleanedMenuWithoutData.splice(insertIndex, 0, normalizedDataMenu);
-  if (cmsPagesMenu) {
-    cleanedMenuWithoutData.splice(insertIndex + 1, 0, cmsPagesMenu);
+  if (injectedDatasets) {
+    cleanedMenuWithoutData.splice(insertIndex, 0, {
+      name: 'Datasets',
+      label: 'Datasets',
+      icon: 'fa-table',
+      url: '/tablemodelview/list/',
+    });
   }
 
-  newMenuData.menu = cleanedMenuWithoutData;
+  const dataInsertIndex = injectedDatasets ? insertIndex + 1 : insertIndex;
+  if (canViewDataMenu && normalizedDataMenu.childs.length > 0) {
+    cleanedMenuWithoutData.splice(dataInsertIndex, 0, normalizedDataMenu);
+  }
+  const cmsInsertIndex =
+    dataInsertIndex +
+    (canViewDataMenu && normalizedDataMenu.childs.length > 0 ? 1 : 0);
+  if (cmsPagesMenu) {
+    cleanedMenuWithoutData.splice(cmsInsertIndex, 0, cmsPagesMenu);
+  }
+  if (
+    aiManagementMenu &&
+    !cleanedMenuWithoutData.some(item => isAiManagementMenu(item))
+  ) {
+    cleanedMenuWithoutData.splice(
+      cmsInsertIndex + (cmsPagesMenu ? 1 : 0),
+      0,
+      aiManagementMenu,
+    );
+  }
+
+  // "Dashboards" stays a link to the listing, but also opens a dropdown that
+  // jumps straight into any dashboard the user can see.
+  newMenuData.menu = cleanedMenuWithoutData.map(item =>
+    isDashboardsItem(item) && dashboardShortcuts.length
+      ? {
+          ...item,
+          childs: [
+            {
+              key: item.name || item.label,
+              name: 'All Dashboards',
+              label: 'All Dashboards',
+              url: item.url,
+            },
+            '-',
+            ...dashboardShortcuts.map(dashboard => ({
+              name: dashboard.dashboard_title,
+              label: dashboard.dashboard_title,
+              url: dashboard.url,
+            })),
+          ],
+        }
+      : item,
+  );
   newMenuData.settings = filteredSettings;
 
   return <Menu data={newMenuData} {...rest} />;

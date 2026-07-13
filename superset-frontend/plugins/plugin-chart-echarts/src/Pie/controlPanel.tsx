@@ -29,7 +29,7 @@ import {
   sharedControls,
 } from '@superset-ui/chart-controls';
 import { DEFAULT_FORM_DATA } from './types';
-import { legendSection } from '../controls';
+import { chartTitleSection, legendSection } from '../controls';
 
 const {
   donut,
@@ -64,6 +64,7 @@ const config: ControlPanelConfig = {
         ],
       ],
     },
+    chartTitleSection,
     {
       label: t('Chart Options'),
       expanded: true,

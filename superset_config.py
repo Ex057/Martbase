@@ -86,7 +86,7 @@ SECRET_KEY_FINGERPRINT = hashlib.sha256(SECRET_KEY.encode("utf-8")).hexdigest()[
 
 # Keep backend startup stable by default; enable debug explicitly when needed.
 DEBUG = os.environ.get("SUPERSET_DEBUG", "0") == "1"
-WEBPACK_DEV_SERVER_URL = "http://localhost:9001"
+WEBPACK_DEV_SERVER_URL = os.environ.get("WEBPACK_DEV_SERVER_URL") or None
 
 # Enable embedding dashboards (for /superset/public/)
 EMBEDDED_SUPERSET = True
@@ -117,6 +117,23 @@ FEATURE_FLAGS = {
 }
 
 _AI_INSIGHTS_PROVIDERS = {}
+
+# LocalAI Configuration
+localai_base_url = os.environ.get("LOCALAI_BASE_URL", "http://localhost:39671")
+_AI_INSIGHTS_PROVIDERS["localai"] = {
+    "enabled": True,
+    "type": "localai",
+    "label": "LocalAI",
+    "base_url": localai_base_url,
+    "api_key_env": "LOCALAI_API_KEY",  # Optional API key for security
+    "models": [
+        model.strip()
+        for model in os.environ.get("LOCALAI_MODELS", "tinyllama").split(",")
+        if model.strip()
+    ],
+    "default_model": os.environ.get("LOCALAI_DEFAULT_MODEL", "tinyllama"),
+    "is_local": True,
+}
 
 if os.environ.get("OPENAI_API_KEY"):
     _AI_INSIGHTS_PROVIDERS["openai"] = {

@@ -268,6 +268,9 @@ def get_environment_tag() -> dict[str, Any]:
 
 
 def menu_data(user: User) -> dict[str, Any]:
+    # Imported lazily: the module pulls in ORM models that import this one.
+    from superset.views.authenticated_home import get_authenticated_home_target_safe
+
     languages = {
         lang: {**appbuilder.languages[lang], "url": appbuilder.get_url_for_locale(lang)}
         for lang in appbuilder.languages
@@ -281,6 +284,7 @@ def menu_data(user: User) -> dict[str, Any]:
 
     return {
         "menu": appbuilder.menu.get_data(),
+        "authenticated_home_target": get_authenticated_home_target_safe(),
         "brand": {
             "path": app.config["LOGO_TARGET_PATH"] or url_for("Superset.welcome"),
             "icon": appbuilder.app_icon,

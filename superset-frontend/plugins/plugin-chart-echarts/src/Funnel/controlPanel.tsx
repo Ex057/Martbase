@@ -31,7 +31,7 @@ import {
   EchartsFunnelLabelTypeType,
   PercentCalcType,
 } from './types';
-import { legendSection } from '../controls';
+import { chartTitleSection, legendSection } from '../controls';
 
 const { labelType, numberFormat, showLabels, defaultTooltipLabel } =
   DEFAULT_FORM_DATA;
@@ -90,6 +90,7 @@ const config: ControlPanelConfig = {
         ],
       ],
     },
+    chartTitleSection,
     {
       label: t('Chart Options'),
       expanded: true,

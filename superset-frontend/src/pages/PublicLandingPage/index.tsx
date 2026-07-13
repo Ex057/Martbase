@@ -83,6 +83,7 @@ const PageShell = styled.div`
   display: flex;
   flex-direction: column;
   font-family: var(--portal-font-body, inherit);
+  font-size: var(--portal-base-font-size, 16px);
   background: var(--portal-bg);
   color: var(--portal-text);
   margin: 0;
@@ -161,6 +162,7 @@ const BrandEyebrow = styled.span`
 `;
 
 const BrandTitle = styled.span`
+  font-family: var(--portal-font-heading, inherit);
   font-size: 18px;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -325,7 +327,8 @@ const SurfaceCard = styled.article`
 
 const CardTitle = styled.h3`
   margin: 0;
-  font-size: 18px;
+  font-family: var(--portal-font-heading, inherit);
+  font-size: var(--portal-heading-card-size, 18px);
   line-height: 1.2;
   letter-spacing: -0.03em;
   color: var(--portal-text);
@@ -710,58 +713,121 @@ export default function PublicLandingPage() {
     data?.config.navbar.title.text ||
     t('Public Analytics Portal');
   const publicThemeConfig = data?.config.theme || {};
-  const accentColor = data?.portal_layout.config.accentColor || '#1976D2';
-  const secondaryColor = data?.portal_layout.config.secondaryColor || '#4DA3FF';
+  const appearanceConfig = data?.portal_layout.config.appearance || {};
+  const brandingAppearance = appearanceConfig.branding || {};
+  const typographyAppearance = appearanceConfig.typography || {};
+  const surfacesAppearance = appearanceConfig.surfaces || {};
+  const linksAppearance = appearanceConfig.links || {};
+  const accentColor =
+    data?.portal_layout.config.accentColor ||
+    brandingAppearance.accentColor ||
+    '#1976D2';
+  const secondaryColor =
+    data?.portal_layout.config.secondaryColor ||
+    brandingAppearance.secondaryColor ||
+    '#4DA3FF';
   const surfaceColor =
     data?.portal_layout.config.surfaceColor ||
+    brandingAppearance.surfaceColor ||
     publicThemeConfig.surfaceColor ||
     '#ffffff';
   const cardBackground =
     data?.portal_layout.config.cardBackground ||
+    brandingAppearance.cardBackground ||
     publicThemeConfig.cardBackground ||
     surfaceColor;
   const cardBorderColor =
     data?.portal_layout.config.cardBorderColor ||
+    brandingAppearance.cardBorderColor ||
     publicThemeConfig.cardBorderColor ||
     'rgba(255, 255, 255, 0.02)';
   const strongBorderColor =
     data?.portal_layout.config.strongBorderColor ||
+    brandingAppearance.strongBorderColor ||
     publicThemeConfig.strongBorderColor ||
     cardBorderColor;
   const heroBackground =
     data?.portal_layout.config.heroBackground ||
+    brandingAppearance.heroBackground ||
     publicThemeConfig.heroBackground ||
     cardBackground;
   const shadowCard =
     data?.portal_layout.config.shadowCard ||
+    surfacesAppearance.shadowCard ||
     publicThemeConfig.shadowCard ||
     '0 14px 36px rgba(15, 23, 42, 0.08)';
   const radiusMd =
-    data?.portal_layout.config.radiusMd || publicThemeConfig.radiusMd || '12px';
+    data?.portal_layout.config.radiusMd ||
+    surfacesAppearance.radiusMd ||
+    publicThemeConfig.radiusMd ||
+    '12px';
   const radiusLg =
-    data?.portal_layout.config.radiusLg || publicThemeConfig.radiusLg || '18px';
+    data?.portal_layout.config.radiusLg ||
+    surfacesAppearance.radiusLg ||
+    publicThemeConfig.radiusLg ||
+    '18px';
   const blockGap =
-    data?.portal_layout.config.blockGap || publicThemeConfig.blockGap || '10px';
+    data?.portal_layout.config.blockGap ||
+    surfacesAppearance.blockGap ||
+    publicThemeConfig.blockGap ||
+    '10px';
   const sectionGap =
     data?.portal_layout.config.sectionGap ||
+    surfacesAppearance.sectionGap ||
     publicThemeConfig.sectionGap ||
     '8px';
   const cardPadding =
     data?.portal_layout.config.cardPadding ||
+    surfacesAppearance.cardPadding ||
     publicThemeConfig.cardPadding ||
     '18px';
   const heroPadding =
     data?.portal_layout.config.heroPadding ||
+    surfacesAppearance.heroPadding ||
     publicThemeConfig.heroPadding ||
     '32px';
   const surfaceBackdropFilter =
     data?.portal_layout.config.surfaceBackdropFilter ||
+    surfacesAppearance.surfaceBackdropFilter ||
     publicThemeConfig.surfaceBackdropFilter ||
     'saturate(140%) blur(12px)';
   const heroOverlayRgb =
     data?.portal_layout.config.heroOverlayRgb ||
+    surfacesAppearance.heroOverlayRgb ||
     publicThemeConfig.heroOverlayRgb ||
     '255, 255, 255';
+  const bodyFontFamily =
+    data?.portal_layout.config.bodyFontFamily ||
+    typographyAppearance.bodyFontFamily ||
+    "'Inter', 'Segoe UI', sans-serif";
+  const headingFontFamily =
+    data?.portal_layout.config.headingFontFamily ||
+    typographyAppearance.headingFontFamily ||
+    "'Public Sans', 'Segoe UI', sans-serif";
+  const baseFontSize =
+    data?.portal_layout.config.baseFontSize ||
+    typographyAppearance.baseFontSize ||
+    '16px';
+  const heroTitleSize =
+    data?.portal_layout.config.heroTitleSize ||
+    typographyAppearance.heroTitleSize ||
+    'clamp(2.5rem, 5vw, 4rem)';
+  const sectionTitleSize =
+    data?.portal_layout.config.sectionTitleSize ||
+    typographyAppearance.sectionTitleSize ||
+    '24px';
+  const cardTitleSize =
+    data?.portal_layout.config.cardTitleSize ||
+    typographyAppearance.cardTitleSize ||
+    '18px';
+  const linkDecoration =
+    data?.portal_layout.config.linkDecoration ||
+    linksAppearance.linkDecoration ||
+    'none';
+  const linkHoverDecoration =
+    data?.portal_layout.config.linkHoverDecoration ||
+    linksAppearance.linkHoverDecoration ||
+    'underline';
   const injectedPortalCss = useMemo(
     () =>
       [
@@ -1304,6 +1370,14 @@ export default function PublicLandingPage() {
     '--portal-nav-active-text': visualMode === 'dark' ? accentColor : '#ffffff',
     '--portal-header-height': `${portalHeaderHeight}px`,
     '--portal-link': accentColor,
+    '--portal-link-decoration': linkDecoration,
+    '--portal-link-hover-decoration': linkHoverDecoration,
+    '--portal-font-body': bodyFontFamily,
+    '--portal-font-heading': headingFontFamily,
+    '--portal-base-font-size': baseFontSize,
+    '--portal-heading-hero-size': heroTitleSize,
+    '--portal-heading-section-size': sectionTitleSize,
+    '--portal-heading-card-size': cardTitleSize,
     '--portal-shadow-card': shadowCard,
     '--portal-radius-md': radiusMd,
     '--portal-radius-lg': radiusLg,

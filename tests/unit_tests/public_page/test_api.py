@@ -30,6 +30,7 @@ from superset.public_page.api import (
     LEGACY_WELCOME_PAGE_DESCRIPTION,
     LEGACY_WELCOME_PAGE_SUBTITLE,
     PublicPageRestApi,
+    _normalize_internal_dashboard_path_map,
 )
 from superset.public_page.block_manager import DEFAULT_WELCOME_PAGE_SEED_VERSION
 from superset.public_page.models import (
@@ -88,6 +89,23 @@ def test_default_theme_tokens_use_flat_full_width_public_defaults() -> None:
     assert tokens["radius"]["lg"] == "0"
     assert tokens["shadows"]["card"] == "none"
     assert tokens["backgrounds"]["hero"] == "#ffffff"
+
+
+def test_normalize_internal_dashboard_path_map_keeps_relative_dashboard_paths() -> None:
+    assert _normalize_internal_dashboard_path_map(
+        {
+            "End user": "/superset/dashboard/42/",
+            "Analytics": "/dashboard/7/?foo=bar",
+        }
+    ) == {
+        "End user": "/superset/dashboard/42/",
+        "Analytics": "/dashboard/7/?foo=bar",
+    }
+
+
+def test_normalize_internal_dashboard_path_map_rejects_non_object() -> None:
+    with pytest.raises(ValidationError):
+        _normalize_internal_dashboard_path_map(["/superset/dashboard/1/"])
 
 
 def test_serialize_dashboard_includes_public_embed_uuid(app_context: None) -> None:

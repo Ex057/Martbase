@@ -19,6 +19,11 @@
 import { useRef, useEffect } from 'react';
 import * as echarts from 'echarts';
 import { styled } from '@superset-ui/core';
+import { resolveCssVarColors } from 'src/utils/resolveCssVarColors';
+import {
+  ChartTitleBlock,
+  chartTitleHeight,
+} from 'src/components/ChartTitleBlock';
 import { RankedVarianceChartProps } from './types';
 
 const Container = styled.div`
@@ -29,16 +34,23 @@ const Container = styled.div`
 `;
 
 export default function RankedVarianceViz(props: RankedVarianceChartProps) {
-  const { width, height, echartOptions } = props;
+  const { width, height, echartOptions, title } = props;
   const chartRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<echarts.ECharts | null>(null);
 
+  const titleHeight = chartTitleHeight(title);
+  const chartHeight = Math.max(0, height - titleHeight);
+
   useEffect(() => {
-    if (!chartRef.current) return;
+    if (!chartRef.current) return undefined;
     if (!instanceRef.current) {
       instanceRef.current = echarts.init(chartRef.current);
     }
-    instanceRef.current.setOption(echartOptions, true);
+    // Canvas can't parse var(--x); resolve to concrete themed colours first.
+    instanceRef.current.setOption(
+      resolveCssVarColors(echartOptions, chartRef.current),
+      true,
+    );
     return () => {
       instanceRef.current?.dispose();
       instanceRef.current = null;
@@ -47,11 +59,12 @@ export default function RankedVarianceViz(props: RankedVarianceChartProps) {
 
   useEffect(() => {
     instanceRef.current?.resize();
-  }, [width, height]);
+  }, [width, chartHeight]);
 
   return (
     <Container style={{ width, height }}>
-      <div ref={chartRef} style={{ width: '100%', height: '100%' }} />
+      <ChartTitleBlock {...title} />
+      <div ref={chartRef} style={{ width: '100%', height: chartHeight }} />
     </Container>
   );
 }

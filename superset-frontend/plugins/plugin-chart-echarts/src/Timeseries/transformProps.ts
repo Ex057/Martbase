@@ -118,6 +118,7 @@ import {
   getXAxisFormatter,
   getYAxisFormatter,
 } from '../utils/formatters';
+import { getChartTitleOption } from '../utils/chartTitle';
 
 export default function transformProps(
   chartProps: EchartsTimeseriesChartProps,
@@ -523,16 +524,39 @@ export default function transformProps(
     yAxisMin = calculateLowerLogTick(minPositiveValue);
   }
 
+  // Check if xAxis contains DHIS2 period codes by metadata OR by sampling data
+  const isPeriodColumn =
+    dhis2PeriodColumns.has(xAxisOrig) || dhis2PeriodColumns.has(xAxisLabel);
+
+  // Sample first few x-axis values to auto-detect DHIS2 periods
+  let hasDetectedPeriods = false;
+  if (!isPeriodColumn && rebasedData.length > 0) {
+    const sampleSize = Math.min(3, rebasedData.length);
+    const sampleValues = rebasedData
+      .slice(0, sampleSize)
+      .map(row => row[xAxisLabel])
+      .filter(val => typeof val === 'string');
+
+    if (sampleValues.length > 0) {
+      hasDetectedPeriods = sampleValues.every(val => {
+        const formatted = formatDHIS2Period(val as string);
+        return formatted !== val; // isDHIS2Period logic
+      });
+    }
+  }
+
+  const shouldUsePeriodFormatter = isPeriodColumn || hasDetectedPeriods;
+
   const tooltipFormatter =
     xAxisDataType === GenericDataType.Temporal
       ? getTooltipTimeFormatter(tooltipTimeFormat)
-      : dhis2PeriodColumns.has(xAxisOrig) || dhis2PeriodColumns.has(xAxisLabel)
+      : shouldUsePeriodFormatter
         ? (formatDHIS2Period as any)
         : String;
   const xAxisFormatter =
     xAxisDataType === GenericDataType.Temporal
       ? getXAxisFormatter(xAxisTimeFormat)
-      : dhis2PeriodColumns.has(xAxisOrig) || dhis2PeriodColumns.has(xAxisLabel)
+      : shouldUsePeriodFormatter
         ? (formatDHIS2Period as any)
         : String;
 
@@ -670,11 +694,18 @@ export default function transformProps(
     }
   }
 
+  // On-chart title / subtitle — the user's own wording rendered above the plot.
+  // Shared across all ECharts charts via getChartTitleOption.
+  const { title: chartTitleOption, topOffset: chartTitleTopOffset } =
+    getChartTitleOption(formData, theme, (chartProps.datasource as any)?.columns);
+
   const echartOptions: EChartsCoreOption = {
     useUTC: true,
+    ...(chartTitleOption && { title: chartTitleOption }),
     grid: {
       ...defaultGrid,
       ...padding,
+      top: padding.top + chartTitleTopOffset,
     },
     xAxis,
     yAxis,

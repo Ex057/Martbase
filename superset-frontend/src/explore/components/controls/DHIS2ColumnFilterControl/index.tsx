@@ -37,6 +37,14 @@
  *     { column: "ou_level_2", values: ["Uganda/Kampala"] }
  *   ]
  *
+ * A period filter may also hold a RELATIVE TOKEN rather than concrete codes:
+ *
+ *   [{ column: "period", values: ["REL::LAST_12_MONTHS"] }]
+ *
+ * The token is stored as-is and re-resolved against the calendar on every query
+ * (see resolveFilterValues in ./relativePeriods), so a saved chart follows the
+ * data as it syncs instead of freezing the codes that existed when it was saved.
+ *
  * buildQuery.ts translates each entry to a WHERE col IN (...) SQL filter.
  */
 
@@ -49,6 +57,12 @@ import {
   detectDHIS2Kind,
   DHIS2ColumnTag,
 } from '@superset-ui/chart-controls/components/ColumnTypeLabel/DHIS2ColumnTag';
+import {
+  RELATIVE_PERIOD_PREFIX,
+  getVisibleRelativeGroups,
+  relativeTokenLabel,
+  relativeTokenOf,
+} from './relativePeriods';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,7 +70,16 @@ import {
 
 export interface DHIS2ColumnFilter {
   column: string;
+  /**
+   * Concrete period codes, and/or `REL::`-prefixed relative tokens which are
+   * expanded at query time.
+   */
   values: string[];
+  /**
+   * Human label of the relative periods in `values`, e.g. "Last 4 quarters".
+   * Display-only.
+   */
+  relativeLabel?: string;
 }
 
 interface DatasourceColumn {
@@ -203,7 +226,7 @@ interface FilterEntryProps {
   stagedDatasetId: number | null;
   /** When true, values are formatted using DHIS2 period labels. */
   isPeriod: boolean;
-  onValuesChange: (values: string[]) => void;
+  onValuesChange: (values: string[], relativeLabel?: string) => void;
   onRemove: () => void;
   /** Full column metadata for badge + verbose name display. */
   columnMeta?: DatasourceColumn;
@@ -249,14 +272,65 @@ const FilterEntry: React.FC<FilterEntryProps> = ({
       .finally(() => setLoading(false));
   }, [filter.column, stagedDatasetId]);
 
-  // Build Ant Design Select options — for period columns show human-readable
-  // label alongside the raw code so users recognise both forms.
-  const options = rawOptions.map(v => ({
+  // Build Ant Design Select options. For period columns we offer BOTH relative
+  // periods (grouped, e.g. "Last 12 months") and the fixed period codes present
+  // in the data. A relative option is stored as its `REL::` token and expanded
+  // at query time, so the chart re-resolves it against the calendar on every run.
+  const fixedPeriodOptions = rawOptions.map(v => ({
     value: v,
     label: isPeriod ? periodSelectLabel(v) : v,
     // Keep the raw code searchable even when the label differs
     title: v,
   }));
+
+  // Typed loosely because period columns use grouped options ({ label, options })
+  // while other columns use flat options ({ value, label }) — Ant's Select accepts
+  // both, but the inferred union confuses the prop's type.
+  const options: any[] = isPeriod
+    ? [
+        ...getVisibleRelativeGroups(rawOptions).map(group => ({
+          label: t(group.label),
+          title: group.label,
+          options: group.tokens.map(({ token, label }) => ({
+            value: `${RELATIVE_PERIOD_PREFIX}${token}`,
+            label: t(label),
+            title: label,
+          })),
+        })),
+        {
+          label: t('Fixed periods'),
+          title: 'Fixed periods',
+          options: fixedPeriodOptions,
+        },
+      ]
+    : fixedPeriodOptions;
+
+  // Store relative tokens verbatim — buildQuery expands them against the
+  // calendar on every query. Expanding here instead would freeze the codes as
+  // of the moment the chart was saved.
+  const handleValuesChange = (selected: string[]) => {
+    if (!isPeriod) {
+      onValuesChange(selected);
+      return;
+    }
+    const relativeLabels = selected
+      .map(value => relativeTokenOf(value))
+      .filter((token): token is string => Boolean(token))
+      .map(relativeTokenLabel)
+      .filter(Boolean);
+    // Remember the relative label (display-only) so charts can show
+    // "Last 4 quarters" rather than a list of concrete codes.
+    onValuesChange(
+      selected,
+      relativeLabels.length ? relativeLabels.join(', ') : undefined,
+    );
+  };
+
+  // Selected chips: a relative token reads "Last quarter", a code "January 2025".
+  const periodValueLabel = (value: string): string => {
+    const token = relativeTokenOf(value);
+    return token ? relativeTokenLabel(token) || token : periodSelectLabel(value);
+  };
 
   const dhis2Kind = detectDHIS2Kind(columnMeta?.extra);
   const displayLabel =
@@ -265,9 +339,7 @@ const FilterEntry: React.FC<FilterEntryProps> = ({
   return (
     <FilterRow>
       <FilterRowHeader>
-        <ColumnLabel
-          style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-        >
+        <ColumnLabel style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {dhis2Kind && <DHIS2ColumnTag kind={dhis2Kind} />}
           {displayLabel}
         </ColumnLabel>
@@ -290,14 +362,18 @@ const FilterEntry: React.FC<FilterEntryProps> = ({
             loading ? t('Loading values…') : t('Select values to filter by')
           }
           value={filter.values}
-          onChange={onValuesChange}
+          onChange={handleValuesChange}
           options={options}
           // Search against both the formatted label and the raw code
           filterOption={(input, option) => {
             const q = input.toLowerCase();
             return (
-              String(option?.value || '').toLowerCase().includes(q) ||
-              String(option?.label || '').toLowerCase().includes(q)
+              String(option?.value || '')
+                .toLowerCase()
+                .includes(q) ||
+              String(option?.label || '')
+                .toLowerCase()
+                .includes(q)
             );
           }}
           // Render currently-selected tags with the formatted label too
@@ -313,7 +389,7 @@ const FilterEntry: React.FC<FilterEntryProps> = ({
                       marginRight: 4,
                     }}
                   >
-                    {periodSelectLabel(String(v))}
+                    {periodValueLabel(String(v))}
                     {closable && (
                       <CloseOutlined
                         style={{ fontSize: 10, cursor: 'pointer' }}
@@ -440,9 +516,9 @@ const DHIS2ColumnFilterControl: React.FC<Props> = ({
   );
 
   const handleValuesChange = useCallback(
-    (idx: number, values: string[]) => {
+    (idx: number, values: string[], relativeLabel?: string) => {
       const updated = safeValue.map((f, i) =>
-        i === idx ? { ...f, values } : f,
+        i === idx ? { ...f, values, relativeLabel } : f,
       );
       onChange(updated);
     },
@@ -474,7 +550,9 @@ const DHIS2ColumnFilterControl: React.FC<Props> = ({
           filter={filter}
           stagedDatasetId={stagedDatasetId}
           isPeriod={periodColumnSet.has(filter.column)}
-          onValuesChange={values => handleValuesChange(idx, values)}
+          onValuesChange={(values, relativeLabel) =>
+            handleValuesChange(idx, values, relativeLabel)
+          }
           onRemove={() => handleRemove(idx)}
           columnMeta={columnByName[filter.column]}
         />

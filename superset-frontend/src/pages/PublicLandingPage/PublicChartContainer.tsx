@@ -375,7 +375,7 @@ export function buildEmbeddedChartCss(
           visibility: visible !important;
         }
         .leaflet-overlay-pane svg {
-          pointer-events: none !important;
+          pointer-events: auto !important;
         }
         .dhis2-map-quick-filters,
         .dhis2-map-quick-filters-panel {
@@ -394,11 +394,17 @@ export function buildEmbeddedChartCss(
         .dashboard-chart > div,
         .slice_container > div,
         .chart-holder > div,
-        .chart-slice > div,
-        .leaflet-layer {
+        .chart-slice > div {
           width: 100% !important;
           height: 100% !important;
         }
+        /*
+         * Do NOT size Leaflet's own elements (.leaflet-layer / panes / tiles).
+         * Leaflet positions its layers and tiles with transform: translate3d and
+         * manages their sizes itself; forcing width/height:100% on .leaflet-layer
+         * fights that layout and scatters the basemap tiles. The map sizes itself
+         * from the width/height props (MapWrapper) — see DHIS2Map.tsx.
+         */
         .dhis2-map-quick-filters,
         .dhis2-map-quick-filters-panel {
           display: none !important;

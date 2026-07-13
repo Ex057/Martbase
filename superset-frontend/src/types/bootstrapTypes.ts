@@ -118,6 +118,8 @@ export interface NavBarProps {
 export interface MenuObjectChildProps {
   label: string;
   name?: string;
+  /** Overrides the generated antd menu key, e.g. to drive `selectedKeys`. */
+  key?: string;
   icon?: React.ReactNode;
   index?: number;
   url?: string;
@@ -135,6 +137,8 @@ export interface MenuObjectProps extends MenuObjectChildProps {
 
 export interface MenuData {
   menu: MenuObjectProps[];
+  /** Dashboard path the CMS "Authenticated Home" setting resolves to, if any. */
+  authenticated_home_target?: string | null;
   brand: BrandProps;
   navbar_right: NavBarProps;
   settings: MenuObjectProps[];

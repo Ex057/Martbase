@@ -18,6 +18,7 @@
  */
 
 import { buildQueryContext, QueryFormData } from '@superset-ui/core';
+import { resolveFilterValues } from '../../explore/components/controls/DHIS2ColumnFilterControl/relativePeriods';
 import { sanitizeDHIS2ColumnName } from '../../features/datasets/AddDataset/DHIS2ParameterBuilder/sanitize';
 import { resolveDHIS2MetricLabel } from '../../utils/dhis2MetricLabel';
 import { getDatasourceBoundaryLevels } from './boundaryLevels';
@@ -388,6 +389,8 @@ export default function buildQuery(formData: QueryFormData) {
     // Each entry is {column: string, values: string[]} and maps to a SQL
     // WHERE col IN (...) clause.  This replaces the old dhis2_filter_periods
     // + adhoc_filters split and works for any column in the dataset.
+    // A period filter may hold a relative token (REL::LAST_12_MONTHS); it is
+    // expanded here, on every query, so the chart tracks newly synced periods.
     interface Dhis2ColFilter { column: string; values: string[] }
     const columnFilters: Dhis2ColFilter[] = Array.isArray(formDataAny?.dhis2_column_filters)
       ? (formDataAny.dhis2_column_filters as Dhis2ColFilter[]).filter(
@@ -395,11 +398,13 @@ export default function buildQuery(formData: QueryFormData) {
         )
       : [];
 
-    const columnExtraFilters = columnFilters.map(f => ({
-      col: f.column,
-      op: 'IN' as const,
-      val: f.values,
-    }));
+    const columnExtraFilters = columnFilters
+      .map(f => ({
+        col: f.column,
+        op: 'IN' as const,
+        val: resolveFilterValues(f.values),
+      }))
+      .filter(f => f.val.length > 0);
 
     // Combine existing adhoc filters with the column filters.
     // Never let time_range through for staged local datasets: the period

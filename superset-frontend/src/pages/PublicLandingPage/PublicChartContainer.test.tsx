@@ -122,6 +122,15 @@ test('buildEmbeddedChartCss hides DHIS2 quick filters on public map embeds', () 
   expect(css).toContain('.dhis2-map-quick-filters');
   expect(css).toContain('.dhis2-map-quick-filters-panel');
   expect(css).toContain('.chart-container > div');
-  expect(css).toContain('.leaflet-layer');
   expect(css).toContain('display: none !important;');
+});
+
+test('buildEmbeddedChartCss does not force-size Leaflet layers for dhis2_map', () => {
+  // Regression: forcing width/height:100% on .leaflet-layer fights Leaflet's
+  // transform-based tile layout and scatters the basemap tiles on the public
+  // (iframe) embed. Leaflet must own its own layer/tile sizing.
+  const css = buildEmbeddedChartCss('map_focus', 'dhis2_map');
+
+  expect(css).not.toMatch(/\.leaflet-layer\s*(,[^{]*)?\{/);
+  expect(css).not.toMatch(/\.leaflet-tile\b/);
 });

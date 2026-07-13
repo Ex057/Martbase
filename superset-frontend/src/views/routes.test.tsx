@@ -39,6 +39,7 @@ jest.mock('src/utils/getBootstrapData', () => ({
 
 jest.mock('src/dashboard/util/permissionUtils', () => ({
   isUserAdmin: jest.fn(() => false),
+  userHasPermission: jest.fn(() => false),
 }));
 
 jest.mock('src/pages/Home', () => () => <div data-test="mock-home" />);
@@ -62,11 +63,47 @@ describe('isFrontendRoute', () => {
     });
   });
 
-  test('includes the public explore iframe route used by portal chart blocks', () => {
-    expect(isFrontendRoute('/superset/explore/public/')).toBe(true);
-  });
+test('includes the public explore iframe route used by portal chart blocks', () => {
+  expect(isFrontendRoute('/superset/explore/public/')).toBe(true);
+});
 
   test('returns false if a route does not match', () => {
     expect(isFrontendRoute('/nonexistent/path/')).toBe(false);
   });
+});
+
+test('includes the AI Management route when the user has AI permissions', () => {
+  let scopedRoutes: typeof routes = [];
+
+  jest.resetModules();
+  jest.isolateModules(() => {
+    jest.doMock('@superset-ui/core', () => ({
+      FeatureFlag: {
+        AiInsights: 'AI_INSIGHTS',
+        EnableExtensions: 'EnableExtensions',
+        TaggingSystem: 'TaggingSystem',
+      },
+      isFeatureEnabled: jest.fn(() => true),
+    }));
+    jest.doMock('src/utils/getBootstrapData', () => ({
+      __esModule: true,
+      default: () => ({
+        common: { conf: { AUTH_USER_REGISTRATION: false } },
+        user: { roles: { 'Data Management': [['can_list', 'AIManagement']] } },
+      }),
+    }));
+    jest.doMock('src/dashboard/util/permissionUtils', () => ({
+      isUserAdmin: jest.fn(() => false),
+      userHasPermission: jest.fn(() => true),
+    }));
+
+    scopedRoutes = require('./routes').routes;
+  });
+
+  expect(
+    scopedRoutes.some(route => route.path === '/superset/ai-management/'),
+  ).toBe(true);
+  expect(scopedRoutes.some(route => route.path === '/ai-management/')).toBe(
+    true,
+  );
 });

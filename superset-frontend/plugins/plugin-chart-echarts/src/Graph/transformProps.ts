@@ -44,6 +44,7 @@ import {
 } from '../utils/series';
 import { getDefaultTooltip } from '../utils/tooltip';
 import { Refs } from '../types';
+import { getChartTitleOption } from '../utils/chartTitle';
 
 type EdgeWithStyles = GraphEdgeItemOption & {
   lineStyle: Exclude<GraphEdgeItemOption['lineStyle'], undefined>;
@@ -335,7 +336,10 @@ export default function transformProps(
     },
   ];
 
+  const { title: chartTitleOption } = getChartTitleOption(formData, theme, (chartProps.datasource as any)?.columns);
+
   const echartOptions: EChartsCoreOption = {
+    ...(chartTitleOption && { title: chartTitleOption }),
     animationDuration: DEFAULT_GRAPH_SERIES_OPTION.animationDuration,
     animationEasing: DEFAULT_GRAPH_SERIES_OPTION.animationEasing,
     tooltip: {

@@ -23,6 +23,7 @@ import {
   getStandardizedControls,
   sharedControls,
 } from '@superset-ui/chart-controls';
+import { chartTitleSection } from '../controls';
 import { DEFAULT_FORM_DATA } from './constants';
 
 const requiredEntity = {
@@ -100,6 +101,7 @@ const controlPanel: ControlPanelConfig = {
         ['row_limit'],
       ],
     },
+    chartTitleSection,
     {
       label: t('Chart options'),
       expanded: true,

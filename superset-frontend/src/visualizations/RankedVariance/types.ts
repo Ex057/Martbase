@@ -17,6 +17,7 @@
  * under the License.
  */
 import { QueryFormData } from '@superset-ui/core';
+import { ResolvedChartTitle } from 'src/utils/chartAutoSubtitle';
 
 export type SortOrder = 'worst-first' | 'best-first' | 'alphabetical';
 
@@ -55,4 +56,5 @@ export interface RankedVarianceChartProps {
   benchmarkLower: number | null;
   benchmarkUpper: number | null;
   showLegend: boolean;
+  title: ResolvedChartTitle;
 }

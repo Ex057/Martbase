@@ -21,6 +21,7 @@ import {
   ControlPanelConfig,
   dndGroupByControl,
 } from '@superset-ui/chart-controls';
+import { chartTitleSection } from '../controls';
 
 const config: ControlPanelConfig = {
   controlPanelSections: [
@@ -64,6 +65,7 @@ const config: ControlPanelConfig = {
         ['sort_by_metric'],
       ],
     },
+    chartTitleSection,
     {
       label: t('Chart Options'),
       expanded: true,

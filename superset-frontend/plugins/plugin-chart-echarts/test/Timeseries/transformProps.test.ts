@@ -88,6 +88,59 @@ describe('EchartsTimeseries transformProps', () => {
     );
   });
 
+  it('should render a manual on-chart title/subtitle with colors', () => {
+    const chartProps = new ChartProps({
+      ...chartPropsConfig,
+      formData: {
+        ...formData,
+        viz_type: 'echarts_timeseries_bar',
+        chart_title: 'Cases Reported',
+        chart_subtitle: 'March 2026',
+        chart_title_color: { r: 255, g: 0, b: 0, a: 1 },
+        chart_subtitle_color: { r: 0, g: 128, b: 0, a: 1 },
+      },
+    });
+    const { echartOptions } = transformProps(
+      chartProps as EchartsTimeseriesChartProps,
+    );
+    expect((echartOptions as any).title).toEqual(
+      expect.objectContaining({
+        text: 'Cases Reported',
+        subtext: 'March 2026',
+        textStyle: expect.objectContaining({ color: '#ff0000' }),
+        subtextStyle: expect.objectContaining({ color: '#008000' }),
+      }),
+    );
+  });
+
+  it('should render the title on any timeseries viz (not just bar)', () => {
+    const chartProps = new ChartProps({
+      ...chartPropsConfig,
+      formData: {
+        ...formData,
+        viz_type: 'echarts_timeseries_line',
+        chart_title: 'Cases Reported',
+      },
+    });
+    const { echartOptions } = transformProps(
+      chartProps as EchartsTimeseriesChartProps,
+    );
+    expect((echartOptions as any).title).toEqual(
+      expect.objectContaining({ text: 'Cases Reported', subtext: '' }),
+    );
+  });
+
+  it('should not render a title when title and subtitle are blank', () => {
+    const chartProps = new ChartProps({
+      ...chartPropsConfig,
+      formData: { ...formData, viz_type: 'echarts_timeseries_bar' },
+    });
+    const { echartOptions } = transformProps(
+      chartProps as EchartsTimeseriesChartProps,
+    );
+    expect((echartOptions as any).title).toBeUndefined();
+  });
+
   it('should transform chart props for horizontal viz', () => {
     const chartProps = new ChartProps({
       ...chartPropsConfig,

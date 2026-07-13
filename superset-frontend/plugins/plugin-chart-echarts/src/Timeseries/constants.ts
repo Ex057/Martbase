@@ -48,6 +48,9 @@ export const DEFAULT_FORM_DATA: EchartsTimeseriesFormData = {
   yAxisTitle: '',
   yAxisTitleMargin: 0,
   yAxisTitlePosition: 'Top',
+  chartTitle: '',
+  chartSubtitle: '',
+  chartTitleAlign: 'center',
   // Now that the weird bug workaround is over, here's the rest...
   ...DEFAULT_SORT_SERIES_DATA,
   annotationLayers: sections.annotationLayers,

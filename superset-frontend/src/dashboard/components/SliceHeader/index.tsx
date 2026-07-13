@@ -101,6 +101,20 @@ const ChartHeaderStyles = styled.div`
       color: var(--pro-navy, ${theme.colorText});
       letter-spacing: -0.01em;
 
+      .chart-auto-title {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--pro-text-secondary, ${theme.colorTextDescription});
+        margin-bottom: 2px;
+        line-height: 1.3;
+      }
+
+      .chart-title-main {
+        display: block;
+      }
+
       & > span.ant-tooltip-open {
         display: inline;
       }
@@ -162,6 +176,194 @@ const ChartHeaderStyles = styled.div`
     }
   `}
 `;
+
+function formatReadableLabel(value: string | null | undefined): string | null {
+  const candidate = String(value || '').trim();
+  if (!candidate) return null;
+
+  // Filter out meaningless labels
+  const lowerCandidate = candidate.toLowerCase();
+  const meaninglessPatterns = [
+    'no filter',
+    'undefined',
+    'null',
+    'none',
+    'select',
+    'choose',
+    'all',
+  ];
+
+  if (meaninglessPatterns.some(pattern => lowerCandidate === pattern)) {
+    return null;
+  }
+
+  // Clean up labels like "ou_level" → "OU Level", "sum_of_cases" → "Sum of Cases"
+  const cleaned = candidate
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return cleaned || null;
+}
+
+function summarizeMetric(formData: Record<string, any>): string | null {
+  const metrics = ensureIsArray(formData.metrics).filter(Boolean);
+  const metric = metrics[0] || formData.metric;
+  if (!metric) {
+    return null;
+  }
+
+  let label: string | null = null;
+
+  if (typeof metric === 'string') {
+    label = formatReadableLabel(metric);
+  } else if (typeof metric === 'object') {
+    label =
+      formatReadableLabel(metric.label) ||
+      formatReadableLabel(metric.metric_name) ||
+      formatReadableLabel(metric.column?.label) ||
+      formatReadableLabel(metric.column?.column_name) ||
+      formatReadableLabel(metric.expressionType === 'SQL' ? metric.sqlExpression : '');
+  }
+
+  // Clean up common metric formatting issues
+  if (label) {
+    // Remove redundant "Sum Of" or "Count Of" prefixes when they're generic
+    label = label
+      .replace(/^(Sum|Count|Avg|Average|Min|Max)\s+Of\s+(.+)$/i, (_, agg, col) => {
+        // Only simplify if the column name already indicates aggregation
+        const colLower = col.toLowerCase();
+        if (
+          colLower.includes('total') ||
+          colLower.includes('count') ||
+          colLower.includes('sum')
+        ) {
+          return col;
+        }
+        return `${agg} of ${col}`;
+      })
+      .trim();
+
+    // Remove generic suffixes like "Level" from abbreviated column names
+    label = label.replace(/^([A-Z]{2,3})\s+Level$/i, '$1').trim();
+  }
+
+  return label || null;
+}
+
+function summarizeTimeRange(formData: Record<string, any>): string | null {
+  // Try DHIS2 period formatting first
+  if (Array.isArray(formData.dhis2_period_filter_values) && formData.dhis2_period_filter_values.length > 0) {
+    try {
+      const { formatDHIS2Period } = require('@superset-ui/core/utils/dhis2Period');
+      const formatted = formData.dhis2_period_filter_values
+        .map((p: string) => formatDHIS2Period(p) || p)
+        .join(', ');
+      if (formatted) return formatted;
+    } catch (e) {
+      // Fallback if module not available
+    }
+  }
+
+  if (formData.dhis2_period_label) {
+    try {
+      const { formatDHIS2Period } = require('@superset-ui/core/utils/dhis2Period');
+      const formatted = formatDHIS2Period(String(formData.dhis2_period_label));
+      if (formatted) return formatted;
+    } catch (e) {
+      // Fallback
+    }
+  }
+
+  return (
+    formatReadableLabel(formData.dhis2_period_filter_values?.join?.(', ')) ||
+    formatReadableLabel(formData.dhis2_period_label) ||
+    formatReadableLabel(formData.time_range) ||
+    formatReadableLabel(formData.granularity_sqla)
+  );
+}
+
+function filterStateLabel(filterState: Record<string, any> | null | undefined) {
+  if (!filterState) {
+    return null;
+  }
+  if (
+    filterState.label &&
+    !String(filterState.label).toLowerCase().includes('undefined')
+  ) {
+    return formatReadableLabel(String(filterState.label));
+  }
+  if (filterState.value) {
+    return formatReadableLabel(ensureIsArray(filterState.value).join(', '));
+  }
+  if (filterState.extraFormData?.filters) {
+    const values = ensureIsArray(filterState.extraFormData.filters)
+      .map((item: any) => item?.val ?? item?.value)
+      .flat()
+      .filter(Boolean)
+      .join(', ');
+    return formatReadableLabel(values);
+  }
+  return null;
+}
+
+function filterTargetName(filter: Record<string, any>): string {
+  const firstTarget = ensureIsArray(filter?.targets)[0] || {};
+  return String(
+    firstTarget?.column?.name ||
+      firstTarget?.column ||
+      firstTarget?.datasetColumnName ||
+      firstTarget?.dataset_col ||
+      filter?.name ||
+      filter?.filterName ||
+      '',
+  ).toLowerCase();
+}
+
+function buildAutoTitle(
+  sliceName: string,
+  formData: Record<string, any>,
+  filterContext: { ou: string | null; period: string | null } | null,
+): string {
+  const metric = summarizeMetric(formData);
+  const orgUnit =
+    formatReadableLabel(filterContext?.ou) ||
+    formatReadableLabel(formData.entity_name) ||
+    formatReadableLabel(formData.org_unit_name) ||
+    formatReadableLabel(formData.district_city);
+  const period =
+    formatReadableLabel(filterContext?.period) || summarizeTimeRange(formData);
+
+  // Use professional templates instead of simple concatenation
+  if (metric && orgUnit && period) {
+    // Template: "Metric in OrgUnit during Period"
+    return `${metric} in ${orgUnit} during ${period}`;
+  }
+
+  if (metric && orgUnit) {
+    // Template: "Metric in OrgUnit"
+    return `${metric} in ${orgUnit}`;
+  }
+
+  if (metric && period) {
+    // Template: "Metric for Period"
+    return `${metric} for ${period}`;
+  }
+
+  if (orgUnit && period) {
+    // Template: "OrgUnit, Period"
+    return `${orgUnit}, ${period}`;
+  }
+
+  // Single element
+  if (metric) return metric;
+  if (orgUnit) return orgUnit;
+  if (period) return period;
+
+  // Fallback to original chart name
+  return sliceName;
+}
 
 const SliceHeader = forwardRef<HTMLDivElement, SliceHeaderProps>(
   (
@@ -249,30 +451,22 @@ const SliceHeader = forwardRef<HTMLDivElement, SliceHeaderProps>(
       const allFilters = Object.values(nativeFilters) as any[];
 
       for (const filter of allFilters) {
-        if (filter.type !== 'NATIVE_FILTER') continue;
         // Only include filters that scope to this chart
         if (
           chartId &&
           Array.isArray(filter.chartsInScope) &&
-          !filter.chartsInScope.includes(chartId)
+          !filter.chartsInScope
+            .map((value: string | number) => String(value))
+            .includes(String(chartId))
         ) {
           continue;
         }
 
         const filterState = dataMask[filter.id]?.filterState;
-        if (!filterState) continue;
-
-        const label =
-          filterState.label && !String(filterState.label).includes('undefined')
-            ? String(filterState.label)
-            : filterState.value
-              ? ensureIsArray(filterState.value).join(', ')
-              : null;
+        const label = filterStateLabel(filterState);
         if (!label) continue;
 
-        const colName = (
-          filter.targets?.[0]?.column?.name || filter.name || ''
-        ).toLowerCase();
+        const colName = filterTargetName(filter);
 
         if (!ouLabel && ouKeywords.some(k => colName.includes(k))) {
           ouLabel = label;
@@ -289,6 +483,16 @@ const SliceHeader = forwardRef<HTMLDivElement, SliceHeaderProps>(
 
     const rowLimit = Number(formData.row_limit || -1);
     const sqlRowCount = Number(firstQueryResponse?.sql_rowcount || 0);
+    const shouldAutoTitle =
+      !editMode && Boolean((formData as Record<string, any>)?.auto_title);
+    const autoTitle = shouldAutoTitle
+      ? buildAutoTitle(
+          sliceName,
+          (formData as Record<string, any>) || {},
+          filterContextLine,
+        )
+      : null;
+    const displayTitle = sliceName;
 
     useEffect(() => {
       const headerElement = headerRef.current;
@@ -297,11 +501,11 @@ const SliceHeader = forwardRef<HTMLDivElement, SliceHeaderProps>(
         (headerElement.scrollWidth > headerElement.offsetWidth ||
           headerElement.scrollHeight > headerElement.offsetHeight)
       ) {
-        setHeaderTooltip(sliceName ?? null);
+        setHeaderTooltip(displayTitle ?? null);
       } else {
         setHeaderTooltip(null);
       }
-    }, [sliceName, width, height]);
+    }, [displayTitle, width, height]);
 
     const exploreParams = new URLSearchParams({
       [URL_PARAMS.sliceId.name]: String(slice.slice_id),
@@ -316,10 +520,11 @@ const SliceHeader = forwardRef<HTMLDivElement, SliceHeaderProps>(
         <div className="header-title" ref={headerRef}>
           <Tooltip title={headerTooltip}>
             {/* this div ensures the hover event triggers correctly and prevents flickering */}
-            <div>
+            <div className="chart-title-main">
               <EditableTitle
                 title={
-                  sliceName ||
+                  autoTitle ||
+                  displayTitle ||
                   (editMode
                     ? '---' // this makes an empty title clickable
                     : '')
@@ -330,7 +535,7 @@ const SliceHeader = forwardRef<HTMLDivElement, SliceHeaderProps>(
               />
             </div>
           </Tooltip>
-          {filterContextLine && !editMode && (
+          {filterContextLine && !editMode && !shouldAutoTitle && (
             <div className="chart-filter-context">
               {filterContextLine.ou && (
                 <span>{filterContextLine.ou}</span>

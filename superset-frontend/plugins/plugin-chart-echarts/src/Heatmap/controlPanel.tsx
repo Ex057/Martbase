@@ -22,7 +22,7 @@ import {
   formatSelectOptionsForRange,
   getStandardizedControls,
 } from '@superset-ui/chart-controls';
-import { xAxisLabelRotation } from '../controls';
+import { chartTitleSection, xAxisLabelRotation } from '../controls';
 
 const sortAxisChoices = [
   ['alpha_asc', t('Axis ascending')],
@@ -103,6 +103,7 @@ const config: ControlPanelConfig = {
         ],
       ],
     },
+    chartTitleSection,
     {
       label: t('Chart Options'),
       expanded: true,

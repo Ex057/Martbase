@@ -18,6 +18,7 @@
  */
 import { t, VizType } from '@superset-ui/core';
 import {
+  ControlPanelSectionConfig,
   ControlPanelsContainerProps,
   ControlSetItem,
   ControlSetRow,
@@ -420,4 +421,97 @@ export const showExtraControls: CustomControlItem = {
     renderTrigger: true,
     default: false,
   },
+};
+
+/**
+ * Shared "Title & Subtitle" section, added to every ECharts chart's Customize
+ * tab. Renders an editable title + subtitle on the chart canvas (above the
+ * plot) with independent colours and a shared alignment. The values are read by
+ * `getChartTitleOption` in each plugin's transformProps.
+ */
+export const chartTitleSection: ControlPanelSectionConfig = {
+  label: t('Title & Subtitle'),
+  tabOverride: 'customize',
+  expanded: false,
+  controlSetRows: [
+    [
+      {
+        name: 'chart_title',
+        config: {
+          type: 'TextControl',
+          label: t('Title'),
+          renderTrigger: true,
+          default: '',
+          description: t(
+            'Title shown on the chart, above the plot area — your own wording.',
+          ),
+        },
+      },
+    ],
+    [
+      {
+        name: 'chart_subtitle',
+        config: {
+          type: 'TextControl',
+          label: t('Subtitle'),
+          renderTrigger: true,
+          default: '',
+          description: t('Optional subtitle shown beneath the title.'),
+          visibility: ({ controls }: any) =>
+            !controls?.chart_auto_subtitle?.value,
+        },
+      },
+    ],
+    [
+      {
+        name: 'chart_auto_subtitle',
+        config: {
+          type: 'CheckboxControl',
+          label: t('Auto subtitle'),
+          renderTrigger: true,
+          default: false,
+          description: t(
+            'Automatically build the subtitle from the chart’s active filters, ' +
+              'e.g. "Region: Bukedi, Busoga · Year > 2020". Uncheck to type your own subtitle.',
+          ),
+        },
+      },
+    ],
+    [
+      {
+        name: 'chart_title_color',
+        config: {
+          type: 'ColorPickerControl',
+          label: t('Title color'),
+          renderTrigger: true,
+          description: t('Text color for the chart title.'),
+        },
+      },
+      {
+        name: 'chart_subtitle_color',
+        config: {
+          type: 'ColorPickerControl',
+          label: t('Subtitle color'),
+          renderTrigger: true,
+          description: t('Text color for the chart subtitle.'),
+        },
+      },
+    ],
+    [
+      {
+        name: 'chart_title_align',
+        config: {
+          type: 'SelectControl',
+          label: t('Title alignment'),
+          renderTrigger: true,
+          clearable: false,
+          default: 'center',
+          choices: [
+            ['center', t('Center')],
+            ['left', t('Left')],
+          ],
+        },
+      },
+    ],
+  ],
 };

@@ -197,7 +197,7 @@ def upgrade() -> None:
             if not _column_exists("public_pages", "style_bundle_id"):
                 batch_op.add_column(sa.Column("style_bundle_id", sa.Integer(), nullable=True))
                 batch_op.create_foreign_key(
-                    "fk_public_pages_style_bundle_id_public_cms_style_bundles",
+                    "fk_pages_style_bundle_id",
                     "public_cms_style_bundles",
                     ["style_bundle_id"],
                     ["id"],
@@ -209,7 +209,7 @@ def upgrade() -> None:
             if not _column_exists("public_page_sections", "style_bundle_id"):
                 batch_op.add_column(sa.Column("style_bundle_id", sa.Integer(), nullable=True))
                 batch_op.create_foreign_key(
-                    "fk_public_page_sections_style_bundle_id_public_cms_style_bundles",
+                    "fk_sections_style_bundle_id",
                     "public_cms_style_bundles",
                     ["style_bundle_id"],
                     ["id"],
@@ -221,7 +221,7 @@ def upgrade() -> None:
             if not _column_exists("public_page_components", "style_bundle_id"):
                 batch_op.add_column(sa.Column("style_bundle_id", sa.Integer(), nullable=True))
                 batch_op.create_foreign_key(
-                    "fk_public_page_components_style_bundle_id_public_cms_style_bundles",
+                    "fk_components_style_bundle_id",
                     "public_cms_style_bundles",
                     ["style_bundle_id"],
                     ["id"],

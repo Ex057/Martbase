@@ -343,12 +343,15 @@ const QuickFiltersOverlay = styled.div`
 `;
 /* eslint-enable theme-colors/no-literal-colors */
 
+// The fit is always synchronous (non-animated): an animated fitBounds runs for
+// ~350ms, and if an invalidateSize (ResizeObserver / prop-resize) lands
+// mid-animation Leaflet recomputes the pixel origin and the tiles/vector panes
+// scatter. A synchronous fit closes that race.
 function fitMapToBoundaries(
   map: L.Map,
   boundaries: BoundaryFeature[],
   viewportWidth: number,
   viewportHeight: number,
-  animate: boolean = true,
 ): boolean {
   const bounds = calculateBounds(boundaries);
 
@@ -356,7 +359,7 @@ function fitMapToBoundaries(
     return false;
   }
 
-  const applyFit = (shouldAnimate: boolean) => {
+  const applyFit = () => {
     const size = map.getSize();
     // Use actual map canvas dimensions. Fall back to viewport props only
     // when the map container has no size yet (e.g. first render before layout).
@@ -370,17 +373,18 @@ function fitMapToBoundaries(
       paddingTopLeft: fitConfig.paddingTopLeft,
       paddingBottomRight: fitConfig.paddingBottomRight,
       maxZoom: fitConfig.maxZoom,
-      animate: shouldAnimate,
-      duration: shouldAnimate ? 0.35 : undefined,
+      animate: false,
     });
   };
 
   map.invalidateSize({ pan: false });
-  applyFit(animate);
+  applyFit();
 
+  // Re-fit after the browser has settled layout, so a container that was still
+  // sizing on the first pass ends up correctly framed.
   requestAnimationFrame(() => {
     map.invalidateSize({ pan: false });
-    applyFit(false);
+    applyFit();
   });
 
   return true;
@@ -487,14 +491,22 @@ interface BoundaryMaskProps {
 
 function MapInstanceBridge({
   onReady,
+  width,
+  height,
 }: {
   onReady: (map: L.Map) => void;
+  width: number;
+  height: number;
 }): ReactElement | null {
   const map = useMap();
 
   useEffect(() => {
     onReady(map);
   }, [map, onReady]);
+
+  // rAF-throttled invalidateSize, shared by the ResizeObserver and the
+  // prop-driven effect below.
+  const invalidateRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const container = map.getContainer();
@@ -508,6 +520,7 @@ function MapInstanceBridge({
         animationFrame = null;
       });
     };
+    invalidateRef.current = invalidate;
 
     invalidate();
     const timeout = window.setTimeout(invalidate, 250);
@@ -523,8 +536,17 @@ function MapInstanceBridge({
         cancelAnimationFrame(animationFrame);
       }
       resizeObserver?.disconnect();
+      invalidateRef.current = null;
     };
   }, [map]);
+
+  // React to the Superset width/height props directly. The ResizeObserver
+  // eventually catches flex-driven resizes, but reacting to the props too makes
+  // sizing deterministic — it removes the mount-time 0px race (map initialised
+  // before the container was measured) instead of relying on the 250ms guess.
+  useEffect(() => {
+    invalidateRef.current?.();
+  }, [width, height]);
 
   return null;
 }
@@ -649,13 +671,7 @@ function FocusButton({
   const handleFocus = () => {
     if (boundaries.length > 0 && map) {
       try {
-        fitMapToBoundaries(
-          map,
-          boundaries,
-          map.getSize().x,
-          map.getSize().y,
-          true,
-        );
+        fitMapToBoundaries(map, boundaries, map.getSize().x, map.getSize().y);
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn('Failed to focus map:', err);
@@ -743,6 +759,18 @@ const DynamicGeoJSON: FC<DynamicGeoJSONProps> = ({
   const prevStyleRef = useRef(style);
   const prevOnEachFeatureRef = useRef(onEachFeature);
 
+  // Debug logging for boundary rendering
+  useEffect(() => {
+    if (data && data.features) {
+      console.info('[DynamicGeoJSON] Rendering features:', {
+        featureCount: data.features.length,
+        firstFeature: data.features[0],
+        hasGeometry: data.features.every((f: any) => f.geometry),
+        geometryTypes: [...new Set(data.features.map((f: any) => f.geometry?.type))],
+      });
+    }
+  }, [data]);
+
   const clearLayerBindings = useCallback((layer: DHIS2GeoJsonLayer) => {
     layer.off();
     if (layer.getTooltip?.()) {
@@ -790,12 +818,19 @@ const DynamicGeoJSON: FC<DynamicGeoJSONProps> = ({
     [clearLayerBindings],
   );
 
+  // Add error boundary for GeoJSON rendering
+  if (!data || !data.features || data.features.length === 0) {
+    console.warn('[DynamicGeoJSON] No features to render');
+    return null;
+  }
+
   return (
     <GeoJSON
       ref={geoJsonRef}
       data={data}
       style={style}
       onEachFeature={onEachFeature}
+      key={`geojson-${styleKey}`} // Force re-render when style changes
     />
   );
 };
@@ -884,6 +919,7 @@ function buildAggregatedValueMaps(options: {
   const orgUnitData = new Map<string, number[]>();
 
   if (!rows.length) {
+    console.warn('[buildAggregatedValueMaps] No rows to aggregate');
     return {
       dataMap: metricMapById,
       dataMapByName: metricMapByName,
@@ -891,6 +927,13 @@ function buildAggregatedValueMaps(options: {
   }
 
   const availableColumns = Object.keys(rows[0]);
+  console.info('[buildAggregatedValueMaps] Starting aggregation:', {
+    rowsCount: rows.length,
+    requestedOrgUnitColumn,
+    metric,
+    availableColumns,
+    sampleRow: rows[0],
+  });
   const actualOrgUnitCol =
     (actualOrgUnitColumn && availableColumns.includes(actualOrgUnitColumn)
       ? actualOrgUnitColumn
@@ -969,12 +1012,28 @@ function buildAggregatedValueMaps(options: {
     const id = String(orgUnitValue).trim();
     const numValue = Number(metricValue);
     if (!id || Number.isNaN(numValue)) {
+      if (Math.random() < 0.01) { // Log 1% of skipped rows
+        console.debug('[buildAggregatedValueMaps] Skipping row - invalid data:', {
+          orgUnitValue,
+          metricValue,
+          id,
+          numValue,
+          isNaN: Number.isNaN(numValue),
+        });
+      }
       return;
     }
 
     const values = orgUnitData.get(id) || [];
     values.push(numValue);
     orgUnitData.set(id, values);
+  });
+
+  console.info('[buildAggregatedValueMaps] OrgUnit data collected:', {
+    orgUnitDataSize: orgUnitData.size,
+    actualOrgUnitCol,
+    actualMetricCol,
+    sampleOrgUnits: Array.from(orgUnitData.keys()).slice(0, 5),
   });
 
   orgUnitData.forEach((values, id) => {
@@ -1014,6 +1073,14 @@ function buildAggregatedValueMaps(options: {
     });
   });
 
+  console.info('[buildAggregatedValueMaps] Final maps built:', {
+    metricMapByIdSize: metricMapById.size,
+    metricMapByNameSize: metricMapByName.size,
+    sampleIds: Array.from(metricMapById.entries()).slice(0, 5),
+    sampleNames: Array.from(metricMapByName.entries()).slice(0, 5),
+    allMapKeys: Array.from(metricMapById.keys()),
+  });
+
   return {
     dataMap: metricMapById,
     dataMapByName: metricMapByName,
@@ -1025,37 +1092,114 @@ function resolveFeatureValueFromMaps(
   dataMap: Map<string, number>,
   dataMapByName: Map<string, number>,
 ): number | undefined {
+  const debugLog = Math.random() < 0.05; // Log 5% of features for debugging
+
+  if (debugLog) {
+    console.debug('[resolveFeatureValueFromMaps] Starting lookup:', {
+      featureId: feature.id,
+      featureName: feature.properties?.name,
+      dataMapSize: dataMap.size,
+      dataMapByNameSize: dataMapByName.size,
+      dataMapKeys: Array.from(dataMap.keys()).slice(0, 5),
+      dataMapByNameKeys: Array.from(dataMapByName.keys()).slice(0, 5),
+    });
+  }
+
+  // Try exact ID match first
   let value = dataMap.get(feature.id);
   if (value !== undefined) {
+    if (debugLog) console.debug('[resolveFeatureValueFromMaps] Found value by feature.id:', value);
     return value;
   }
 
+  // Try exact name match
+  const featureName = feature.properties?.name;
+  if (featureName) {
+    // Try exact match first
+    value = dataMap.get(featureName);
+    if (value !== undefined) {
+      if (debugLog) console.debug('[resolveFeatureValueFromMaps] Found value by exact name:', featureName, value);
+      return value;
+    }
+
+    // If feature name is like "Abim District", also try without "District"
+    // This handles cases where data has full names but boundaries don't, or vice versa
+    const nameWithoutSuffix = featureName.replace(/\s+(District|City|Municipality|County|Town Council)$/i, '').trim();
+    const nameWithDistrict = featureName.includes('District') ? featureName : `${featureName} District`;
+    const nameWithCity = featureName.includes('City') ? featureName : `${featureName} City`;
+
+    // Try variations
+    for (const variant of [nameWithoutSuffix, nameWithDistrict, nameWithCity]) {
+      value = dataMap.get(variant);
+      if (value !== undefined) {
+        if (debugLog) console.debug('[resolveFeatureValueFromMaps] Found value by name variant:', variant, value);
+        return value;
+      }
+    }
+  }
+
+  // Generate all possible match keys for both ID and name
   const matchKeys = [
     ...buildOrgUnitMatchKeys(feature.id),
-    ...buildOrgUnitMatchKeys(feature.properties?.name),
+    ...buildOrgUnitMatchKeys(featureName),
   ];
 
+  if (debugLog) {
+    console.debug('[resolveFeatureValueFromMaps] Match keys:', matchKeys);
+  }
+
+  // Try all match keys
   for (const key of matchKeys) {
     value = dataMapByName.get(key);
     if (value !== undefined) {
+      if (debugLog) console.debug('[resolveFeatureValueFromMaps] Found value by match key:', key, value);
+      return value;
+    }
+
+    // Also try in the main dataMap
+    value = dataMap.get(key);
+    if (value !== undefined) {
+      if (debugLog) console.debug('[resolveFeatureValueFromMaps] Found value by match key in dataMap:', key, value);
       return value;
     }
   }
 
-  const normalizedFeatureName = normalizeOrgUnitMatchKey(
-    feature.properties?.name,
-  );
+  // Fallback: normalized fuzzy matching
+  const normalizedFeatureName = normalizeOrgUnitMatchKey(featureName);
   if (normalizedFeatureName) {
+    // Check all entries in both maps with fuzzy matching
     for (const [key, val] of dataMap.entries()) {
       const normalizedKey = normalizeOrgUnitMatchKey(key);
-      if (
+      if (normalizedKey && (
         normalizedKey === normalizedFeatureName ||
         normalizedKey.includes(normalizedFeatureName) ||
         normalizedFeatureName.includes(normalizedKey)
-      ) {
+      )) {
+        if (debugLog) console.debug('[resolveFeatureValueFromMaps] Found value by normalized match in dataMap:', key, val);
         return val;
       }
     }
+
+    for (const [key, val] of dataMapByName.entries()) {
+      const normalizedKey = normalizeOrgUnitMatchKey(key);
+      if (normalizedKey && (
+        normalizedKey === normalizedFeatureName ||
+        normalizedKey.includes(normalizedFeatureName) ||
+        normalizedFeatureName.includes(normalizedKey)
+      )) {
+        if (debugLog) console.debug('[resolveFeatureValueFromMaps] Found value by normalized match in dataMapByName:', key, val);
+        return val;
+      }
+    }
+  }
+
+  if (debugLog) {
+    console.warn('[resolveFeatureValueFromMaps] No value found for feature:', {
+      featureId: feature.id,
+      featureName: feature.properties?.name,
+      normalizedFeatureName,
+      triedKeys: matchKeys,
+    });
   }
 
   return undefined;
@@ -1109,6 +1253,11 @@ function DHIS2Map({
   data,
   width,
   height,
+  chartTitle,
+  chartSubtitle,
+  chartTitleColor,
+  chartSubtitleColor,
+  chartTitleAlign = 'center',
   databaseId,
   isStagedLocalDataset = false,
   stagedDatasetId,
@@ -1129,11 +1278,11 @@ function DHIS2Map({
   chartBackgroundColor,
   transparentCardContainer = false,
   boundaryFocusMaskStyle = 'off',
-  basemapStyle = 'osmLight',
+  basemapStyle = 'none',
   labelTextColor,
-  opacity,
+  opacity = 0.7,  // DEFAULT TO 0.7 if not provided
   strokeColor,
-  strokeWidth,
+  strokeWidth = 1,  // DEFAULT TO 1 if not provided
   autoThemeBorders = false,
   showAllBoundaries = false,
   focusSelectedBoundaryWithChildren = false,
@@ -1176,6 +1325,14 @@ function DHIS2Map({
   const MAX_PENDING_BOUNDARY_RETRIES = 8;
   const metricDisplayName = metricLabel || metric;
   const hasQueryData = data.length > 0;
+
+  // Log opacity to debug visibility issue
+  console.info('[DHIS2Map] Component opacity settings:', {
+    opacity,
+    strokeWidth,
+    strokeColor,
+    chartBackgroundColor,
+  });
   const sourceInstanceIdsInputKey = useMemo(
     () =>
       (Array.isArray(sourceInstanceIds) ? sourceInstanceIds : [])
@@ -2730,34 +2887,53 @@ function DHIS2Map({
     return colorScheme || 'supersetColors';
   }, [useLinearColorScheme, linearColorScheme, colorScheme]);
 
-  const colorScale = useMemo(
-    () =>
-      getColorScale(
-        activeColorScheme,
-        valueRange.min,
-        valueRange.max,
-        legendClasses,
-        legendReverseColors,
-        useLinearColorScheme ? 'sequential' : 'categorical',
-        manualBreaks,
-        manualColors,
-        effectiveStagedLegendDefinition,
-        legendType,
-        legendDataValues,
-      ),
-    [
+  const colorScale = useMemo(() => {
+    console.info('[DHIS2Map] Creating color scale:', {
       activeColorScheme,
-      effectiveStagedLegendDefinition,
-      legendDataValues,
-      legendType,
       valueRange,
       legendClasses,
       legendReverseColors,
       useLinearColorScheme,
+      legendType,
+      hasData: valueRange.hasData,
+    });
+
+    const scale = getColorScale(
+      activeColorScheme,
+      valueRange.min,
+      valueRange.max,
+      legendClasses,
+      legendReverseColors,
+      useLinearColorScheme ? 'sequential' : 'categorical',
       manualBreaks,
       manualColors,
-    ],
-  );
+      effectiveStagedLegendDefinition,
+      legendType,
+      legendDataValues,
+    );
+
+    // Test the color scale
+    if (valueRange.hasData) {
+      const testValue = (valueRange.min + valueRange.max) / 2;
+      console.info('[DHIS2Map] Testing color scale:', {
+        testValue,
+        resultColor: scale(testValue),
+      });
+    }
+
+    return scale;
+  }, [
+    activeColorScheme,
+    effectiveStagedLegendDefinition,
+    legendDataValues,
+    legendType,
+    valueRange,
+    legendClasses,
+    legendReverseColors,
+    useLinearColorScheme,
+    manualBreaks,
+    manualColors,
+  ]);
 
   const computedLegendEntries = useMemo(
     () =>
@@ -2790,7 +2966,14 @@ function DHIS2Map({
   );
 
   const fetchBoundaries = useCallback(async () => {
+    console.info('[DHIS2Map] fetchBoundaries called with:', {
+      databaseId,
+      effectiveBoundaryLevels,
+      boundaryLoadMethod,
+    });
+
     if (!databaseId) {
+      console.error('[DHIS2Map] No database selected');
       setError(t('No database selected'));
       setLoading(false);
       return;
@@ -3037,6 +3220,16 @@ function DHIS2Map({
       }
       const validFeatures = convertToBoundaryFeatures(result.allFeatures);
 
+      // Debug: Check if features have valid geometry
+      const featuresWithGeometry = validFeatures.filter(f => f.geometry && f.geometry.coordinates);
+      if (featuresWithGeometry.length < validFeatures.length) {
+        console.warn('[DHIS2Map] Some features missing geometry:', {
+          total: validFeatures.length,
+          withGeometry: featuresWithGeometry.length,
+          missing: validFeatures.length - featuresWithGeometry.length,
+        });
+      }
+
       setBoundaries(validFeatures);
     } catch (err: any) {
       const message = err?.message || '';
@@ -3105,7 +3298,17 @@ function DHIS2Map({
       sourceInstanceIdsKey,
     ].join('|');
 
+    console.info('[DHIS2Map] Boundary fetch useEffect triggered:', {
+      boundaryRequestKey,
+      lastLoaded: lastLoadedBoundaryRequestKeyRef.current,
+      databaseId,
+      effectiveBoundaryLevels,
+      boundaryLevelsKey,
+      sourceInstanceIdsKey,
+    });
+
     if (lastLoadedBoundaryRequestKeyRef.current === boundaryRequestKey) {
+      console.info('[DHIS2Map] Skipping fetch - same config');
       return; // same config — do not re-fetch
     }
 
@@ -3119,6 +3322,10 @@ function DHIS2Map({
       effectiveBoundaryLevels &&
       effectiveBoundaryLevels.length > 0
     ) {
+      console.info('[DHIS2Map] Fetching boundaries with config:', {
+        databaseId,
+        effectiveBoundaryLevels,
+      });
       // Cancel any pending retry when the config itself changes.
       if (boundaryPendingRetryTimerRef.current) {
         clearTimeout(boundaryPendingRetryTimerRef.current);
@@ -3131,6 +3338,11 @@ function DHIS2Map({
       setLoading(true);
       fetchBoundaries();
     } else {
+      console.warn('[DHIS2Map] Not fetching boundaries:', {
+        hasDatabaseId: !!databaseId,
+        hasEffectiveLevels: !!effectiveBoundaryLevels,
+        levelsLength: effectiveBoundaryLevels?.length || 0,
+      });
       // Only show the "no database" error if we have previously had a valid
       // databaseId — while the datasource is still loading (placeholder),
       // databaseId is undefined but the error would be spurious.
@@ -3270,6 +3482,7 @@ function DHIS2Map({
 
   const displayBoundaries = useMemo(() => {
     if (boundaries.length === 0) {
+      console.warn('[DHIS2Map] No boundaries available to display');
       return [];
     }
 
@@ -3279,7 +3492,29 @@ function DHIS2Map({
       showAllBoundaries,
     });
 
-    return visibleBoundaries;
+    // Validate boundaries have proper geometry
+    const validBoundaries = visibleBoundaries.filter(boundary => {
+      if (!boundary.geometry || !boundary.geometry.coordinates) {
+        console.warn('[DHIS2Map] Invalid boundary geometry:', boundary.id, boundary);
+        return false;
+      }
+      return true;
+    });
+
+    console.info('[DHIS2Map] Display boundaries:', {
+      totalBoundaries: boundaries.length,
+      visibleBoundaries: visibleBoundaries.length,
+      validBoundaries: validBoundaries.length,
+      showAllBoundaries,
+      selectedBoundaryIds: Array.from(selectedBoundaryIds),
+      firstBoundary: validBoundaries[0],
+      boundaryNamesAndIds: validBoundaries.slice(0, 10).map(b => ({
+        id: b.id,
+        name: b.properties?.name,
+      })),
+    });
+
+    return validBoundaries;
   }, [boundaries, selectedBoundaryIds, showAllBoundaries]);
 
   const displayBoundaryIdsSignature = useMemo(
@@ -3365,8 +3600,33 @@ function DHIS2Map({
 
   const getFeatureStyle = useCallback(
     (feature: BoundaryFeature) => {
-      // Debug: Log that we're styling (only for first feature to avoid spam)
+      // Ensure feature has valid geometry
+      if (!feature || !feature.geometry) {
+        console.warn('[DHIS2Map] Feature missing geometry:', feature);
+        return {
+          fillColor: '#cccccc',
+          fillOpacity: 0.3,
+          color: '#666666',
+          weight: 1,
+        };
+      }
+
       const value = getFeatureValue(feature);
+
+      // Debug logging for data mapping issues
+      if (Math.random() < 0.1) { // Log 10% of features
+        const fillColorResult = value !== undefined ? colorScale(value) : 'no-data';
+        console.debug('[getFeatureStyle] Feature styling:', {
+          featureId: feature.id,
+          featureName: feature.properties?.name,
+          value,
+          hasValue: value !== undefined,
+          fillColor: fillColorResult,
+          colorScaleExists: !!colorScale,
+          valueRange: valueRange,
+        });
+      }
+
       const noDataColorRgb = `rgba(${legendNoDataColor.r},${legendNoDataColor.g},${legendNoDataColor.b},${legendNoDataColor.a})`;
       const unselectedFillRgb = `rgba(${unselectedAreaFillColor.r},${unselectedAreaFillColor.g},${unselectedAreaFillColor.b},${unselectedAreaFillColor.a})`;
       const unselectedBorderRgb = `rgba(${unselectedAreaBorderColor.r},${unselectedAreaBorderColor.g},${unselectedAreaBorderColor.b},${unselectedAreaBorderColor.a})`;
@@ -3374,24 +3634,32 @@ function DHIS2Map({
 
       // Determine fill color based on data
       let fillColor = noDataColorRgb;
-      let fillOpacityValue = opacity;
+      const configuredOpacity =
+        typeof opacity === 'number' && Number.isFinite(opacity) ? opacity : 0.7;
+      let fillOpacityValue = configuredOpacity;
       let borderColor = `rgba(${strokeColor.r},${strokeColor.g},${strokeColor.b},${strokeColor.a})`;
-      let borderWidth = strokeWidth;
+      let borderWidth =
+        typeof strokeWidth === 'number' && Number.isFinite(strokeWidth)
+          ? strokeWidth
+          : 1;
 
       if (isSelectedArea) {
         // Areas with data: use color scale
         fillColor = colorScale(value);
+        // Keep matched polygons visible even when a saved chart carries
+        // an accidental zero/near-zero fill opacity.
+        fillOpacityValue = Math.max(configuredOpacity, 0.2);
         // Default selected-area borders should stay visually tied to the
         // thematic key color unless a more specific border mode overrides it.
         borderColor = darkenColor(fillColor, 0.3);
       } else if (shouldStyleUnselectedAreas) {
         fillColor = unselectedFillRgb;
-        fillOpacityValue = unselectedAreaFillOpacity;
+        fillOpacityValue = Math.max(unselectedAreaFillOpacity, 0.3);
         borderColor = unselectedBorderRgb;
-        borderWidth = unselectedAreaBorderWidth;
+        borderWidth = Math.max(unselectedAreaBorderWidth || 0, 1);
       } else {
         // Areas without data: make clearly visible, not almost transparent
-        fillOpacityValue = Math.max(opacity * 0.6, 0.3);
+        fillOpacityValue = Math.max(configuredOpacity * 0.6, 0.3);
       }
 
       const isSelected = selectedFeatureId === feature.id;
@@ -3421,12 +3689,28 @@ function DHIS2Map({
         fillOpacityValue = Math.min(fillOpacityValue + 0.1, 1);
       }
 
-      return {
+      const style = {
         color: borderColor,
         weight: borderWidth,
         fillColor,
         fillOpacity: fillOpacityValue,
       };
+
+      // Debug log some feature styles
+      if (Math.random() < 0.1) { // Log 10% of features
+        console.debug('[getFeatureStyle] Final style for feature:', {
+          featureId: feature.id,
+          featureName: feature.properties?.name,
+          hasValue: value !== undefined,
+          value,
+          configuredOpacity,
+          fillColor: style.fillColor,
+          fillOpacity: style.fillOpacity,
+          fullStyle: style,
+        });
+      }
+
+      return style;
     },
     [
       getFeatureValue,
@@ -3495,6 +3779,24 @@ function DHIS2Map({
 
       const handlers: Record<string, () => void> = {};
 
+      // Add hover handlers for better interactivity
+      handlers.mouseover = () => {
+        const originalStyle = getFeatureStyle(feature);
+        vectorLayer.setStyle({
+          ...originalStyle,
+          weight: Math.max(originalStyle.weight ?? 1, (strokeWidth ?? 1) + 1),
+          opacity: 1,
+          fillOpacity: Math.min((originalStyle.fillOpacity ?? 0.7) + 0.1, 1),
+        });
+        vectorLayer.bringToFront?.();
+      };
+
+      handlers.mouseout = () => {
+        // Reset to original style
+        const originalStyle = getFeatureStyle(feature);
+        vectorLayer.setStyle(originalStyle);
+      };
+
       handlers.click = () => {
         setSelectedFeatureId(null);
         if (document.activeElement instanceof HTMLElement) {
@@ -3558,6 +3860,7 @@ function DHIS2Map({
     [
       getFeatureValue,
       getTooltipRowForFeature,
+      getFeatureStyle,
       dataMap,
       metric,
       metricDisplayName,
@@ -3570,6 +3873,8 @@ function DHIS2Map({
       labelTextColor,
       enableDrill,
       mapInstance,
+      strokeWidth,
+      opacity,
     ],
   );
 
@@ -3590,14 +3895,70 @@ function DHIS2Map({
     fetchBoundaries();
   }, [fetchBoundaries]);
 
+  const rgbaCss = (
+    c?: { r: number; g: number; b: number; a?: number },
+    fallback?: string,
+  ) =>
+    c && typeof c.r === 'number'
+      ? `rgba(${c.r}, ${c.g}, ${c.b}, ${c.a ?? 1})`
+      : fallback;
+  const titleColorCss = rgbaCss(chartTitleColor, '#1f2937');
+  const subtitleColorCss = rgbaCss(chartSubtitleColor, '#6b7280');
+  const hasChartTitle = Boolean(chartTitle || chartSubtitle);
+
   return (
     <MapWrapper
       $transparentCardContainer={transparentCardContainer}
       style={{ width, height }}
     >
       <MapCanvas $backgroundColor={chartBackgroundColor}>
+        {/*
+          Always render the overlay wrapper (toggled with `display`) so the
+          MapContainer keeps a stable child position — otherwise React would
+          remount the Leaflet map when the title appears/disappears, leaving the
+          tiles half-rendered.
+        */}
+        <div
+          className="dhis2-map-title-overlay"
+          style={{
+            position: 'absolute',
+            top: 8,
+            left: 0,
+            right: 0,
+            zIndex: 1000,
+            pointerEvents: 'none',
+            display: hasChartTitle ? 'block' : 'none',
+            textAlign: chartTitleAlign === 'left' ? 'left' : 'center',
+            padding: chartTitleAlign === 'left' ? '0 12px' : 0,
+          }}
+        >
+          {chartTitle && (
+            <div
+              style={{
+                fontSize: 16,
+                fontWeight: 600,
+                color: titleColorCss,
+                lineHeight: 1.3,
+              }}
+            >
+              {chartTitle}
+            </div>
+          )}
+          {chartSubtitle && (
+            <div
+              style={{
+                fontSize: 12,
+                color: subtitleColorCss,
+                lineHeight: 1.3,
+              }}
+            >
+              {chartSubtitle}
+            </div>
+          )}
+        </div>
         {/* @ts-ignore - React 19 compatibility */}
         <MapContainer
+          key="dhis2-map-container"
           center={[1.3733, 32.2903]}
           zoom={7}
           zoomSnap={0.25}
@@ -3612,7 +3973,11 @@ function DHIS2Map({
         >
           {/* @ts-ignore - React 19 compatibility */}
           <BaseMapLayer mapType={currentBasemap as any} />
-          <MapInstanceBridge onReady={handleMapInstanceReady} />
+          <MapInstanceBridge
+            onReady={handleMapInstanceReady}
+            width={width}
+            height={height}
+          />
 
           {/* Auto-focus map when boundaries load */}
           {/* @ts-ignore - React 19 compatibility */}

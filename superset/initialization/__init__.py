@@ -172,6 +172,7 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
         from superset.datasets.metrics.api import DatasetMetricRestApi
         from superset.datasource.api import DatasourceRestApi
         from superset.local_staging.api import LocalStagingRestApi
+        from superset.ai_insights.admin_views import AIManagementView
         from superset.dhis2.api import DHIS2RestApi, DHIS2CacheApi
         from superset.dhis2.admin_views import (
             DHIS2AdminView,
@@ -263,10 +264,12 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
         self.superset_app.register_blueprint(health_blueprint)
         if feature_flag_manager.is_feature_enabled("AI_INSIGHTS"):
             from superset.ai_insights.admin_views import (
+                ai_management_alias_blueprint,
                 ai_management_frontend_blueprint,
             )
 
             self.superset_app.register_blueprint(ai_management_frontend_blueprint)
+            self.superset_app.register_blueprint(ai_management_alias_blueprint)
         self.superset_app.register_blueprint(dhis2_frontend_blueprint)
         self.superset_app.register_blueprint(local_staging_blueprint)
         self.superset_app.register_blueprint(cms_frontend_blueprint)
@@ -369,6 +372,7 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
             icon="fa-database",
             category="Data",
             category_label=_("Data"),
+            menu_cond=lambda: appbuilder.sm.can_access("can_list", "DatabaseView"),
         )
         appbuilder.add_view(
             DHIS2AdminView,
@@ -443,6 +447,7 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
             icon="fa-table",
             category="",
             category_icon="",
+            cond=lambda: appbuilder.sm.can_access("can_list", "TableModelView"),
         )
 
         appbuilder.add_view(
@@ -537,8 +542,10 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
                 icon="fa-robot",
                 category="",
                 category_icon="",
-                cond=lambda: feature_flag_manager.is_feature_enabled(
-                    "AI_INSIGHTS"
+                cond=lambda: feature_flag_manager.is_feature_enabled("AI_INSIGHTS")
+                and (
+                    appbuilder.sm.is_admin()
+                    or appbuilder.sm.can_access("can_list", "AIManagement")
                 ),
             )
 
@@ -546,6 +553,7 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
         # Setup views with no menu
         #
         appbuilder.add_view_no_menu(Api)
+        appbuilder.add_view_no_menu(AIManagementView)
         appbuilder.add_view_no_menu(Dashboard)
         appbuilder.add_view_no_menu(Datasource)
         appbuilder.add_view_no_menu(DatasetEditor)

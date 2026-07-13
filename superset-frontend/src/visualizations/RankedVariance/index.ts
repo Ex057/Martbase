@@ -19,6 +19,7 @@
 import { Behavior, t, ChartMetadata, ChartPlugin } from '@superset-ui/core';
 import transformProps from './transformProps';
 import controlPanel from './controlPanel';
+import buildQuery from './buildQuery';
 import thumbnail from './images/thumbnailUrl';
 
 export default class RankedVarianceChartPlugin extends ChartPlugin {
@@ -33,7 +34,6 @@ export default class RankedVarianceChartPlugin extends ChartPlugin {
         thumbnail,
         tags: [
           t('Health'),
-          t('Health'),
           t('Comparison'),
           t('Variance'),
           t('Performance'),
@@ -42,6 +42,7 @@ export default class RankedVarianceChartPlugin extends ChartPlugin {
       }),
       controlPanel,
       transformProps,
+      buildQuery,
       loadChart: () => import('./RankedVarianceViz'),
     });
   }

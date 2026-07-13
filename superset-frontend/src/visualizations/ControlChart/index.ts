@@ -19,6 +19,7 @@
 import { Behavior, t, ChartMetadata, ChartPlugin } from '@superset-ui/core';
 import transformProps from './transformProps';
 import controlPanel from './controlPanel';
+import buildQuery from './buildQuery';
 import thumbnail from './images/thumbnailUrl';
 
 export default class ControlChartPlugin extends ChartPlugin {
@@ -33,7 +34,6 @@ export default class ControlChartPlugin extends ChartPlugin {
         thumbnail,
         tags: [
           t('Health'),
-          t('Health'),
           t('Epidemiology'),
           t('Statistical'),
           t('Anomaly'),
@@ -43,6 +43,7 @@ export default class ControlChartPlugin extends ChartPlugin {
       }),
       controlPanel,
       transformProps,
+      buildQuery,
       loadChart: () => import('./ControlChartViz'),
     });
   }

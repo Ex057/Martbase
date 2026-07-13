@@ -132,6 +132,9 @@ function buildAdminPayload(isPublished = true) {
           'This embedded view is tuned for public presentation with tighter chrome, balanced spacing, and the portal frame still available around it.',
         dashboardBackLabel: 'Back to page',
         dashboardLoadingLabel: 'Loading dashboard...',
+        authenticatedHomeMode: 'dashboard',
+        authenticatedHomeDashboardId: 42,
+        authenticatedHomeDashboardPath: '/superset/dashboard/42/',
       },
     },
     stats: {
@@ -200,7 +203,14 @@ function buildAdminPayload(isPublished = true) {
       header: [],
       footer: [],
     },
-    dashboards: [],
+    dashboards: [
+      {
+        id: 42,
+        dashboard_title: 'Beginner Dashboard',
+        slug: 'beginner-dashboard',
+        url: '/superset/dashboard/42/',
+      },
+    ],
     available_charts: [],
     media_assets: [
       {
@@ -438,6 +448,11 @@ test('saves configurable portal copy from the CMS portal tab', async () => {
   const loginButtonTextInput = getFieldInput('Login Button Text');
   const footerTextInput = getFieldInput('Footer Text');
   const dashboardBackLabelInput = getFieldInput('Dashboard Back Label');
+  const bodyFontFamilyInput = getFieldInput('Body Font Family');
+  const beginnerDashboardSelect = screen
+    .getByText('Beginner Home Dashboard')
+    .closest('div')
+    ?.parentElement?.querySelector('.ant-select') as HTMLElement;
 
   await userEvent.clear(loginButtonTextInput);
   await userEvent.type(loginButtonTextInput, 'Portal sign in');
@@ -445,6 +460,13 @@ test('saves configurable portal copy from the CMS portal tab', async () => {
   await userEvent.type(footerTextInput, 'Custom portal footer');
   await userEvent.clear(dashboardBackLabelInput);
   await userEvent.type(dashboardBackLabelInput, 'Return to directory');
+  await userEvent.clear(bodyFontFamilyInput);
+  await userEvent.type(
+    bodyFontFamilyInput,
+    "'Source Sans Pro', 'Segoe UI', sans-serif",
+  );
+  await userEvent.click(beginnerDashboardSelect);
+  await userEvent.click(await screen.findByText('Beginner Dashboard'));
   await userEvent.click(
     screen.getByRole('button', { name: /Save Portal Settings/i }),
   );
@@ -463,4 +485,15 @@ test('saves configurable portal copy from the CMS portal tab', async () => {
   expect(payload.config.loginButtonText).toBe('Portal sign in');
   expect(payload.config.footerText).toBe('Custom portal footer');
   expect(payload.config.dashboardBackLabel).toBe('Return to directory');
+  expect(payload.config.bodyFontFamily).toBe(
+    "'Source Sans Pro', 'Segoe UI', sans-serif",
+  );
+  expect(payload.config.appearance.typography.bodyFontFamily).toBe(
+    "'Source Sans Pro', 'Segoe UI', sans-serif",
+  );
+  expect(payload.config.authenticatedHomeDashboardId).toBe(42);
+  expect(payload.config.authenticatedHomeDashboardPath).toBe(
+    '/superset/dashboard/42/',
+  );
+  expect(payload.config.authenticatedHomeRoleDashboardPaths).toEqual({});
 });

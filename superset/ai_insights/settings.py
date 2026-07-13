@@ -25,6 +25,12 @@ LOCALAI_API_KEY_ENV_VAR = "LOCALAI_API_KEY_ENV"
 LOCALAI_BASE_URL_ENV_VAR = "LOCALAI_BASE_URL"
 LOCALAI_EXTERNAL_BACKENDS_ENV_VAR = "LOCALAI_EXTERNAL_BACKENDS"
 LOCALAI_DEFAULT_EXTERNAL_BACKENDS = "llama-cpp"
+LOCALAI_SERVICE_BASE_URL = os.environ.get(LOCALAI_BASE_URL_ENV_VAR, "http://localai:39671")
+OLLAMA_SERVICE_BASE_URL = (
+    os.environ.get("OLLAMA_BASE_URL")
+    or os.environ.get("OLLAMA_HOST")
+    or "http://ollama:11434"
+)
 
 OPENAI_TEXT_MODEL_CATALOG: list[dict[str, Any]] = [
     # Based on OpenAI's official Models and All models catalog as of 2026-03-29.
@@ -335,7 +341,7 @@ DEEPSEEK_TEXT_MODEL_CATALOG: list[dict[str, Any]] = [
     },
 ]
 
-LOCALAI_DEFAULT_MODEL_ID = "ai-insights-model-26.04"
+LOCALAI_DEFAULT_MODEL_ID = "tinyllama"
 
 LOCALAI_SUPERSET_CAPABILITIES: list[str] = [
     "Natural-language analytics chat",
@@ -541,7 +547,7 @@ PROVIDER_PRESETS: list[dict[str, Any]] = [
         "label": "LocalAI",
         "description": "OpenAI-compatible local inference server (localai.io) for self-hosted models.",
         "catalog_key": "localai_text",
-        "default_base_url": "http://127.0.0.1:39671",
+        "default_base_url": LOCALAI_SERVICE_BASE_URL,
         "default_model": LOCALAI_DEFAULT_MODEL_ID,
         "is_local": True,
         "supports_base_url": True,
@@ -554,7 +560,7 @@ PROVIDER_PRESETS: list[dict[str, Any]] = [
         "label": "Ollama",
         "description": "Local model runtime for self-hosted AI testing and offline use.",
         "catalog_key": None,
-        "default_base_url": "http://127.0.0.1:11434",
+        "default_base_url": OLLAMA_SERVICE_BASE_URL,
         "default_model": "llama3.1:8b",
         "is_local": True,
         "supports_base_url": True,
@@ -784,7 +790,7 @@ def ensure_localai_environment(*, write_env_file: bool = True) -> dict[str, str]
     base_url = (
         os.environ.get(LOCALAI_BASE_URL_ENV_VAR)
         or env_file_values.get(LOCALAI_BASE_URL_ENV_VAR)
-        or "http://127.0.0.1:39671"
+        or LOCALAI_SERVICE_BASE_URL
     ).strip()
     default_model = (
         os.environ.get("LOCALAI_DEFAULT_MODEL")

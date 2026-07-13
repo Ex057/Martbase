@@ -36,6 +36,7 @@ import {
   getTemporalColumns,
   sharedControls,
 } from '@superset-ui/chart-controls';
+import { chartTitleSection } from '../controls';
 
 const config: ControlPanelConfig = {
   controlPanelSections: [
@@ -104,6 +105,7 @@ const config: ControlPanelConfig = {
         ],
       ],
     },
+    chartTitleSection,
     sections.titleControls,
     {
       label: t('Chart Options'),

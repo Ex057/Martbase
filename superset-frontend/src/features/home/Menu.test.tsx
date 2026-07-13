@@ -23,28 +23,38 @@ import setupCodeOverrides from 'src/setup/setupCodeOverrides';
 import { getExtensionsRegistry } from '@superset-ui/core';
 import MenuWrapper, { Menu } from './Menu';
 
+var mockBootstrapData = {
+  common: {
+    feature_flags: {},
+    conf: {
+      AUTH_USER_REGISTRATION: false,
+    },
+  },
+  user: {
+    firstName: 'Admin',
+    lastName: 'User',
+    isActive: true,
+    isAnonymous: false,
+    username: 'admin',
+    permissions: {},
+    userId: 1,
+    roles: {
+      Admin: [
+        ['cms.pages.view', 'CMS'],
+        ['can_list', 'DatabaseView'],
+        ['can_list', 'TableModelView'],
+        ['can_list', 'DHIS2AdminView'],
+        ['can_list', 'AIManagement'],
+        ['can_read', 'AIManagement'],
+        ['can_write', 'AIManagement'],
+      ],
+    },
+  },
+};
+
 jest.mock('src/utils/getBootstrapData', () => ({
   __esModule: true,
-  default: () => ({
-    common: {
-      feature_flags: {},
-      conf: {
-        AUTH_USER_REGISTRATION: false,
-      },
-    },
-    user: {
-      firstName: 'Admin',
-      lastName: 'User',
-      isActive: true,
-      isAnonymous: false,
-      username: 'admin',
-      permissions: {},
-      userId: 1,
-      roles: {
-        Admin: [['cms.pages.view', 'CMS']],
-      },
-    },
-  }),
+  default: () => mockBootstrapData,
   applicationRoot: () => '',
 }));
 
@@ -367,6 +377,34 @@ fetchMock.get(
 beforeEach(() => {
   // setup a DOM element as a render target
   useSelectorMock.mockClear();
+  mockBootstrapData = {
+    common: {
+      feature_flags: {},
+      conf: {
+        AUTH_USER_REGISTRATION: false,
+      },
+    },
+    user: {
+      firstName: 'Admin',
+      lastName: 'User',
+      isActive: true,
+      isAnonymous: false,
+      username: 'admin',
+      permissions: {},
+      userId: 1,
+      roles: {
+        Admin: [
+          ['cms.pages.view', 'CMS'],
+          ['can_list', 'DatabaseView'],
+          ['can_list', 'TableModelView'],
+          ['can_list', 'DHIS2AdminView'],
+          ['can_list', 'AIManagement'],
+          ['can_read', 'AIManagement'],
+          ['can_write', 'AIManagement'],
+        ],
+      },
+    },
+  };
 });
 
 test('should render', async () => {
@@ -472,6 +510,14 @@ test('should keep Data visible in the top navbar and include the local workspace
   const dataMenu = await screen.findByText('Data');
   userEvent.hover(dataMenu);
 
+  expect(await screen.findByText('Datasets')).toHaveAttribute(
+    'href',
+    '/tablemodelview/list/',
+  );
+  expect(await screen.findByText('Databases')).toHaveAttribute(
+    'href',
+    '/databaseview/list/',
+  );
   expect(await screen.findByText('Staged Datasets')).toHaveAttribute(
     'href',
     '/superset/dhis2/local-data/',
@@ -486,7 +532,7 @@ test('should keep Data visible in the top navbar and include the local workspace
   );
 });
 
-test('should move DHIS2 and SQL into Data and place Data after Datasets', async () => {
+test('should keep Datasets top-level while grouping DHIS2 and SQL in Data', async () => {
   useSelectorMock.mockReturnValue({ roles: user.roles });
   render(<MenuWrapper {...wrapperMenuProps} />, {
     useRedux: true,
@@ -496,12 +542,9 @@ test('should move DHIS2 and SQL into Data and place Data after Datasets', async 
   });
 
   const datasetsTab = await screen.findByText('Datasets');
-  const dataTab = await screen.findByText('Data');
-  expect(
-    datasetsTab.compareDocumentPosition(dataTab) &
-      Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
+  expect(datasetsTab).toHaveAttribute('href', '/tablemodelview/list/');
 
+  const dataTab = await screen.findByText('Data');
   userEvent.hover(dataTab);
 
   expect(await screen.findByText('Instances')).toHaveAttribute(
@@ -511,6 +554,36 @@ test('should move DHIS2 and SQL into Data and place Data after Datasets', async 
   expect(await screen.findByText('SQL Lab')).toHaveAttribute(
     'href',
     '/sqllab/',
+  );
+});
+
+test('should route Home through the portal home flag', async () => {
+  useSelectorMock.mockReturnValue({ roles: user.roles });
+  render(<MenuWrapper {...wrapperMenuProps} />, {
+    useRedux: true,
+    useQueryParams: true,
+    useRouter: true,
+    useTheme: true,
+  });
+
+  expect(await screen.findByText('Home')).toHaveAttribute(
+    'href',
+    '/superset/welcome/',
+  );
+});
+
+test('should inject a top-level Datasets tab when the backend menu omits it', async () => {
+  useSelectorMock.mockReturnValue({ roles: user.roles });
+  render(<MenuWrapper {...mockedProps} />, {
+    useRedux: true,
+    useQueryParams: true,
+    useRouter: true,
+    useTheme: true,
+  });
+
+  expect(await screen.findByText('Datasets')).toHaveAttribute(
+    'href',
+    '/tablemodelview/list/',
   );
 });
 
@@ -598,6 +671,60 @@ test('should remove legacy DHIS2 admin links from Settings and normalize them in
   expect(screen.queryByText('DHIS2 Sync History')).not.toBeInTheDocument();
 });
 
+test('should inject AI Management when the user can access it', async () => {
+  mockBootstrapData = {
+    ...mockBootstrapData,
+    user: {
+      ...mockBootstrapData.user,
+      roles: {
+        Analytics: [
+          ['can_list', 'AIManagement'],
+          ['can_read', 'AIManagement'],
+          ['can_write', 'AIManagement'],
+        ],
+      },
+    },
+  };
+
+  render(<MenuWrapper {...wrapperMenuProps} />, {
+    useRedux: true,
+    useQueryParams: true,
+    useRouter: true,
+    useTheme: true,
+  });
+
+  expect(await screen.findByText('AI Management')).toBeInTheDocument();
+  expect(screen.queryByText('Data')).not.toBeInTheDocument();
+});
+
+test('should hide DHIS2 workspace links without DHIS2 admin permission', async () => {
+  mockBootstrapData = {
+    ...mockBootstrapData,
+    user: {
+      ...mockBootstrapData.user,
+      roles: {
+        Analytics: [
+          ['can_list', 'DatabaseView'],
+          ['can_list', 'TableModelView'],
+        ],
+      },
+    },
+  };
+
+  render(<MenuWrapper {...mockedProps} />, {
+    useRedux: true,
+    useQueryParams: true,
+    useRouter: true,
+    useTheme: true,
+  });
+
+  const dataMenu = await screen.findByText('Data');
+  userEvent.hover(dataMenu);
+
+  expect(screen.queryByText('Staged Datasets')).not.toBeInTheDocument();
+  expect(screen.queryByText('DHIS2 Instances')).not.toBeInTheDocument();
+});
+
 test('should add CMS Pages after Data for authenticated users', async () => {
   useSelectorMock.mockReturnValue({ roles: user.roles });
   render(<MenuWrapper {...authenticatedWrapperMenuProps} />, {
@@ -608,7 +735,7 @@ test('should add CMS Pages after Data for authenticated users', async () => {
   });
 
   const dataTab = await screen.findByText('Data');
-  const cmsPagesTab = await screen.findByText('CMS Pages');
+  const cmsPagesTab = await screen.findByText('Dynamic Pages');
 
   expect(
     dataTab.compareDocumentPosition(cmsPagesTab) &
@@ -621,7 +748,7 @@ test('should add CMS Pages after Data for authenticated users', async () => {
     'href',
     '/superset/public/',
   );
-  expect(await screen.findByText('CMS Dashboard')).toHaveAttribute(
+  expect(await screen.findByText('Admin Dashboard')).toHaveAttribute(
     'href',
     '/superset/cms/',
   );
@@ -649,7 +776,7 @@ test('should not add CMS Pages for anonymous users', async () => {
   });
 
   await screen.findByText('Data');
-  expect(screen.queryByText('CMS Pages')).not.toBeInTheDocument();
+  expect(screen.queryByText('Dynamic Pages')).not.toBeInTheDocument();
 });
 
 test('should render the dropdown items', async () => {

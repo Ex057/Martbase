@@ -108,6 +108,7 @@ import {
   getYAxisFormatter,
 } from '../utils/formatters';
 import { getMetricDisplayName } from '../utils/metricDisplayName';
+import { getChartTitleOption } from '../utils/chartTitle';
 
 const getFormatter = (
   customFormatters: Record<string, ValueFormatter>,
@@ -637,16 +638,39 @@ export default function transformProps(
     if (maxSecondary === undefined) maxSecondary = 1;
   }
 
+  // Check if xAxis contains DHIS2 period codes by metadata OR by sampling data
+  const isPeriodColumn =
+    dhis2PeriodColumns.has(xAxisOrig) || dhis2PeriodColumns.has(xAxisLabel);
+
+  // Sample first few x-axis values to auto-detect DHIS2 periods
+  let hasDetectedPeriods = false;
+  if (!isPeriodColumn && rebasedDataA.length > 0) {
+    const sampleSize = Math.min(3, rebasedDataA.length);
+    const sampleValues = rebasedDataA
+      .slice(0, sampleSize)
+      .map((row: Record<string, unknown>) => row[xAxisLabel])
+      .filter((val: unknown): val is string => typeof val === 'string');
+
+    if (sampleValues.length > 0) {
+      hasDetectedPeriods = sampleValues.every((val: string) => {
+        const formatted = formatDHIS2Period(val);
+        return formatted !== val; // isDHIS2Period logic
+      });
+    }
+  }
+
+  const shouldUsePeriodFormatter = isPeriodColumn || hasDetectedPeriods;
+
   const tooltipFormatter =
     xAxisDataType === GenericDataType.Temporal
       ? getTooltipTimeFormatter(tooltipTimeFormat)
-      : dhis2PeriodColumns.has(xAxisOrig) || dhis2PeriodColumns.has(xAxisLabel)
+      : shouldUsePeriodFormatter
         ? (formatDHIS2Period as any)
         : String;
   const xAxisFormatter =
     xAxisDataType === GenericDataType.Temporal
       ? getXAxisFormatter(xAxisTimeFormat)
-      : dhis2PeriodColumns.has(xAxisOrig) || dhis2PeriodColumns.has(xAxisLabel)
+      : shouldUsePeriodFormatter
         ? (formatDHIS2Period as any)
         : String;
 
@@ -668,11 +692,15 @@ export default function transformProps(
   const { setDataMask = () => {}, onContextMenu } = hooks;
   const alignTicks = yAxisIndex !== yAxisIndexB;
 
+  const { title: chartTitleOption, topOffset: chartTitleTopOffset } =
+    getChartTitleOption(formData, theme, (chartProps.datasource as any)?.columns);
   const echartOptions: EChartsCoreOption = {
+    ...(chartTitleOption && { title: chartTitleOption }),
     useUTC: true,
     grid: {
       ...defaultGrid,
       ...chartPadding,
+      top: chartPadding.top + chartTitleTopOffset,
     },
     xAxis: {
       type: xAxisType,

@@ -129,6 +129,11 @@ export interface DHIS2LoaderColumnDefinition {
 export interface DHIS2MapProps {
   width: number;
   height: number;
+  chartTitle?: string;
+  chartSubtitle?: string;
+  chartTitleColor?: { r: number; g: number; b: number; a?: number };
+  chartSubtitleColor?: { r: number; g: number; b: number; a?: number };
+  chartTitleAlign?: 'left' | 'center';
   data: Record<string, any>[];
   databaseId: number;
   isStagedLocalDataset?: boolean;

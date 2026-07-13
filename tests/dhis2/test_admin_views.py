@@ -19,8 +19,10 @@
 import tests.dhis2._bootstrap  # noqa: F401 - must be first
 
 from flask import Flask
+import pytest
+from werkzeug.exceptions import Forbidden
 
-from superset.dhis2.admin_views import DHIS2AdminView
+from superset.dhis2.admin_views import DHIS2AdminView, _render_authenticated_shell
 
 
 def test_frontend_path_respects_application_root():
@@ -54,3 +56,33 @@ def test_frontend_path_supports_local_staging_pages():
             DHIS2AdminView()._frontend_path("/superset/dhis2/local-data/")
             == "/tenant/superset/dhis2/local-data/"
         )
+
+
+def test_render_authenticated_shell_requires_permission(mocker):
+    app = Flask(__name__)
+
+    with app.test_request_context("/superset/dhis2/instances/"):
+        from flask import g
+
+        g.user = type("User", (), {"is_anonymous": False})()
+        mocker.patch("superset.dhis2.admin_views.security_manager.can_access", return_value=False)
+
+        with pytest.raises(Forbidden):
+            _render_authenticated_shell()
+
+
+def test_render_authenticated_shell_renders_when_permitted(mocker):
+    app = Flask(__name__)
+
+    with app.test_request_context("/superset/dhis2/instances/"):
+        from flask import g
+
+        g.user = type("User", (), {"is_anonymous": False})()
+        mocker.patch("superset.dhis2.admin_views.security_manager.can_access", return_value=True)
+        render_app_template = mocker.patch(
+            "superset.views.base.BaseSupersetView.render_app_template",
+            return_value="rendered-shell",
+        )
+
+        assert _render_authenticated_shell() == "rendered-shell"
+        render_app_template.assert_called_once()

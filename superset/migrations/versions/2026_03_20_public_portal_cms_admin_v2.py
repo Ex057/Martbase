@@ -155,7 +155,7 @@ def upgrade() -> None:
                 """
                 UPDATE public_pages
                 SET published_on = COALESCE(published_on, changed_on, created_on)
-                WHERE is_published = 1 AND published_on IS NULL
+                WHERE is_published = TRUE AND published_on IS NULL
                 """
             )
         )

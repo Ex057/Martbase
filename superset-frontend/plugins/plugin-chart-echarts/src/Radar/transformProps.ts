@@ -50,6 +50,7 @@ import { defaultGrid } from '../defaults';
 import { Refs } from '../types';
 import { getDefaultTooltip } from '../utils/tooltip';
 import { findGlobalMax, renderNormalizedTooltip } from './utils';
+import { getChartTitleOption } from '../utils/chartTitle';
 
 export function formatLabel({
   params,
@@ -349,7 +350,10 @@ export default function transformProps(
       metricsWithCustomBounds,
     );
 
+  const { title: chartTitleOption } = getChartTitleOption(formData, theme, (chartProps.datasource as any)?.columns);
+
   const echartOptions: EChartsCoreOption = {
+    ...(chartTitleOption && { title: chartTitleOption }),
     grid: {
       ...defaultGrid,
     },

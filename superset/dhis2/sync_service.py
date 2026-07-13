@@ -2275,7 +2275,7 @@ class DHIS2SyncService:
                 # --- Incremental per-chunk staging ---
                 # Each OU chunk's rows are staged to ClickHouse as soon as they
                 # arrive so the UI shows a rising row count in real-time.
-                _chunk_first = True  # first chunk triggers replace/prune
+                _chunk_first = True  # first chunk triggers the full-refresh replace
                 _rows_staged_for_inst = 0
 
                 def _on_chunk_rows(
@@ -2287,14 +2287,12 @@ class DHIS2SyncService:
                     nonlocal _chunk_first, _rows_staged_for_inst, _rows_staged, total_rows
                     _replace = _chunk_first and not _plan.use_incremental
                     _chunk_first = False
-                    _prune = _plan.periods_to_delete if _replace else []
                     _count = self._load_rows(
                         _ds,
                         _inst,
                         chunk_rows,
                         sync_job_id=job_id,
                         replace_instance_rows=_replace,
-                        periods_to_prune=_prune,
                     )
                     _rows_staged_for_inst += _count
                     _rows_staged += _count
@@ -2339,19 +2337,34 @@ class DHIS2SyncService:
                     # At least one chunk was staged incrementally; _rows_staged
                     # and total_rows were already updated inside _on_chunk_rows.
                     row_count = _rows_staged_for_inst
-                else:
-                    # No chunks produced rows (dataset returned nothing).
-                    # Still run _load_rows so replace/prune executes for full syncs.
+                elif rows:
+                    # Rows arrived but never went through the chunk callback.
                     row_count = self._load_rows(
                         dataset,
                         instance,
                         rows,
                         sync_job_id=job_id,
                         replace_instance_rows=not incremental_plan.use_incremental,
-                        periods_to_prune=incremental_plan.periods_to_delete,
                     )
                     _rows_staged += row_count
                     total_rows += row_count
+                else:
+                    # The instance returned nothing. Do NOT run the full-refresh
+                    # replace here: it would delete every staged row for this
+                    # instance on the strength of an empty response, which is far
+                    # more often an upstream hiccup than a genuine empty window.
+                    row_count = 0
+                    logger.warning(
+                        "Sync: instance '%s' returned no rows for dataset=%d; "
+                        "keeping previously staged rows",
+                        instance.name,
+                        staged_dataset_id,
+                    )
+
+                # Staging is CUMULATIVE. Periods that have aged out of the
+                # dataset's relative window are deliberately left in place so the
+                # history stays queryable, which is why
+                # `incremental_plan.periods_to_delete` is not acted on here.
 
                 _completed_units += 1
                 any_success = True
@@ -3519,7 +3532,6 @@ class DHIS2SyncService:
         sync_job_id: int | None = None,
         *,
         replace_instance_rows: bool = True,
-        periods_to_prune: list[str] | None = None,
     ) -> int:
         """Replace staging data for *instance* within *dataset* atomically.
 
@@ -3558,22 +3570,24 @@ class DHIS2SyncService:
 
         row_count = 0
         if replace_instance_rows:
+            # The local staging engines default `replace_all` to False, i.e. they
+            # only insert. Without this flag a "full refresh" appends to the old
+            # rows instead of replacing them. (The legacy DHIS2StagingEngine
+            # always replaces and takes no such flag — it has no `engine_name`.)
+            replace_kwargs: dict[str, Any] = {}
+            if hasattr(staging_engine, "engine_name"):
+                replace_kwargs["replace_all"] = True
             result = staging_engine.replace_rows_for_instance(
                 dataset,
                 instance_id=instance.id,
                 instance_name=instance.name,
                 rows=rows,
                 sync_job_id=sync_job_id,
+                **replace_kwargs,
             )
             # replace_rows_for_instance returns {"deleted": int, "inserted": int}
             row_count = result.get("inserted", 0) if isinstance(result, dict) else int(result or 0)
         else:
-            if periods_to_prune:
-                staging_engine.delete_rows_for_instance_periods(
-                    dataset,
-                    instance.id,
-                    periods_to_prune,
-                )
             row_count = staging_engine.upsert_rows_for_instance(
                 dataset,
                 instance_id=instance.id,

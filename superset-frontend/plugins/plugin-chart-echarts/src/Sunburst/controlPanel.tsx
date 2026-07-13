@@ -27,6 +27,7 @@ import {
   D3_TIME_FORMAT_OPTIONS,
   getStandardizedControls,
 } from '@superset-ui/chart-controls';
+import { chartTitleSection } from '../controls';
 import { DEFAULT_FORM_DATA } from './types';
 
 const { labelType, numberFormat, showLabels } = DEFAULT_FORM_DATA;
@@ -45,6 +46,7 @@ const config: ControlPanelConfig = {
         ['sort_by_metric'],
       ],
     },
+    chartTitleSection,
     {
       label: t('Chart Options'),
       expanded: true,
