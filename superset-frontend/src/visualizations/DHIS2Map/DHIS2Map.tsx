@@ -35,6 +35,17 @@ import L from 'leaflet';
 // @ts-ignore - leaflet styles
 import 'leaflet/dist/leaflet.css';
 import {
+  clearGeoFeatureCache,
+  GeoFeatureLoadResult,
+  loadDHIS2GeoFeatures,
+  DHIS2GeoJSONFeature,
+} from 'src/utils/dhis2GeoFeatureLoader';
+import {
+  syncDHIS2LegendSchemesForDatabase,
+  readCachedLegendSets,
+} from 'src/utils/dhis2LegendColorSchemes';
+import { colorValueToCss } from 'src/utils/colorValue';
+import {
   AggregationMethod,
   BoundaryFocusMaskStyle,
   CompassStyle,
@@ -47,12 +58,6 @@ import {
   LegendDisplayType,
 } from './types';
 import { DHIS2DataLoader } from './dhis2DataLoader';
-import {
-  clearGeoFeatureCache,
-  GeoFeatureLoadResult,
-  loadDHIS2GeoFeatures,
-  DHIS2GeoJSONFeature,
-} from 'src/utils/dhis2GeoFeatureLoader';
 import {
   resolveEffectiveBoundaryLevels,
   resolvePrimaryBoundaryLevel,
@@ -85,10 +90,6 @@ import {
   getLegendRangeFromDefinition,
   normalizeOrgUnitMatchKey,
 } from './utils';
-import {
-  syncDHIS2LegendSchemesForDatabase,
-  readCachedLegendSets,
-} from 'src/utils/dhis2LegendColorSchemes';
 import {
   getStagedDatasetIdFromSql,
   hasDHIS2SqlComment,
@@ -161,6 +162,22 @@ const MapCanvas = styled.div<{ $backgroundColor?: string }>`
     width: 100%;
     height: 100%;
     background: ${({ $backgroundColor }) => $backgroundColor || '#ffffff'};
+  }
+
+  /* Ensure tiles render without gaps */
+  .leaflet-tile-container img,
+  .leaflet-tile {
+    image-rendering: -webkit-optimize-contrast;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+
+  .leaflet-tile-pane {
+    will-change: transform;
+  }
+
+  .leaflet-pane {
+    z-index: auto;
   }
 
   .leaflet-container .leaflet-interactive:focus,
@@ -759,18 +776,6 @@ const DynamicGeoJSON: FC<DynamicGeoJSONProps> = ({
   const prevStyleRef = useRef(style);
   const prevOnEachFeatureRef = useRef(onEachFeature);
 
-  // Debug logging for boundary rendering
-  useEffect(() => {
-    if (data && data.features) {
-      console.info('[DynamicGeoJSON] Rendering features:', {
-        featureCount: data.features.length,
-        firstFeature: data.features[0],
-        hasGeometry: data.features.every((f: any) => f.geometry),
-        geometryTypes: [...new Set(data.features.map((f: any) => f.geometry?.type))],
-      });
-    }
-  }, [data]);
-
   const clearLayerBindings = useCallback((layer: DHIS2GeoJsonLayer) => {
     layer.off();
     if (layer.getTooltip?.()) {
@@ -927,13 +932,6 @@ function buildAggregatedValueMaps(options: {
   }
 
   const availableColumns = Object.keys(rows[0]);
-  console.info('[buildAggregatedValueMaps] Starting aggregation:', {
-    rowsCount: rows.length,
-    requestedOrgUnitColumn,
-    metric,
-    availableColumns,
-    sampleRow: rows[0],
-  });
   const actualOrgUnitCol =
     (actualOrgUnitColumn && availableColumns.includes(actualOrgUnitColumn)
       ? actualOrgUnitColumn
@@ -1012,28 +1010,12 @@ function buildAggregatedValueMaps(options: {
     const id = String(orgUnitValue).trim();
     const numValue = Number(metricValue);
     if (!id || Number.isNaN(numValue)) {
-      if (Math.random() < 0.01) { // Log 1% of skipped rows
-        console.debug('[buildAggregatedValueMaps] Skipping row - invalid data:', {
-          orgUnitValue,
-          metricValue,
-          id,
-          numValue,
-          isNaN: Number.isNaN(numValue),
-        });
-      }
       return;
     }
 
     const values = orgUnitData.get(id) || [];
     values.push(numValue);
     orgUnitData.set(id, values);
-  });
-
-  console.info('[buildAggregatedValueMaps] OrgUnit data collected:', {
-    orgUnitDataSize: orgUnitData.size,
-    actualOrgUnitCol,
-    actualMetricCol,
-    sampleOrgUnits: Array.from(orgUnitData.keys()).slice(0, 5),
   });
 
   orgUnitData.forEach((values, id) => {
@@ -1073,14 +1055,6 @@ function buildAggregatedValueMaps(options: {
     });
   });
 
-  console.info('[buildAggregatedValueMaps] Final maps built:', {
-    metricMapByIdSize: metricMapById.size,
-    metricMapByNameSize: metricMapByName.size,
-    sampleIds: Array.from(metricMapById.entries()).slice(0, 5),
-    sampleNames: Array.from(metricMapByName.entries()).slice(0, 5),
-    allMapKeys: Array.from(metricMapById.keys()),
-  });
-
   return {
     dataMap: metricMapById,
     dataMapByName: metricMapByName,
@@ -1092,23 +1066,9 @@ function resolveFeatureValueFromMaps(
   dataMap: Map<string, number>,
   dataMapByName: Map<string, number>,
 ): number | undefined {
-  const debugLog = Math.random() < 0.05; // Log 5% of features for debugging
-
-  if (debugLog) {
-    console.debug('[resolveFeatureValueFromMaps] Starting lookup:', {
-      featureId: feature.id,
-      featureName: feature.properties?.name,
-      dataMapSize: dataMap.size,
-      dataMapByNameSize: dataMapByName.size,
-      dataMapKeys: Array.from(dataMap.keys()).slice(0, 5),
-      dataMapByNameKeys: Array.from(dataMapByName.keys()).slice(0, 5),
-    });
-  }
-
   // Try exact ID match first
   let value = dataMap.get(feature.id);
   if (value !== undefined) {
-    if (debugLog) console.debug('[resolveFeatureValueFromMaps] Found value by feature.id:', value);
     return value;
   }
 
@@ -1118,21 +1078,25 @@ function resolveFeatureValueFromMaps(
     // Try exact match first
     value = dataMap.get(featureName);
     if (value !== undefined) {
-      if (debugLog) console.debug('[resolveFeatureValueFromMaps] Found value by exact name:', featureName, value);
       return value;
     }
 
     // If feature name is like "Abim District", also try without "District"
     // This handles cases where data has full names but boundaries don't, or vice versa
-    const nameWithoutSuffix = featureName.replace(/\s+(District|City|Municipality|County|Town Council)$/i, '').trim();
-    const nameWithDistrict = featureName.includes('District') ? featureName : `${featureName} District`;
-    const nameWithCity = featureName.includes('City') ? featureName : `${featureName} City`;
+    const nameWithoutSuffix = featureName
+      .replace(/\s+(District|City|Municipality|County|Town Council)$/i, '')
+      .trim();
+    const nameWithDistrict = featureName.includes('District')
+      ? featureName
+      : `${featureName} District`;
+    const nameWithCity = featureName.includes('City')
+      ? featureName
+      : `${featureName} City`;
 
     // Try variations
     for (const variant of [nameWithoutSuffix, nameWithDistrict, nameWithCity]) {
       value = dataMap.get(variant);
       if (value !== undefined) {
-        if (debugLog) console.debug('[resolveFeatureValueFromMaps] Found value by name variant:', variant, value);
         return value;
       }
     }
@@ -1144,22 +1108,16 @@ function resolveFeatureValueFromMaps(
     ...buildOrgUnitMatchKeys(featureName),
   ];
 
-  if (debugLog) {
-    console.debug('[resolveFeatureValueFromMaps] Match keys:', matchKeys);
-  }
-
   // Try all match keys
   for (const key of matchKeys) {
     value = dataMapByName.get(key);
     if (value !== undefined) {
-      if (debugLog) console.debug('[resolveFeatureValueFromMaps] Found value by match key:', key, value);
       return value;
     }
 
     // Also try in the main dataMap
     value = dataMap.get(key);
     if (value !== undefined) {
-      if (debugLog) console.debug('[resolveFeatureValueFromMaps] Found value by match key in dataMap:', key, value);
       return value;
     }
   }
@@ -1170,36 +1128,27 @@ function resolveFeatureValueFromMaps(
     // Check all entries in both maps with fuzzy matching
     for (const [key, val] of dataMap.entries()) {
       const normalizedKey = normalizeOrgUnitMatchKey(key);
-      if (normalizedKey && (
-        normalizedKey === normalizedFeatureName ||
-        normalizedKey.includes(normalizedFeatureName) ||
-        normalizedFeatureName.includes(normalizedKey)
-      )) {
-        if (debugLog) console.debug('[resolveFeatureValueFromMaps] Found value by normalized match in dataMap:', key, val);
+      if (
+        normalizedKey &&
+        (normalizedKey === normalizedFeatureName ||
+          normalizedKey.includes(normalizedFeatureName) ||
+          normalizedFeatureName.includes(normalizedKey))
+      ) {
         return val;
       }
     }
 
     for (const [key, val] of dataMapByName.entries()) {
       const normalizedKey = normalizeOrgUnitMatchKey(key);
-      if (normalizedKey && (
-        normalizedKey === normalizedFeatureName ||
-        normalizedKey.includes(normalizedFeatureName) ||
-        normalizedFeatureName.includes(normalizedKey)
-      )) {
-        if (debugLog) console.debug('[resolveFeatureValueFromMaps] Found value by normalized match in dataMapByName:', key, val);
+      if (
+        normalizedKey &&
+        (normalizedKey === normalizedFeatureName ||
+          normalizedKey.includes(normalizedFeatureName) ||
+          normalizedFeatureName.includes(normalizedKey))
+      ) {
         return val;
       }
     }
-  }
-
-  if (debugLog) {
-    console.warn('[resolveFeatureValueFromMaps] No value found for feature:', {
-      featureId: feature.id,
-      featureName: feature.properties?.name,
-      normalizedFeatureName,
-      triedKeys: matchKeys,
-    });
   }
 
   return undefined;
@@ -1280,9 +1229,9 @@ function DHIS2Map({
   boundaryFocusMaskStyle = 'off',
   basemapStyle = 'none',
   labelTextColor,
-  opacity = 0.7,  // DEFAULT TO 0.7 if not provided
+  opacity = 0.7, // DEFAULT TO 0.7 if not provided
   strokeColor,
-  strokeWidth = 1,  // DEFAULT TO 1 if not provided
+  strokeWidth = 1, // DEFAULT TO 1 if not provided
   autoThemeBorders = false,
   showAllBoundaries = false,
   focusSelectedBoundaryWithChildren = false,
@@ -1327,12 +1276,6 @@ function DHIS2Map({
   const hasQueryData = data.length > 0;
 
   // Log opacity to debug visibility issue
-  console.info('[DHIS2Map] Component opacity settings:', {
-    opacity,
-    strokeWidth,
-    strokeColor,
-    chartBackgroundColor,
-  });
   const sourceInstanceIdsInputKey = useMemo(
     () =>
       (Array.isArray(sourceInstanceIds) ? sourceInstanceIds : [])
@@ -2887,53 +2830,34 @@ function DHIS2Map({
     return colorScheme || 'supersetColors';
   }, [useLinearColorScheme, linearColorScheme, colorScheme]);
 
-  const colorScale = useMemo(() => {
-    console.info('[DHIS2Map] Creating color scale:', {
+  const colorScale = useMemo(
+    () =>
+      getColorScale(
+        activeColorScheme,
+        valueRange.min,
+        valueRange.max,
+        legendClasses,
+        legendReverseColors,
+        useLinearColorScheme ? 'sequential' : 'categorical',
+        manualBreaks,
+        manualColors,
+        effectiveStagedLegendDefinition,
+        legendType,
+        legendDataValues,
+      ),
+    [
       activeColorScheme,
+      effectiveStagedLegendDefinition,
+      legendDataValues,
+      legendType,
       valueRange,
       legendClasses,
       legendReverseColors,
       useLinearColorScheme,
-      legendType,
-      hasData: valueRange.hasData,
-    });
-
-    const scale = getColorScale(
-      activeColorScheme,
-      valueRange.min,
-      valueRange.max,
-      legendClasses,
-      legendReverseColors,
-      useLinearColorScheme ? 'sequential' : 'categorical',
       manualBreaks,
       manualColors,
-      effectiveStagedLegendDefinition,
-      legendType,
-      legendDataValues,
-    );
-
-    // Test the color scale
-    if (valueRange.hasData) {
-      const testValue = (valueRange.min + valueRange.max) / 2;
-      console.info('[DHIS2Map] Testing color scale:', {
-        testValue,
-        resultColor: scale(testValue),
-      });
-    }
-
-    return scale;
-  }, [
-    activeColorScheme,
-    effectiveStagedLegendDefinition,
-    legendDataValues,
-    legendType,
-    valueRange,
-    legendClasses,
-    legendReverseColors,
-    useLinearColorScheme,
-    manualBreaks,
-    manualColors,
-  ]);
+    ],
+  );
 
   const computedLegendEntries = useMemo(
     () =>
@@ -2966,12 +2890,6 @@ function DHIS2Map({
   );
 
   const fetchBoundaries = useCallback(async () => {
-    console.info('[DHIS2Map] fetchBoundaries called with:', {
-      databaseId,
-      effectiveBoundaryLevels,
-      boundaryLoadMethod,
-    });
-
     if (!databaseId) {
       console.error('[DHIS2Map] No database selected');
       setError(t('No database selected'));
@@ -3221,7 +3139,9 @@ function DHIS2Map({
       const validFeatures = convertToBoundaryFeatures(result.allFeatures);
 
       // Debug: Check if features have valid geometry
-      const featuresWithGeometry = validFeatures.filter(f => f.geometry && f.geometry.coordinates);
+      const featuresWithGeometry = validFeatures.filter(
+        f => f.geometry && f.geometry.coordinates,
+      );
       if (featuresWithGeometry.length < validFeatures.length) {
         console.warn('[DHIS2Map] Some features missing geometry:', {
           total: validFeatures.length,
@@ -3298,17 +3218,7 @@ function DHIS2Map({
       sourceInstanceIdsKey,
     ].join('|');
 
-    console.info('[DHIS2Map] Boundary fetch useEffect triggered:', {
-      boundaryRequestKey,
-      lastLoaded: lastLoadedBoundaryRequestKeyRef.current,
-      databaseId,
-      effectiveBoundaryLevels,
-      boundaryLevelsKey,
-      sourceInstanceIdsKey,
-    });
-
     if (lastLoadedBoundaryRequestKeyRef.current === boundaryRequestKey) {
-      console.info('[DHIS2Map] Skipping fetch - same config');
       return; // same config — do not re-fetch
     }
 
@@ -3322,10 +3232,6 @@ function DHIS2Map({
       effectiveBoundaryLevels &&
       effectiveBoundaryLevels.length > 0
     ) {
-      console.info('[DHIS2Map] Fetching boundaries with config:', {
-        databaseId,
-        effectiveBoundaryLevels,
-      });
       // Cancel any pending retry when the config itself changes.
       if (boundaryPendingRetryTimerRef.current) {
         clearTimeout(boundaryPendingRetryTimerRef.current);
@@ -3495,23 +3401,14 @@ function DHIS2Map({
     // Validate boundaries have proper geometry
     const validBoundaries = visibleBoundaries.filter(boundary => {
       if (!boundary.geometry || !boundary.geometry.coordinates) {
-        console.warn('[DHIS2Map] Invalid boundary geometry:', boundary.id, boundary);
+        console.warn(
+          '[DHIS2Map] Invalid boundary geometry:',
+          boundary.id,
+          boundary,
+        );
         return false;
       }
       return true;
-    });
-
-    console.info('[DHIS2Map] Display boundaries:', {
-      totalBoundaries: boundaries.length,
-      visibleBoundaries: visibleBoundaries.length,
-      validBoundaries: validBoundaries.length,
-      showAllBoundaries,
-      selectedBoundaryIds: Array.from(selectedBoundaryIds),
-      firstBoundary: validBoundaries[0],
-      boundaryNamesAndIds: validBoundaries.slice(0, 10).map(b => ({
-        id: b.id,
-        name: b.properties?.name,
-      })),
     });
 
     return validBoundaries;
@@ -3536,53 +3433,6 @@ function DHIS2Map({
         .join('|'),
     [levelBorderColors],
   );
-
-  useEffect(() => {
-    const firstFiveBoundaries = displayBoundaries.slice(0, 5).map(boundary => ({
-      id: boundary.id,
-      name: boundary.properties?.name ?? null,
-      level: boundary.properties?.level ?? null,
-    }));
-
-    const firstFiveDistrictCityValues = filteredData.slice(0, 5).map(row => ({
-      district_city:
-        row?.district_city ??
-        row?.districtCity ??
-        row?.[effectiveOrgUnitDataColumn || ''] ??
-        null,
-      region: row?.region ?? null,
-      national: row?.national ?? null,
-      metric:
-        row?.[metric as string] ??
-        row?.[resolvedMetricColumn || ''] ??
-        row?.value ??
-        null,
-    }));
-
-    // eslint-disable-next-line no-console
-    console.info('[DHIS2Map] Boundary/data diagnostics', {
-      displayBoundariesLength: displayBoundaries.length,
-      firstFiveBoundaries,
-      effectiveDataLength: filteredData.length,
-      firstFiveDistrictCityValues,
-      effectiveOrgUnitDataColumn,
-      resolvedEffectiveOrgUnitColumn,
-      resolvedMetricColumn,
-      dataMapSize: dataMap.size,
-      dataMapSample: Array.from(dataMap.entries()).slice(0, 5),
-      dataMapByNameSize: dataMapByName.size,
-      dataMapByNameSample: Array.from(dataMapByName.entries()).slice(0, 5),
-    });
-  }, [
-    dataMap,
-    dataMapByName,
-    displayBoundaries,
-    effectiveOrgUnitDataColumn,
-    filteredData,
-    metric,
-    resolvedEffectiveOrgUnitColumn,
-    resolvedMetricColumn,
-  ]);
 
   const shouldStyleUnselectedAreas = useMemo(
     () =>
@@ -3612,20 +3462,6 @@ function DHIS2Map({
       }
 
       const value = getFeatureValue(feature);
-
-      // Debug logging for data mapping issues
-      if (Math.random() < 0.1) { // Log 10% of features
-        const fillColorResult = value !== undefined ? colorScale(value) : 'no-data';
-        console.debug('[getFeatureStyle] Feature styling:', {
-          featureId: feature.id,
-          featureName: feature.properties?.name,
-          value,
-          hasValue: value !== undefined,
-          fillColor: fillColorResult,
-          colorScaleExists: !!colorScale,
-          valueRange: valueRange,
-        });
-      }
 
       const noDataColorRgb = `rgba(${legendNoDataColor.r},${legendNoDataColor.g},${legendNoDataColor.b},${legendNoDataColor.a})`;
       const unselectedFillRgb = `rgba(${unselectedAreaFillColor.r},${unselectedAreaFillColor.g},${unselectedAreaFillColor.b},${unselectedAreaFillColor.a})`;
@@ -3695,20 +3531,6 @@ function DHIS2Map({
         fillColor,
         fillOpacity: fillOpacityValue,
       };
-
-      // Debug log some feature styles
-      if (Math.random() < 0.1) { // Log 10% of features
-        console.debug('[getFeatureStyle] Final style for feature:', {
-          featureId: feature.id,
-          featureName: feature.properties?.name,
-          hasValue: value !== undefined,
-          value,
-          configuredOpacity,
-          fillColor: style.fillColor,
-          fillOpacity: style.fillOpacity,
-          fullStyle: style,
-        });
-      }
 
       return style;
     },
@@ -3895,15 +3717,8 @@ function DHIS2Map({
     fetchBoundaries();
   }, [fetchBoundaries]);
 
-  const rgbaCss = (
-    c?: { r: number; g: number; b: number; a?: number },
-    fallback?: string,
-  ) =>
-    c && typeof c.r === 'number'
-      ? `rgba(${c.r}, ${c.g}, ${c.b}, ${c.a ?? 1})`
-      : fallback;
-  const titleColorCss = rgbaCss(chartTitleColor, '#1f2937');
-  const subtitleColorCss = rgbaCss(chartSubtitleColor, '#6b7280');
+  const titleColorCss = colorValueToCss(chartTitleColor) ?? '#1f2937';
+  const subtitleColorCss = colorValueToCss(chartSubtitleColor) ?? '#6b7280';
   const hasChartTitle = Boolean(chartTitle || chartSubtitle);
 
   return (
@@ -3967,6 +3782,7 @@ function DHIS2Map({
           scrollWheelZoom={false}
           dragging={interactionEnabled}
           doubleClickZoom={interactionEnabled}
+          style={{ width: '100%', height: '100%' }}
           boxZoom={interactionEnabled}
           keyboard={interactionEnabled}
           touchZoom={interactionEnabled}

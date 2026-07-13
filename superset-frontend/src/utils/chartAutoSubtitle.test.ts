@@ -25,6 +25,7 @@ import {
   isAutoSubtitleEnabled,
   makeColumnLabeller,
   renderFilterSegment,
+  resolveChartTitle,
   summarizeValues,
 } from './chartAutoSubtitle';
 
@@ -37,6 +38,33 @@ const COLUMNS = [
   },
 ];
 const columnLabel = makeColumnLabeller(COLUMNS);
+
+describe('makeColumnLabeller', () => {
+  test('a duplicated column_name resolves to the FIRST occurrence', () => {
+    const label = makeColumnLabeller([
+      { column_name: 'dx', verbose_name: 'First label' },
+      { column_name: 'dx', verbose_name: 'Second label' },
+    ]);
+    expect(label('dx')).toBe('First label');
+  });
+
+  test('falls back to the raw name for unknown columns', () => {
+    expect(columnLabel('nope')).toBe('nope');
+  });
+});
+
+describe('resolveChartTitle', () => {
+  test('a falsy title (0) stays blank rather than rendering "0"', () => {
+    expect(resolveChartTitle({ chart_title: 0 }).title).toBe('');
+    expect(resolveChartTitle({ chart_title: false }).title).toBe('');
+  });
+
+  test('reads a real title and trims it', () => {
+    expect(resolveChartTitle({ chartTitle: '  Rainfall  ' }).title).toBe(
+      'Rainfall',
+    );
+  });
+});
 
 describe('summarizeValues', () => {
   test('names up to three values, then collapses', () => {

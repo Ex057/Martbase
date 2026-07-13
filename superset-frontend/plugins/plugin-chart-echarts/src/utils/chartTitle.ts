@@ -16,34 +16,17 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { rgbToHex, SupersetTheme } from '@superset-ui/core';
+import { SupersetTheme } from '@superset-ui/core';
 import {
-  buildFilterSubtitle,
-  isAutoSubtitleEnabled,
+  chartTitleHeight,
   LabelledColumn,
+  pickerToCssColor,
+  resolveChartTitle,
 } from 'src/utils/chartAutoSubtitle';
 
-/** RGBA colour object as stored by ColorPickerControl. */
-type ColorObj = { r: number; g: number; b: number; a?: number };
-
-/**
- * Convert a ColorPickerControl value ({ r, g, b, a }) to a CSS colour string,
- * or undefined when unset so the chart theme colour is used instead.
- */
-export function pickerToCssColor(color?: ColorObj): string | undefined {
-  if (
-    !color ||
-    typeof color.r !== 'number' ||
-    typeof color.g !== 'number' ||
-    typeof color.b !== 'number'
-  ) {
-    return undefined;
-  }
-  const { r, g, b, a } = color;
-  return typeof a === 'number' && a < 1
-    ? `rgba(${r}, ${g}, ${b}, ${a})`
-    : rgbToHex(r, g, b);
-}
+// pickerToCssColor is re-exported for existing importers; the single
+// implementation lives in src/utils/chartAutoSubtitle.
+export { pickerToCssColor };
 
 export interface ChartTitleOption {
   text: string;
@@ -83,21 +66,19 @@ export function getChartTitleOption(
   theme: SupersetTheme,
   datasourceColumns: LabelledColumn[] = [],
 ): ChartTitleResult {
-  const text =
-    (formData?.chartTitle && String(formData.chartTitle).trim()) || '';
-  const subtext = isAutoSubtitleEnabled(formData)
-    ? buildFilterSubtitle(formData, datasourceColumns)
-    : (formData?.chartSubtitle && String(formData.chartSubtitle).trim()) || '';
-  if (!text && !subtext) {
+  // resolveChartTitle is the single source of truth for title/subtitle/colours
+  // (and reads both camelCase and snake_case formData); this just maps its
+  // result into the ECharts `title` option.
+  const { title, subtitle, titleColor, subtitleColor, align } =
+    resolveChartTitle(formData, datasourceColumns);
+  if (!title && !subtitle) {
     return { topOffset: 0 };
   }
-  const titleColor = pickerToCssColor(formData?.chartTitleColor);
-  const subtitleColor = pickerToCssColor(formData?.chartSubtitleColor);
   return {
     title: {
-      text,
-      subtext,
-      left: formData?.chartTitleAlign === 'left' ? 'left' : 'center',
+      text: title,
+      subtext: subtitle,
+      left: align,
       top: 0,
       textStyle: {
         fontSize: 16,
@@ -109,6 +90,6 @@ export function getChartTitleOption(
         color: subtitleColor || theme.colorTextSecondary,
       },
     },
-    topOffset: subtext ? 48 : 30,
+    topOffset: chartTitleHeight({ title, subtitle }),
   };
 }

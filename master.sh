@@ -510,7 +510,7 @@ FEATURE_FLAGS = {
     "THUMBNAILS": True,
     "ALERT_REPORTS": True,
     "DASHBOARD_RBAC": True,
-    "DYNAMIC_PLUGINS": True,
+    "DYNAMIC_PLUGINS": False,
     "AI_INSIGHTS": True,
 }
 REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")

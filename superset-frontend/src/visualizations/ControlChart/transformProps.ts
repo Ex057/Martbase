@@ -20,7 +20,11 @@
 import { getMetricLabel, getNumberFormatter } from '@superset-ui/core';
 import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
 import { periodToRange } from 'src/explore/components/controls/DHIS2ColumnFilterControl/relativePeriods';
-import { ControlChartFormData, ControlChartChartProps, ThresholdMethod } from './types';
+import {
+  ControlChartFormData,
+  ControlChartChartProps,
+  ThresholdMethod,
+} from './types';
 
 /* ── Statistical helpers ───────────────────────────── */
 
@@ -79,7 +83,9 @@ function computeThresholds(
 
 /* ── ECharts option builder ────────────────────────── */
 
-export default function transformProps(chartProps: any): ControlChartChartProps {
+export default function transformProps(
+  chartProps: any,
+): ControlChartChartProps {
   const { width, height, formData, queriesData } = chartProps;
   const fd = formData as ControlChartFormData;
   const data = queriesData?.[0]?.data || [];
@@ -101,27 +107,28 @@ export default function transformProps(chartProps: any): ControlChartChartProps 
 
   // If every x is a DHIS2 period code, sort chronologically by its true start —
   // correct even across granularities ("2024" vs "202401" vs "2024Q1"), which a
-  // lexical SQL sort gets wrong. Non-period axes keep the query's order.
-  const allPeriods =
-    paired.length > 0 && paired.every(p => periodToRange(p.x) !== undefined);
-  if (allPeriods) {
-    paired.sort(
-      (a, b) => periodToRange(a.x)!.startYM - periodToRange(b.x)!.startYM,
-    );
-  }
+  // lexical SQL sort gets wrong. Non-period axes keep the query's order. Parse
+  // each period once rather than re-parsing 2× per comparison in the sort.
+  const startYMs = paired.map(p => periodToRange(p.x)?.startYM);
+  const ordered = startYMs.every(ym => ym !== undefined)
+    ? paired
+        .map((p, i) => ({ p, ym: startYMs[i] as number }))
+        .sort((a, b) => a.ym - b.ym)
+        .map(d => d.p)
+    : paired;
 
-  const xValues: string[] = paired.map(p => p.x);
-  const yValues: number[] = paired.map(p => p.y);
+  const xValues: string[] = ordered.map(p => p.x);
+  const yValues: number[] = ordered.map(p => p.y);
 
   // parseFloat('0') is 0 (falsy) — test against '' so a manual limit of 0 holds.
-  const manualUclStr = fd.manual_ucl == null ? '' : String(fd.manual_ucl).trim();
-  const manualLclStr = fd.manual_lcl == null ? '' : String(fd.manual_lcl).trim();
-  const manualUclRaw = manualUclStr === '' ? null : parseFloat(manualUclStr);
-  const manualLclRaw = manualLclStr === '' ? null : parseFloat(manualLclStr);
-  const manualUcl =
-    manualUclRaw != null && Number.isFinite(manualUclRaw) ? manualUclRaw : null;
-  const manualLcl =
-    manualLclRaw != null && Number.isFinite(manualLclRaw) ? manualLclRaw : null;
+  // Number.isFinite(null) is already false, so it also handles the empty case.
+  const toManualLimit = (raw: unknown): number | null => {
+    const str = raw == null ? '' : String(raw).trim();
+    const num = str === '' ? NaN : parseFloat(str);
+    return Number.isFinite(num) ? num : null;
+  };
+  const manualUcl = toManualLimit(fd.manual_ucl);
+  const manualLcl = toManualLimit(fd.manual_lcl);
 
   const computed = computeThresholds(
     yValues,
@@ -129,7 +136,7 @@ export default function transformProps(chartProps: any): ControlChartChartProps 
     fd.baseline_periods ?? 52,
     fd.csum_weight ?? 0.5,
   );
-  const meanVal = computed.meanVal;
+  const { meanVal } = computed;
   const ucl = manualUcl !== null ? manualUcl : computed.ucl;
   const lcl = manualLcl !== null ? manualLcl : computed.lcl;
 
@@ -224,7 +231,10 @@ export default function transformProps(chartProps: any): ControlChartChartProps 
               silent: true,
               data: [
                 [
-                  { yAxis: ucl, itemStyle: { color: 'rgba(211, 47, 47, 0.06)' } },
+                  {
+                    yAxis: ucl,
+                    itemStyle: { color: 'rgba(211, 47, 47, 0.06)' },
+                  },
                   { yAxis: dataMax * 1.2 },
                 ],
               ],
@@ -281,7 +291,8 @@ export default function transformProps(chartProps: any): ControlChartChartProps 
         const isBreach = breachIndices.has(idx);
         let html = `<strong>${xValues[idx]}</strong><br/>`;
         html += `Observed: <strong>${yFmt(observed)}</strong>`;
-        if (isBreach) html += ` <span style="color:${uclColor}">⚠ BREACH</span>`;
+        if (isBreach)
+          html += ` <span style="color:${uclColor}">⚠ BREACH</span>`;
         html += `<br/>Mean: ${yFmt(meanVal)} | UCL: ${yFmt(ucl)}`;
         return html;
       },
@@ -331,6 +342,9 @@ export default function transformProps(chartProps: any): ControlChartChartProps 
     manualUcl,
     manualLcl,
     nullValueText: fd.null_value_text || '–',
-    title: resolveChartTitle(chartProps.formData, chartProps.datasource?.columns),
+    title: resolveChartTitle(
+      chartProps.formData,
+      chartProps.datasource?.columns,
+    ),
   };
 }

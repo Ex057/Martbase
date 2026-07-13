@@ -18,7 +18,7 @@
  */
 
 import { buildQueryContext, QueryFormData } from '@superset-ui/core';
-import { resolveFilterValues } from '../../explore/components/controls/DHIS2ColumnFilterControl/relativePeriods';
+import { dhis2ColumnFilterClauses } from '../../explore/components/controls/DHIS2ColumnFilterControl/shared';
 import { sanitizeDHIS2ColumnName } from '../../features/datasets/AddDataset/DHIS2ParameterBuilder/sanitize';
 import { resolveDHIS2MetricLabel } from '../../utils/dhis2MetricLabel';
 import { getDatasourceBoundaryLevels } from './boundaryLevels';
@@ -142,7 +142,9 @@ export default function buildQuery(formData: QueryFormData) {
       ? (() => {
           const col = datasourceAny.columns.find((c: any) => {
             const extra = parseColumnExtra(c?.extra);
-            return extra?.dhis2_is_period === true || extra?.dhis2IsPeriod === true;
+            return (
+              extra?.dhis2_is_period === true || extra?.dhis2IsPeriod === true
+            );
           });
           return col ? String(col?.column_name || '').trim() : null;
         })()
@@ -186,12 +188,14 @@ export default function buildQuery(formData: QueryFormData) {
       if (Array.isArray(boundary_levels) && boundary_levels.length > 0) {
         selectedLevel = Math.min(...boundary_levels);
       } else if (boundary_level) {
-        selectedLevel = Array.isArray(boundary_level) ? boundary_level[0] : boundary_level;
+        selectedLevel = Array.isArray(boundary_level)
+          ? boundary_level[0]
+          : boundary_level;
       }
       if (Number.isFinite(simpleBoundaryLevel) && simpleBoundaryLevel > 0) {
         selectedLevel = simpleBoundaryLevel;
       }
-      
+
       const minimalColumns: string[] = selectedLevelColumn
         ? [sanitizeDHIS2ColumnName(selectedLevelColumn)]
         : [];
@@ -236,9 +240,7 @@ export default function buildQuery(formData: QueryFormData) {
     let metricColumn =
       typeof metric === 'string'
         ? metric
-        : (metric as any)?.column?.column_name ||
-          (metric as any)?.label ||
-          '';
+        : (metric as any)?.column?.column_name || (metric as any)?.label || '';
 
     // Extract column name from SQL aggregate functions like SUM(column_name)
     const sqlAggPattern =
@@ -346,7 +348,9 @@ export default function buildQuery(formData: QueryFormData) {
     // tooltips and the user can apply period filters.
     // Use the datasource-derived period column name first; fall back to
     // granularity_sqla (user-selected time column).
-    const effectivePeriodColumn = periodColumnName || (granularity_sqla ? sanitizeDHIS2ColumnName(granularity_sqla) : null);
+    const effectivePeriodColumn =
+      periodColumnName ||
+      (granularity_sqla ? sanitizeDHIS2ColumnName(granularity_sqla) : null);
     if (effectivePeriodColumn) {
       addColumn(effectivePeriodColumn);
     }
@@ -405,7 +409,13 @@ export default function buildQuery(formData: QueryFormData) {
       ? [aggregatedMetric]
       : usesRawMetricRows
         ? []
-        : [{ expressionType: 'SQL' as const, sqlExpression: 'COUNT(*)', label: '__count' }];
+        : [
+            {
+              expressionType: 'SQL' as const,
+              sqlExpression: 'COUNT(*)',
+              label: '__count',
+            },
+          ];
 
     if (usesRawMetricRows) {
       // Latest / none need the raw metric rows so the map can resolve the
@@ -441,26 +451,11 @@ export default function buildQuery(formData: QueryFormData) {
           }
         : null;
 
-    // Build filters from the DHIS2ColumnFilterControl (dhis2_column_filters).
-    // Each entry is {column: string, values: string[]} and maps to a SQL
-    // WHERE col IN (...) clause.  This replaces the old dhis2_filter_periods
-    // + adhoc_filters split and works for any column in the dataset.
-    // A period filter may hold a relative token (REL::LAST_12_MONTHS); it is
-    // expanded here, on every query, so the chart tracks newly synced periods.
-    interface Dhis2ColFilter { column: string; values: string[] }
-    const columnFilters: Dhis2ColFilter[] = Array.isArray(formDataAny?.dhis2_column_filters)
-      ? (formDataAny.dhis2_column_filters as Dhis2ColFilter[]).filter(
-          f => f?.column && Array.isArray(f.values) && f.values.length > 0,
-        )
-      : [];
-
-    const columnExtraFilters = columnFilters
-      .map(f => ({
-        col: f.column,
-        op: 'IN' as const,
-        val: resolveFilterValues(f.values),
-      }))
-      .filter(f => f.val.length > 0);
+    // Build filters from the DHIS2ColumnFilterControl (dhis2_column_filters):
+    // each {column, values} entry becomes a WHERE col IN (...) clause, with any
+    // relative period token (REL::LAST_12_MONTHS) expanded on every query so the
+    // chart tracks newly synced periods. Shared with every other DHIS2 chart.
+    const columnExtraFilters = dhis2ColumnFilterClauses(formData);
 
     // Combine existing adhoc filters with the column filters.
     // Never let time_range through for staged local datasets: the period

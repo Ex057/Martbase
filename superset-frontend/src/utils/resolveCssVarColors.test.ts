@@ -72,4 +72,27 @@ describe('resolveCssVarColors', () => {
       resolveCssVarColors({ a: 'rgba(211, 47, 47, 0.06)', b: '#fff' }),
     ).toEqual({ a: 'rgba(211, 47, 47, 0.06)', b: '#fff' });
   });
+
+  test('returns the SAME reference when nothing contains var() (no copy)', () => {
+    // Clone-on-write: a large option with no var() must not be reallocated.
+    const data = [1, 2, 3, 4, 5];
+    const option = { series: [{ data }], grid: { top: 40 } };
+    const result = resolveCssVarColors(option);
+    expect(result).toBe(option);
+    expect(result.series).toBe(option.series);
+    expect(result.series[0].data).toBe(data);
+  });
+
+  test('copies only the branch that changed, sharing the rest', () => {
+    const bigData = [1, 2, 3];
+    const option = {
+      series: [{ data: bigData }],
+      xAxis: { axisLabel: { color: 'var(--x, #abc)' } },
+    };
+    const result = resolveCssVarColors(option);
+    expect(result).not.toBe(option); // root changed
+    expect(result.series).toBe(option.series); // untouched branch shared
+    expect(result.series[0].data).toBe(bigData);
+    expect(result.xAxis.axisLabel.color).toBe('#abc'); // changed branch resolved
+  });
 });

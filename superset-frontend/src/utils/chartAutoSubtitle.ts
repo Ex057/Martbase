@@ -213,12 +213,16 @@ function readFormDataKey(
 
 /** Resolve a column's display label from the datasource. */
 export function makeColumnLabeller(columns: LabelledColumn[] = []) {
-  return (columnName: string): string => {
-    const match = columns.find(
-      column => String(column?.column_name) === columnName,
-    );
-    return match?.verbose_name || match?.column_name || columnName;
-  };
+  // Index once; a datasource can have many columns (one per DHIS2 data element)
+  // and this is called per filter.
+  const labels = new Map<string, string>();
+  columns.forEach(column => {
+    const name = String(column?.column_name ?? '');
+    // First occurrence wins, matching the previous Array.find behaviour.
+    if (name && !labels.has(name))
+      labels.set(name, column?.verbose_name || name);
+  });
+  return (columnName: string): string => labels.get(columnName) || columnName;
 }
 
 const OPERATOR_PHRASES: Record<string, string> = {
@@ -433,16 +437,16 @@ export function resolveChartTitle(
   columns: LabelledColumn[] = [],
   extraPrefix: string[] = [],
 ): ResolvedChartTitle {
-  const title =
-    (readFormDataKey(formData, 'chartTitle', 'chart_title') &&
-      String(readFormDataKey(formData, 'chartTitle', 'chart_title')).trim()) ||
-    '';
-  const manualSubtitle =
-    (readFormDataKey(formData, 'chartSubtitle', 'chart_subtitle') &&
-      String(
-        readFormDataKey(formData, 'chartSubtitle', 'chart_subtitle'),
-      ).trim()) ||
-    '';
+  // Read once, but keep the old falsy→'' semantics so a coerced 0/false title
+  // stays blank rather than rendering as the literal '0'/'false'.
+  const rawTitle = readFormDataKey(formData, 'chartTitle', 'chart_title');
+  const title = rawTitle ? String(rawTitle).trim() : '';
+  const rawSubtitle = readFormDataKey(
+    formData,
+    'chartSubtitle',
+    'chart_subtitle',
+  );
+  const manualSubtitle = rawSubtitle ? String(rawSubtitle).trim() : '';
   const subtitle = isAutoSubtitleEnabled(formData)
     ? buildFilterSubtitle(formData, columns, extraPrefix)
     : manualSubtitle;
@@ -457,7 +461,8 @@ export function resolveChartTitle(
       readFormDataKey(formData, 'chartSubtitleColor', 'chart_subtitle_color'),
     ),
     align:
-      readFormDataKey(formData, 'chartTitleAlign', 'chart_title_align') === 'left'
+      readFormDataKey(formData, 'chartTitleAlign', 'chart_title_align') ===
+      'left'
         ? 'left'
         : 'center',
   };

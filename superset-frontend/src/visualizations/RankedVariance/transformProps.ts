@@ -19,7 +19,11 @@
 /* eslint-disable theme-colors/no-literal-colors */
 import { getMetricLabel, getNumberFormatter } from '@superset-ui/core';
 import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
-import { RankedVarianceFormData, RankedVarianceChartProps, SortOrder } from './types';
+import {
+  RankedVarianceFormData,
+  RankedVarianceChartProps,
+  SortOrder,
+} from './types';
 
 interface VarianceBand {
   threshold: number;
@@ -47,7 +51,9 @@ function resolveColor(absVariance: number, bands: VarianceBand[]): string {
   return bands[bands.length - 1]?.color ?? '#6B7280';
 }
 
-export default function transformProps(chartProps: any): RankedVarianceChartProps {
+export default function transformProps(
+  chartProps: any,
+): RankedVarianceChartProps {
   const { width, height, formData, queriesData } = chartProps;
   const fd = formData as RankedVarianceFormData;
   const data = queriesData?.[0]?.data || [];
@@ -56,7 +62,9 @@ export default function transformProps(chartProps: any): RankedVarianceChartProp
   const actualLabel = fd.actual_metric ? getMetricLabel(fd.actual_metric) : '';
   const targetLabel = fd.target_metric ? getMetricLabel(fd.target_metric) : '';
   const valueFmt = getNumberFormatter(fd.y_axis_format || '+,.1%');
-  const bands = parseVarianceBands(fd.variance_thresholds || '5:#2E7D32;15:#F9A825;100:#D32F2F');
+  const bands = parseVarianceBands(
+    fd.variance_thresholds || '5:#2E7D32;15:#F9A825;100:#D32F2F',
+  );
   const maxEntities = fd.max_entities ?? 20;
 
   const varianceMode = (fd as any).variance_mode || 'absolute';
@@ -66,8 +74,10 @@ export default function transformProps(chartProps: any): RankedVarianceChartProp
   const showBenchmarkBand = (fd as any).show_benchmark_band ?? false;
   const rawLower = (fd as any).benchmark_lower;
   const rawUpper = (fd as any).benchmark_upper;
-  const benchmarkLower = rawLower !== '' && rawLower != null ? Number(rawLower) : null;
-  const benchmarkUpper = rawUpper !== '' && rawUpper != null ? Number(rawUpper) : null;
+  const benchmarkLower =
+    rawLower !== '' && rawLower != null ? Number(rawLower) : null;
+  const benchmarkUpper =
+    rawUpper !== '' && rawUpper != null ? Number(rawUpper) : null;
   const showLegend = (fd as any).show_legend ?? false;
 
   // Compute variance for each entity. A missing ACTUAL means the entity has no
@@ -87,20 +97,21 @@ export default function transformProps(chartProps: any): RankedVarianceChartProp
     .map((e: any) => {
       const hasTarget = Number.isFinite(e.target);
       const diff = e.actual - (hasTarget ? e.target : 0);
-      const variance =
-        varianceMode === 'relative'
-          ? hasTarget && e.target !== 0
-            ? (diff / Math.abs(e.target)) * 100
-            : 0
-          : diff;
-      // Colour by percentage deviation so the (percentage) severity bands apply
-      // regardless of display mode — the previous code coloured absolute mode by
-      // raw magnitude against percentage thresholds, painting everything green.
-      const pctSeverity =
-        hasTarget && e.target !== 0
-          ? Math.abs((diff / Math.abs(e.target)) * 100)
-          : Math.abs(diff);
-      return { entity: e.entity, actual: e.actual, target: e.target, variance, pctSeverity };
+      // Percentage deviation from target, or null when there's no usable target.
+      const pct =
+        hasTarget && e.target !== 0 ? (diff / Math.abs(e.target)) * 100 : null;
+      const variance = varianceMode === 'relative' ? (pct ?? 0) : diff;
+      // Colour by percentage severity so the (percentage) bands apply in both
+      // display modes — the previous code coloured absolute mode by raw
+      // magnitude against percentage thresholds, painting everything green.
+      const pctSeverity = pct != null ? Math.abs(pct) : Math.abs(diff);
+      return {
+        entity: e.entity,
+        actual: e.actual,
+        target: e.target,
+        variance,
+        pctSeverity,
+      };
     });
 
   // Sort
@@ -119,7 +130,9 @@ export default function transformProps(chartProps: any): RankedVarianceChartProp
 
   const entityNames = entities.map((e: any) => e.entity);
   const varianceValues = entities.map((e: any) => e.variance);
-  const barColors = entities.map((e: any) => resolveColor(e.pctSeverity, bands));
+  const barColors = entities.map((e: any) =>
+    resolveColor(e.pctSeverity, bands),
+  );
 
   const echartOptions = {
     grid: {
@@ -141,10 +154,12 @@ export default function transformProps(chartProps: any): RankedVarianceChartProp
       formatter: (params: any) => {
         const p = params[0];
         const e = entities[p.dataIndex];
-        return `<strong>${e.entity}</strong><br/>` +
+        return (
+          `<strong>${e.entity}</strong><br/>` +
           `Actual: ${valueFmt(e.actual)}<br/>` +
           `Target: ${valueFmt(e.target)}<br/>` +
-          `Variance: <strong>${valueFmt(e.variance)}</strong>`;
+          `Variance: <strong>${valueFmt(e.variance)}</strong>`
+        );
       },
     },
     xAxis: {
@@ -212,9 +227,7 @@ export default function transformProps(chartProps: any): RankedVarianceChartProp
                   borderType: 'dashed',
                   borderWidth: 1,
                 },
-                data: [
-                  [{ xAxis: benchmarkLower }, { xAxis: benchmarkUpper }],
-                ],
+                data: [[{ xAxis: benchmarkLower }, { xAxis: benchmarkUpper }]],
               }
             : undefined,
       },

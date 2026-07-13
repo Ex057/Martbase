@@ -49,15 +49,37 @@ export function resolveCssVarColors<T>(option: T, el?: Element | null): T {
     return match[2] ? resolveString(match[2].trim()) : value;
   };
 
+  // Clone-on-write: return the SAME node when nothing beneath it changed, so a
+  // large ECharts option (series[].data arrays with no colours) is not deep-
+  // copied on every setOption/resize — only the branches holding var() are.
   const walk = (node: any): any => {
     if (typeof node === 'string') {
       return node.includes('var(') ? resolveString(node) : node;
     }
-    if (Array.isArray(node)) return node.map(walk);
+    if (Array.isArray(node)) {
+      // Allocate a copy only once a child actually changes, so a big data array
+      // with no var() (the common case) is scanned but never copied.
+      let next: any[] | undefined;
+      for (let i = 0; i < node.length; i += 1) {
+        const resolved = walk(node[i]);
+        if (resolved !== node[i]) {
+          next = next ?? node.slice();
+          next[i] = resolved;
+        }
+      }
+      return next ?? node;
+    }
     if (node && typeof node === 'object') {
-      const out: Record<string, any> = {};
-      Object.keys(node).forEach(key => {
-        out[key] = walk(node[key]);
+      const entries = Object.keys(node).map(
+        key => [key, walk(node[key])] as const,
+      );
+      // Only allocate a copy when a value actually changed.
+      if (entries.every(([key, resolved]) => resolved === node[key])) {
+        return node;
+      }
+      const out: Record<string, any> = { ...node };
+      entries.forEach(([key, resolved]) => {
+        out[key] = resolved;
       });
       return out;
     }

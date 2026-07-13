@@ -674,14 +674,22 @@ function buildMapAutoSubtitle(params: {
   } = params;
   const parts: string[] = [];
 
-  const distinct = (column: string): string[] =>
-    column && data.length
-      ? Array.from(
-          new Set(
-            data.map(row => String(row?.[column] ?? '').trim()).filter(Boolean),
-          ),
-        )
-      : [];
+  // Memoized: distinct() is called several times for the same columns (the scope
+  // loop, the org-unit column, the period fallback), and each miss is a full pass
+  // over the data rows.
+  const distinctCache = new Map<string, string[]>();
+  const distinct = (column: string): string[] => {
+    if (!column || !data.length) return [];
+    const cached = distinctCache.get(column);
+    if (cached) return cached;
+    const values = Array.from(
+      new Set(
+        data.map(row => String(row?.[column] ?? '').trim()).filter(Boolean),
+      ),
+    );
+    distinctCache.set(column, values);
+    return values;
+  };
 
   const levelLabel = humanizeLevelLabel(
     primaryBoundaryLevel != null

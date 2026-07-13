@@ -97,6 +97,10 @@ export function BaseMapLayer({ mapType }: BaseMapLayerProps): React.ReactElement
       zIndex={1}
       opacity={1}
       className="dhis2-base-map-tiles"
+      tileSize={256}
+      updateWhenIdle={false}
+      updateWhenZooming={false}
+      keepBuffer={2}
     />
   );
 }
