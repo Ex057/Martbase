@@ -578,6 +578,17 @@ LOCAL_STAGING_CONFIG = {
         "password": CLICKHOUSE_PASSWORD,
     } if os.getenv("CLICKHOUSE_ENABLED", "1") == "1" else None,
 }
+
+# Public dashboard access
+PUBLIC_DASHBOARD_ENTRY_ENABLED = True
+AUTH_ROLE_PUBLIC = "Public"
+PUBLIC_ROLE_LIKE = "Gamma"
+
+# Guest token configuration for embedded dashboards
+GUEST_TOKEN_JWT_SECRET = os.getenv("GUEST_TOKEN_JWT_SECRET", SECRET_KEY)
+GUEST_TOKEN_JWT_ALGO = "HS256"
+GUEST_TOKEN_HEADER_NAME = "X-GuestToken"
+GUEST_TOKEN_JWT_EXP_SECONDS = 86400
 PY
   ok "superset_config.py written"
 }

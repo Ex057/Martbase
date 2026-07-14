@@ -34,6 +34,43 @@ import { MapContainer, GeoJSON, useMap } from 'react-leaflet';
 import L from 'leaflet';
 // @ts-ignore - leaflet styles
 import 'leaflet/dist/leaflet.css';
+
+// Ensure critical Leaflet CSS is injected at runtime (fixes production build issue
+// where entry CSS may not load, causing panes to have position:static instead of absolute)
+if (typeof document !== 'undefined') {
+  const leafletStyles = document.getElementById('leaflet-critical-css');
+  if (!leafletStyles) {
+    const style = document.createElement('style');
+    style.id = 'leaflet-critical-css';
+    style.textContent = `
+      .leaflet-pane, .leaflet-tile, .leaflet-marker-icon, .leaflet-marker-shadow,
+      .leaflet-tile-container, .leaflet-pane > svg, .leaflet-pane > canvas,
+      .leaflet-zoom-box, .leaflet-image-layer, .leaflet-layer {
+        position: absolute;
+        left: 0;
+        top: 0;
+      }
+      .leaflet-container {
+        overflow: hidden;
+      }
+      .leaflet-tile, .leaflet-marker-icon, .leaflet-marker-shadow {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        user-select: none;
+        -webkit-user-drag: none;
+      }
+      .leaflet-tile-pane { z-index: 200; }
+      .leaflet-overlay-pane { z-index: 400; }
+      .leaflet-shadow-pane { z-index: 500; }
+      .leaflet-marker-pane { z-index: 600; }
+      .leaflet-tooltip-pane { z-index: 650; }
+      .leaflet-popup-pane { z-index: 700; }
+      .leaflet-map-pane canvas { z-index: 100; }
+      .leaflet-map-pane svg { z-index: 200; }
+    `;
+    document.head.appendChild(style);
+  }
+}
 import {
   AggregationMethod,
   BoundaryFocusMaskStyle,
