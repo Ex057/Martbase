@@ -200,15 +200,17 @@ class DashboardDAO(BaseDAO[Dashboard]):
         md = dashboard.params_dict
 
         if (positions := data.get("positions")) is not None:
-            # find slices in the position data
+            # find slices in the position data - filter out None values
             slice_ids = [
                 value.get("meta", {}).get("chartId")
                 for value in positions.values()
-                if isinstance(value, dict)
+                if isinstance(value, dict) and value.get("meta", {}).get("chartId")
             ]
 
+            # Only query if we have valid slice IDs
             current_slices = (
                 db.session.query(Slice).filter(Slice.id.in_(slice_ids)).all()
+                if slice_ids else []
             )
 
             dashboard.slices = current_slices

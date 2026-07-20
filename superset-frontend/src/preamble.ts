@@ -30,6 +30,8 @@ import setupClient from './setup/setupClient';
 import setupColors from './setup/setupColors';
 import setupFormatters from './setup/setupFormatters';
 import setupDashboardComponents from './setup/setupDashboardComponents';
+import applyPresetChartPalette from './theme/applyChartPalette';
+import { getPreset } from './theme/presets';
 import { User } from './types/bootstrapTypes';
 import getBootstrapData, { applicationRoot } from './utils/getBootstrapData';
 import './hooks/useLocale';
@@ -132,6 +134,24 @@ setupClient({ appRoot: applicationRoot() });
     bootstrapData.common.extra_categorical_color_schemes,
     bootstrapData.common.extra_sequential_color_schemes,
   );
+
+  // Route the persisted Pro Theme Preset palette into chart series colors so
+  // charts render with the selected scheme on first paint. Must run AFTER
+  // setupColors (which sets the stock default key) so this override wins.
+  try {
+    const appliedPresetId =
+      typeof localStorage !== 'undefined'
+        ? localStorage.getItem('superset-applied-preset-id')
+        : null;
+    const presetPalette = appliedPresetId
+      ? getPreset(appliedPresetId)?.chartPalette
+      : undefined;
+    if (presetPalette?.length) {
+      applyPresetChartPalette(presetPalette, { setAsDefault: true });
+    }
+  } catch {
+    // Non-critical — charts fall back to the stock default scheme.
+  }
 
   setupDashboardComponents();
 

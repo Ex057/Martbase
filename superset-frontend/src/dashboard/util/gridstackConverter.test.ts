@@ -150,6 +150,74 @@ describe('gridstackConverter', () => {
       expect(result.W1.meta.gsX).toBe(3);
       expect(result.W1.meta.gsY).toBe(2);
     });
+
+    it('preserves chartId and other metadata during sync', () => {
+      const layout = {
+        ...baseLayout,
+        CHART_A: {
+          ...baseLayout.CHART_A,
+          meta: { width: 6, height: 50, chartId: 42, sliceName: 'Test Chart', uuid: 'abc123' },
+        },
+      };
+      const widgets = layoutToWidgets(layout);
+      const rebuilt = widgetsToLayout(widgets, layout);
+
+      expect(rebuilt.CHART_A.meta.chartId).toBe(42);
+      expect(rebuilt.CHART_A.meta.sliceName).toBe('Test Chart');
+      expect(rebuilt.CHART_A.meta.uuid).toBe('abc123');
+    });
+
+    it('preserves all existing row metadata beyond background', () => {
+      const layout = {
+        ...baseLayout,
+        ROW_1: {
+          ...baseLayout.ROW_1,
+          meta: {
+            background: 'BACKGROUND_WHITE',
+            customProp: 'preserved',
+            nestedData: { key: 'value' },
+          },
+        },
+      };
+      const widgets = layoutToWidgets(layout);
+      const rebuilt = widgetsToLayout(widgets, layout);
+
+      expect(rebuilt.ROW_1.meta.background).toBe('BACKGROUND_WHITE');
+      expect(rebuilt.ROW_1.meta.customProp).toBe('preserved');
+      expect(rebuilt.ROW_1.meta.nestedData).toEqual({ key: 'value' });
+    });
+
+    it('handles widgets with missing parentRowId gracefully', () => {
+      const widgets: any[] = [
+        { id: 'W1', x: 0, y: 0, w: 6, h: 4, componentType: 'CHART', meta: { chartId: 1 } },
+        { id: 'W2', x: 6, y: 0, w: 6, h: 4, componentType: 'CHART', meta: { chartId: 2 } },
+      ];
+      const result = widgetsToLayout(widgets, baseLayout);
+      // Should create rows without crashing
+      expect(result.GRID_ID.children.length).toBeGreaterThan(0);
+    });
+
+    it('does not lose component type during conversion', () => {
+      const layout = {
+        ...baseLayout,
+        HEADER_1: {
+          id: 'HEADER_1',
+          type: 'HEADER',
+          children: [],
+          parents: ['ROOT_ID', 'GRID_ID', 'ROW_1'],
+          meta: { width: 12, height: 30, text: 'My Header' },
+        },
+        ROW_1: {
+          ...baseLayout.ROW_1,
+          children: ['CHART_A', 'HEADER_1'],
+        },
+      };
+      const widgets = layoutToWidgets(layout);
+      const rebuilt = widgetsToLayout(widgets, layout);
+
+      expect(rebuilt.HEADER_1.type).toBe('HEADER');
+      expect(rebuilt.HEADER_1.meta.text).toBe('My Header');
+    });
   });
 
   describe('getLeafComponents', () => {

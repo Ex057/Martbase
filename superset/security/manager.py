@@ -137,12 +137,60 @@ PRODUCTION_CUSTOM_ROLE_SPECS: tuple[CustomRoleSpec, ...] = (
         ),
         revoke=(
             ("can_list", "DHIS2AdminView"),
+            # Hide "Dynamic Pages" (CMS) and block CMS page/API access.
+            ("cms.pages.view", "CMS"),
+            ("cms.pages.create", "CMS"),
+            ("cms.pages.edit", "CMS"),
+            ("cms.pages.delete", "CMS"),
+            ("cms.pages.publish", "CMS"),
+            ("cms.media.manage", "CMS"),
+            ("cms.menus.manage", "CMS"),
+            ("cms.charts.embed", "CMS"),
+            ("cms.layout.manage", "CMS"),
+            ("cms.themes.manage", "CMS"),
+            ("cms.templates.manage", "CMS"),
+            ("cms.styles.manage", "CMS"),
         ),
     ),
     CustomRoleSpec(
         name="End user",
         base_role="Gamma",
+        grant=(
+            # Read-only visibility into all data so published dashboards and the
+            # charts inside them appear without having to share each dashboard by
+            # role. Write is revoked below, so this is view-only; the Data/SQL Lab
+            # menus stay hidden via the revokes.
+            ("all_datasource_access", "all_datasource_access"),
+            # Allow DHIS2 map/boundary rendering (DHIS2 Maps, Small Multiples
+            # mini-map). The /database/<id>/dhis2_metadata/ route is
+            # @protect()-guarded and, because it isn't in
+            # MODEL_API_RW_METHOD_PERMISSION_MAP, derives its own permission
+            # (can_dhis2_metadata on Database). It's a read-only GeoJSON/metadata
+            # lookup; granting it does not expose any edit surface.
+            ("can_dhis2_metadata", "Database"),
+        ),
         revoke=(
+            # View-only: strip create/edit on charts and dashboards so the
+            # "+" create dropdown and edit/save controls are hidden and writes
+            # are blocked at the API layer. Viewing uses can_read/can_list,
+            # which Gamma retains.
+            ("can_write", "Chart"),
+            ("can_write", "Dashboard"),
+            # Hide the top-nav "Charts" list entirely. End users consume charts
+            # only inside dashboards; can_read on Chart is kept so the charts
+            # still render within a dashboard.
+            ("menu_access", "Charts"),
+            # Strip chart-level actions on dashboards: "Edit chart" (Explore),
+            # "View query", and "Share" — End users only consume dashboards and
+            # must never reach an edit surface. can_explore also blocks the
+            # Explore page server-side, not just the menu item.
+            ("can_explore", "Superset"),
+            ("can_view_query", "Dashboard"),
+            # Hide "View as table" on dashboard charts — its results modal has
+            # an "Edit chart" footer button, another path to the edit surface.
+            ("can_view_chart_as_table", "Dashboard"),
+            ("can_share_chart", "Superset"),
+            ("can_share_dashboard", "Superset"),
             ("can_list", "AIManagement"),
             ("can_read", "AIManagement"),
             ("can_write", "AIManagement"),

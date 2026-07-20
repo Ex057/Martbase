@@ -20,6 +20,10 @@
 import { useState, useCallback, useMemo } from 'react';
 import { styled, t } from '@superset-ui/core';
 import {
+  ChartTitleBlock,
+  chartTitleHeight,
+} from 'src/components/ChartTitleBlock';
+import {
   SummaryTransformedProps,
   SummaryItem,
   SummaryGroup,
@@ -641,7 +645,10 @@ export default function Summary(props: SummaryTransformedProps) {
     borderWidth,
     borderColor,
     borderStyle,
+    chartTitle,
   } = props;
+
+  const titleHeight = chartTitle ? chartTitleHeight(chartTitle) : 0;
 
   const isGrouped = groups && groups.length > 0;
   const totalGroups = groups?.length ?? 0;
@@ -876,7 +883,10 @@ export default function Summary(props: SummaryTransformedProps) {
   if (!isGrouped) {
     return (
       <Wrapper $fontFamily={fontFamily} style={{ width, height }}>
-        {renderCards(items)}
+        {chartTitle && <ChartTitleBlock {...chartTitle} />}
+        <div style={{ height: height - titleHeight, overflow: 'auto' }}>
+          {renderCards(items)}
+        </div>
       </Wrapper>
     );
   }
@@ -887,6 +897,7 @@ export default function Summary(props: SummaryTransformedProps) {
       $fontFamily={fontFamily}
       style={{ width, height, display: 'flex', flexDirection: 'column' }}
     >
+      {chartTitle && <ChartTitleBlock {...chartTitle} />}
       <div style={{ flex: '1 1 auto', overflow: 'auto' }}>
         {visibleGroups.map((group: SummaryGroup) => (
           <GroupSection key={group.groupKey}>

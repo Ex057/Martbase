@@ -26,6 +26,7 @@ import {
 } from '@superset-ui/chart-controls';
 import { DEFAULT_FORM_DATA } from './types';
 import { chartTitleSection } from '../controls';
+import { dhis2DataFiltersSection } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 const config: ControlPanelConfig = {
   controlPanelSections: [
@@ -58,6 +59,7 @@ const config: ControlPanelConfig = {
       ],
     },
     chartTitleSection,
+    dhis2DataFiltersSection,
     {
       label: t('Chart Options'),
       expanded: true,

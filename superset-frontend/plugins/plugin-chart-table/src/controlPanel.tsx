@@ -476,6 +476,116 @@ const config: ControlPanelConfig = {
       ],
     },
     {
+      label: t('Title & Subtitle'),
+      tabOverride: 'customize',
+      expanded: false,
+      controlSetRows: [
+        [
+          {
+            name: 'chart_title',
+            config: {
+              type: 'TextControl',
+              label: t('Title'),
+              renderTrigger: true,
+              default: '',
+              description: t('Title shown on the chart.'),
+            },
+          },
+        ],
+        [
+          {
+            name: 'chart_auto_subtitle',
+            config: {
+              type: 'CheckboxControl',
+              label: t('Auto subtitle'),
+              renderTrigger: true,
+              default: false,
+              description: t(
+                "Automatically build the subtitle from the chart's active filters.",
+              ),
+            },
+          },
+        ],
+        [
+          {
+            name: 'chart_auto_subtitle_metrics',
+            config: {
+              type: 'CheckboxControl',
+              label: t('Include metrics in subtitle'),
+              renderTrigger: true,
+              default: true,
+              description: t('Prepend metric names to the auto subtitle.'),
+              visibility: ({ controls }: ControlPanelsContainerProps) =>
+                Boolean(controls?.chart_auto_subtitle?.value),
+            },
+          },
+        ],
+        [
+          {
+            name: 'chart_subtitle',
+            config: {
+              type: 'TextControl',
+              label: t('Subtitle'),
+              renderTrigger: true,
+              default: '',
+              description: t('Optional subtitle shown beneath the title.'),
+              visibility: ({ controls }: ControlPanelsContainerProps) =>
+                !controls?.chart_auto_subtitle?.value,
+            },
+          },
+        ],
+        [
+          {
+            name: 'chart_title_color',
+            config: {
+              type: 'ColorPickerControl',
+              label: t('Title Color'),
+              default: { r: 0, g: 0, b: 0, a: 1 },
+              renderTrigger: true,
+              visibility: ({ controls }: ControlPanelsContainerProps) =>
+                Boolean(controls?.chart_title?.value),
+            },
+          },
+          {
+            name: 'chart_title_align',
+            config: {
+              type: 'SelectControl',
+              label: t('Alignment'),
+              default: 'left',
+              choices: [
+                ['left', t('Left')],
+                ['center', t('Center')],
+              ],
+              renderTrigger: true,
+            },
+          },
+        ],
+      ],
+    },
+    {
+      label: t('Data Filters'),
+      tabOverride: 'customize',
+      expanded: false,
+      controlSetRows: [
+        [
+          {
+            name: 'dhis2_column_filters',
+            config: {
+              type: 'DHIS2ColumnFilterControl',
+              label: t('Period / Org Unit Filters'),
+              description: t(
+                'Select columns for period and organization unit filtering',
+              ),
+              default: [],
+              mapStateToProps: (state: { datasource?: unknown }) => ({
+                datasource: state.datasource,
+              }),
+            },
+          },
+        ],
+      ],
+    },
+    {
       label: t('Options'),
       expanded: true,
       controlSetRows: [
@@ -803,6 +913,36 @@ const config: ControlPanelConfig = {
                   verboseMap,
                 };
               },
+            },
+          },
+        ],
+        [
+          {
+            name: 'color_breakpoints',
+            config: {
+              type: 'ColorBreakpointsControl',
+              label: t('Color breakpoints'),
+              description: t(
+                'Define color ranges based on numeric values. Each breakpoint specifies a min/max range and a color.',
+              ),
+              renderTrigger: true,
+              default: [],
+            },
+          },
+        ],
+        [
+          {
+            name: 'default_breakpoint_color',
+            config: {
+              type: 'ColorPickerControl',
+              label: t('Default breakpoint color'),
+              description: t(
+                "The color used when a value doesn't match any defined breakpoints.",
+              ),
+              renderTrigger: true,
+              visibility: ({ controls }: { controls: Record<string, { value?: unknown }> }) =>
+                Array.isArray(controls?.color_breakpoints?.value) &&
+                (controls?.color_breakpoints?.value as unknown[]).length > 0,
             },
           },
         ],

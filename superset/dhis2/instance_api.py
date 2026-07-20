@@ -34,7 +34,7 @@ from typing import Any
 from flask import request, Response
 from flask_appbuilder import expose
 from flask_appbuilder.api import BaseApi, safe
-from flask_appbuilder.security.decorators import permission_name, protect
+from flask_appbuilder.security.decorators import protect
 
 from superset.dhis2 import instance_service as svc
 
@@ -54,6 +54,25 @@ class DHIS2InstanceApi(BaseApi):
     allow_browser_login = True
     openapi_spec_tag = "DHIS2 Instances"
 
+    # Gate every endpoint on the DHIS2 admin menu permission so this data/CRUD
+    # API matches the page guard in admin_views.py (`can_list DHIS2AdminView`).
+    # Only roles that hold that permission (Data Management, Admin) may read or
+    # manage instances; Analytics, End user, and plain Gamma/Alpha get 403.
+    # Without this the API defaulted to `can_read/can_write DHIS2InstanceApi`,
+    # which base Gamma/Alpha roles hold — letting them bypass the page's 403 and
+    # pull/modify instance data directly via the API.
+    class_permission_name = "DHIS2AdminView"
+    method_permission_name = {
+        "list_instances": "list",
+        "get_instance": "list",
+        "create_instance": "list",
+        "update_instance": "list",
+        "delete_instance": "list",
+        "test_connection": "list",
+        "test_config": "list",
+        "migrate_legacy": "list",
+    }
+
     # ------------------------------------------------------------------
     # List
     # ------------------------------------------------------------------
@@ -61,7 +80,6 @@ class DHIS2InstanceApi(BaseApi):
     @expose("/", methods=["GET"])
     @protect()
     @safe
-    @permission_name("read")
     def list_instances(self) -> Response:
         """List DHIS2 instances for a database.
 
@@ -122,7 +140,6 @@ class DHIS2InstanceApi(BaseApi):
     @expose("/<int:pk>", methods=["GET"])
     @protect()
     @safe
-    @permission_name("read")
     def get_instance(self, pk: int) -> Response:
         """Retrieve a single DHIS2 instance by primary key.
 
@@ -153,7 +170,6 @@ class DHIS2InstanceApi(BaseApi):
     @expose("/", methods=["POST"])
     @protect()
     @safe
-    @permission_name("write")
     def create_instance(self) -> Response:
         """Create a new DHIS2 instance.
 
@@ -225,7 +241,6 @@ class DHIS2InstanceApi(BaseApi):
     @expose("/<int:pk>", methods=["PUT"])
     @protect()
     @safe
-    @permission_name("write")
     def update_instance(self, pk: int) -> Response:
         """Update an existing DHIS2 instance.
 
@@ -300,7 +315,6 @@ class DHIS2InstanceApi(BaseApi):
     @expose("/<int:pk>", methods=["DELETE"])
     @protect()
     @safe
-    @permission_name("write")
     def delete_instance(self, pk: int) -> Response:
         """Delete a DHIS2 instance.
 
@@ -339,7 +353,6 @@ class DHIS2InstanceApi(BaseApi):
     @expose("/<int:pk>/test", methods=["POST"])
     @protect()
     @safe
-    @permission_name("read")
     def test_connection(self, pk: int) -> Response:
         """Test connectivity for a persisted DHIS2 instance.
 
@@ -393,7 +406,6 @@ class DHIS2InstanceApi(BaseApi):
     @expose("/test-config", methods=["POST"])
     @protect()
     @safe
-    @permission_name("read")
     def test_config(self) -> Response:
         """Test a DHIS2 connection from raw configuration without saving.
 
@@ -452,7 +464,6 @@ class DHIS2InstanceApi(BaseApi):
     @expose("/migrate-legacy", methods=["POST"])
     @protect()
     @safe
-    @permission_name("write")
     def migrate_legacy(self) -> Response:
         """Migrate legacy single-instance DHIS2 config to a named instance.
 

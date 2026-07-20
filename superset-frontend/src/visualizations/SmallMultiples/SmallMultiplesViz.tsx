@@ -20,6 +20,10 @@
 import { useRef, useEffect, useMemo, useCallback } from 'react';
 import * as echarts from 'echarts';
 import { styled, getNumberFormatter } from '@superset-ui/core';
+import {
+  ChartTitleBlock,
+  chartTitleHeight,
+} from 'src/components/ChartTitleBlock';
 import { SmallMultiplesChartProps, PanelData, MiniChartType } from './types';
 import { buildOption, MiniPanelConfig } from './chartOptions';
 import SharedLegend from './SharedLegend';
@@ -312,7 +316,14 @@ export default function SmallMultiplesViz(props: SmallMultiplesChartProps) {
     panelIconUrl,
     panelIconText,
     panelIconSize,
+    chartTitle,
+    legendClasses,
+    legendReverseColors,
+    legendNoDataColor,
   } = props;
+
+  const titleHeight = chartTitle ? chartTitleHeight(chartTitle) : 0;
+  const contentHeight = height - titleHeight;
 
   const yFormatter = useMemo(
     () => getNumberFormatter(yAxisFormat),
@@ -535,6 +546,9 @@ export default function SmallMultiplesViz(props: SmallMultiplesChartProps) {
           linearColors={linearColors}
           formatter={yFormatter}
           nullText={nullValueText}
+          legendClasses={legendClasses}
+          legendReverseColors={legendReverseColors}
+          legendNoDataColor={legendNoDataColor}
         />
       );
     }
@@ -550,7 +564,8 @@ export default function SmallMultiplesViz(props: SmallMultiplesChartProps) {
 
   return (
     <Wrapper style={{ width, height }}>
-      <ScrollArea>
+      {chartTitle && <ChartTitleBlock {...chartTitle} />}
+      <ScrollArea style={{ height: contentHeight }}>
         <GridContainer $columns={effectiveColumns} $gap={panelPadding}>
           {activePanels.map(panel => (
             <PanelCard

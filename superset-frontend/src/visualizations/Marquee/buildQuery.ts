@@ -18,13 +18,22 @@
  */
 
 import { buildQueryContext, QueryFormData } from '@superset-ui/core';
+import { dhis2ColumnFilterClauses } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 export default function buildQuery(formData: QueryFormData) {
-  return buildQueryContext(formData, baseQueryObject => [
-    {
-      ...baseQueryObject,
-      columns: formData.groupby || [],
-      row_limit: 1,
-    },
-  ]);
+  return buildQueryContext(formData, baseQueryObject => {
+    const existingFilters = Array.isArray(baseQueryObject.filters)
+      ? baseQueryObject.filters
+      : [];
+    const dhis2Filters = dhis2ColumnFilterClauses(formData);
+
+    return [
+      {
+        ...baseQueryObject,
+        columns: formData.groupby || [],
+        row_limit: 1,
+        filters: [...existingFilters, ...dhis2Filters],
+      },
+    ];
+  });
 }

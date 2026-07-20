@@ -17,6 +17,7 @@
  * under the License.
  */
 import { getMetricLabel, getNumberFormatter } from '@superset-ui/core';
+import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
 import { CohortCascadeFormData, CohortCascadeChartProps, CascadeStage } from './types';
 
 /* eslint-disable theme-colors/no-literal-colors */
@@ -82,5 +83,6 @@ export default function transformProps(chartProps: any): CohortCascadeChartProps
     densityTier: fd.density_tier || 'standard',
     referenceStage,
     nullValueText: fd.null_value_text || '–',
+    chartTitle: resolveChartTitle(chartProps.rawFormData),
   };
 }

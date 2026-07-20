@@ -103,6 +103,26 @@ const ACTION_KEYS = {
   space: ' ',
 };
 
+const TitleBlock = styled.div<{
+  $align?: 'left' | 'center';
+  $titleColor?: string;
+}>`
+  padding: 8px 16px 4px;
+  text-align: ${({ $align }) => $align || 'left'};
+  .chart-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: ${({ $titleColor, theme }) => $titleColor || theme.colorText};
+    margin-bottom: 2px;
+  }
+  .chart-subtitle {
+    font-size: 12px;
+    color: ${({ theme }) => theme.colorTextSecondary};
+  }
+`;
+
+const TITLE_HEIGHT = 48;
+
 /**
  * Return sortType based on data type
  */
@@ -310,6 +330,7 @@ export default function TableChart<D extends DataRecord = DataRecord>(
     hasServerPageLengthChanged,
     serverPageLength,
     slice_id,
+    chartTitle,
   } = props;
 
   const comparisonColumns = useMemo(
@@ -1238,6 +1259,10 @@ export default function TableChart<D extends DataRecord = DataRecord>(
 
   const { width: widthFromState, height: heightFromState } = tableSize;
 
+  const hasTitleContent = chartTitle?.title || chartTitle?.subtitle;
+  const titleHeight = hasTitleContent ? TITLE_HEIGHT : 0;
+  const adjustedHeight = heightFromState - titleHeight;
+
   const handleSortByChange = useCallback(
     (sortBy: SortByItem[]) => {
       if (!serverPagination) return;
@@ -1276,6 +1301,16 @@ export default function TableChart<D extends DataRecord = DataRecord>(
 
   return (
     <Styles>
+      {hasTitleContent && (
+        <TitleBlock $align={chartTitle?.align} $titleColor={chartTitle?.titleColor}>
+          {chartTitle?.title && (
+            <div className="chart-title">{chartTitle.title}</div>
+          )}
+          {chartTitle?.subtitle && (
+            <div className="chart-subtitle">{chartTitle.subtitle}</div>
+          )}
+        </TitleBlock>
+      )}
       <DataTable<D>
         columns={columns}
         data={data}
@@ -1285,7 +1320,7 @@ export default function TableChart<D extends DataRecord = DataRecord>(
         serverPaginationData={serverPaginationData}
         pageSizeOptions={pageSizeOptions}
         width={widthFromState}
-        height={heightFromState}
+        height={adjustedHeight}
         serverPagination={serverPagination}
         onServerPaginationChange={handleServerPaginationChange}
         onColumnOrderChange={() => setColumnOrderToggle(!columnOrderToggle)}

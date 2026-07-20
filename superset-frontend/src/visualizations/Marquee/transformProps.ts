@@ -23,6 +23,7 @@ import {
   getNumberFormatter,
   t,
 } from '@superset-ui/core';
+import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
 import { MarqueeChartProps, MarqueeFormData, MarqueeKpiItem } from './types';
 
 function resolveMetricLabel(metric: any, index: number): string {
@@ -164,5 +165,6 @@ export default function transformProps(chartProps: ChartProps): MarqueeChartProp
     showSubtitle: fd.show_subtitle ?? true,
     showDelta: fd.show_delta ?? true,
     showSeparators: fd.show_separators ?? false,
+    chartTitle: resolveChartTitle(chartProps.rawFormData, chartProps.datasource?.columns),
   };
 }

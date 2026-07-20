@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { render } from 'spec/helpers/testing-library';
+import { render, waitFor, act } from 'spec/helpers/testing-library';
 
 import MissingChart from 'src/dashboard/components/MissingChart';
 
@@ -30,6 +30,14 @@ const setup = (overrides?: MissingChartProps) => (
 
 // eslint-disable-next-line no-restricted-globals -- TODO: Migrate from describe blocks
 describe('MissingChart', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   test('renders a .missing-chart-container', () => {
     const rendered = render(setup());
 
@@ -39,16 +47,49 @@ describe('MissingChart', () => {
     expect(missingChartContainer).toBeVisible();
   });
 
-  test('renders a .missing-chart-body', () => {
+  test('shows loading message initially', () => {
     const rendered = render(setup());
 
     const missingChartBody = rendered.container.querySelector(
       '.missing-chart-body',
     );
-    const bodyText =
-      'There is no chart definition associated with this component, could it have been deleted?<br><br>Delete this container and save to remove this message.';
-
     expect(missingChartBody).toBeVisible();
-    expect(missingChartBody?.innerHTML).toMatch(bodyText);
+    expect(missingChartBody?.textContent).toContain('Loading chart data');
+  });
+
+  test('shows delete message after timeout', async () => {
+    const rendered = render(setup());
+
+    // Fast-forward 4+ seconds
+    act(() => {
+      jest.advanceTimersByTime(4500);
+    });
+
+    await waitFor(() => {
+      const missingChartBody = rendered.container.querySelector(
+        '.missing-chart-body',
+      );
+      expect(missingChartBody?.textContent).toContain('Missing Chart');
+      expect(missingChartBody?.textContent).toContain(
+        'could not be loaded',
+      );
+    });
+  });
+
+  test('shows delete instructions after timeout', async () => {
+    const rendered = render(setup());
+
+    act(() => {
+      jest.advanceTimersByTime(4500);
+    });
+
+    await waitFor(() => {
+      const missingChartBody = rendered.container.querySelector(
+        '.missing-chart-body',
+      );
+      expect(missingChartBody?.textContent).toContain(
+        'button to remove',
+      );
+    });
   });
 });

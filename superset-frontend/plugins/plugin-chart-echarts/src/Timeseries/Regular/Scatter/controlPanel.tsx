@@ -44,6 +44,7 @@ import {
   forceMaxInterval,
   chartTitleSection,
 } from '../../../controls';
+import { dhis2DataFiltersSection } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 const {
   logAxis,
@@ -59,6 +60,7 @@ const config: ControlPanelConfig = {
     sections.echartsTimeSeriesQueryWithXAxisSort,
     sections.advancedAnalyticsControls,
     chartTitleSection,
+    dhis2DataFiltersSection,
     sections.annotationsAndLayersControls,
     sections.forecastIntervalControls,
     sections.titleControls,

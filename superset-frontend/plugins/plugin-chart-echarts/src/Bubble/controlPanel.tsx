@@ -34,6 +34,7 @@ import {
   xAxisLabelRotation,
   xAxisLabelInterval,
 } from '../controls';
+import { dhis2DataFiltersSection } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 import { defaultYAxis } from '../defaults';
 
 const { logAxis, truncateYAxis, yAxisBounds, opacity } = DEFAULT_FORM_DATA;
@@ -64,6 +65,7 @@ const config: ControlPanelConfig = {
       ],
     },
     chartTitleSection,
+    dhis2DataFiltersSection,
     {
       label: t('Chart Options'),
       expanded: true,

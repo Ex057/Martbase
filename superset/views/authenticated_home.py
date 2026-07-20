@@ -79,9 +79,20 @@ def accessible_dashboard_path(path: Any) -> str | None:
     if dashboard is None:
         return None
 
-    if security_manager.can_access_dashboard(dashboard):
-        return normalized_path
-    return None
+    if not security_manager.can_access_dashboard(dashboard):
+        return None
+
+    # `can_access_dashboard` intentionally skips the published check for role-less
+    # dashboards (to allow sharing WIP dashboards), but the dashboard REST API that
+    # the browser uses to load the target enforces `published=True` for non-owners.
+    # Redirecting to an unpublished dashboard would therefore 404 in the client and
+    # crash the home page, so only redirect to targets the client can actually load.
+    if not dashboard.published and not (
+        security_manager.is_admin() or security_manager.is_owner(dashboard)
+    ):
+        return None
+
+    return normalized_path
 
 
 def get_authenticated_home_target() -> str | None:

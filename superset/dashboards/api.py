@@ -102,7 +102,7 @@ from superset.dashboards.schemas import (
     thumbnail_query_schema,
 )
 from superset.exceptions import ScreenshotImageNotAvailableException
-from superset.extensions import event_logger
+from superset.extensions import cache_manager, event_logger
 from superset.models.dashboard import Dashboard
 from superset.models.embedded_dashboard import EmbeddedDashboard
 from superset.security.guest_token import GuestUser
@@ -1092,6 +1092,80 @@ class DashboardRestApi(BaseSupersetModelRestApi):
         parent_value: Any = None,
         parent_level: Any = None,
     ) -> dict[str, Any]:
+        """Cache wrapper around the (expensive) option builder.
+
+        The cache key includes a per-dataset version token derived from the
+        staged dataset's ``last_sync_at`` and the source database's
+        ``changed_on`` — both change when DHIS2 data / repository org units are
+        re-synced, so a sync automatically busts cached dropdown options.
+        """
+        from superset.connectors.sqla.models import SqlaTable  # pylint: disable=import-outside-toplevel
+        from superset.models.core import Database  # pylint: disable=import-outside-toplevel
+        from superset.dhis2.models import DHIS2StagedDataset  # pylint: disable=import-outside-toplevel
+
+        version = "0"
+        try:
+            dataset = db.session.get(SqlaTable, dataset_id)
+            extra = getattr(dataset, "extra_dict", {}) or {} if dataset else {}
+            staged_dataset_id = extra.get("dhis2_staged_dataset_id")
+            source_database_id = extra.get("dhis2_source_database_id")
+            sync_token = None
+            if isinstance(staged_dataset_id, int):
+                staged = db.session.get(DHIS2StagedDataset, staged_dataset_id)
+                sync_token = getattr(staged, "last_sync_at", None) if staged else None
+            db_token = None
+            if isinstance(source_database_id, int):
+                source_db = db.session.get(Database, source_database_id)
+                db_token = getattr(source_db, "changed_on", None) if source_db else None
+            version = f"{sync_token}:{db_token}"
+        except Exception:  # pylint: disable=broad-except
+            # On any resolution failure, fall back to computing without caching.
+            return DashboardRestApi._build_dashboard_dhis2_filter_options_uncached(
+                dashboard=dashboard,
+                dataset_id=dataset_id,
+                column_name=column_name,
+                level=level,
+                parent_value=parent_value,
+                parent_level=parent_level,
+            )
+
+        if isinstance(parent_value, (list, tuple, set)):
+            parent_token = ",".join(sorted(str(v) for v in parent_value))
+        else:
+            parent_token = str(parent_value)
+        cache_key = (
+            f"dhis2_filter_opts:{getattr(dashboard, 'id', None)}:{dataset_id}:"
+            f"{column_name}:{level}:{parent_level}:{parent_token}:{version}"
+        )
+
+        cached = cache_manager.cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        result = DashboardRestApi._build_dashboard_dhis2_filter_options_uncached(
+            dashboard=dashboard,
+            dataset_id=dataset_id,
+            column_name=column_name,
+            level=level,
+            parent_value=parent_value,
+            parent_level=parent_level,
+        )
+        try:
+            cache_manager.cache.set(cache_key, result, timeout=300)
+        except Exception:  # pylint: disable=broad-except
+            logger.warning("Failed to cache DHIS2 filter options", exc_info=True)
+        return result
+
+    @staticmethod
+    def _build_dashboard_dhis2_filter_options_uncached(
+        *,
+        dashboard: Any,
+        dataset_id: int,
+        column_name: str,
+        level: Any,
+        parent_value: Any = None,
+        parent_level: Any = None,
+    ) -> dict[str, Any]:
         from superset.connectors.sqla.models import SqlaTable  # pylint: disable=import-outside-toplevel
         from superset.models.core import Database  # pylint: disable=import-outside-toplevel
         from superset.dhis2 import staged_dataset_service as staged_dataset_svc  # pylint: disable=import-outside-toplevel
@@ -1175,6 +1249,7 @@ class DashboardRestApi(BaseSupersetModelRestApi):
                 local_filter_options = staged_dataset_svc.get_local_filter_options(
                     staged_dataset_id,
                     filters=staged_filters,
+                    only_columns=[column_name],
                 )
                 dataset_options = next(
                     (

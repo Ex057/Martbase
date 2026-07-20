@@ -21,6 +21,7 @@ import {
   getMetricLabel,
   getNumberFormatter,
 } from '@superset-ui/core';
+import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
 import {
   SummaryChartFormData,
   SummaryGroup,
@@ -347,5 +348,8 @@ export default function transformProps(
     borderWidth: fd.borderWidth ?? 1,
     borderColor: rgbToCss(fd.borderColor),
     borderStyle: fd.borderStyle || 'solid',
+
+    /* Title & Subtitle */
+    chartTitle: resolveChartTitle(chartProps.rawFormData),
   };
 }

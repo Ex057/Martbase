@@ -37,6 +37,7 @@ import {
 import { DEFAULT_FORM_DATA } from './types';
 import { LABEL_POSITION } from '../constants';
 import { chartTitleSection, legendSection } from '../controls';
+import { dhis2DataFiltersSection } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 const { labelType, labelPosition, numberFormat, showLabels, isCircle } =
   DEFAULT_FORM_DATA;
@@ -94,6 +95,7 @@ const config: ControlPanelConfig = {
       ],
     },
     chartTitleSection,
+    dhis2DataFiltersSection,
     {
       label: t('Chart Options'),
       expanded: true,

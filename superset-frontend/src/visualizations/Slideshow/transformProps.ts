@@ -22,6 +22,7 @@ import {
   getNumberFormatter,
   t,
 } from '@superset-ui/core';
+import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
 import { SlideshowChartProps, SlideshowFormData, SlideshowSlide } from './types';
 
 function cssRgba(
@@ -151,5 +152,7 @@ export default function transformProps(
     progressBarColor: cssRgba(fd.progressBarColor),
 
     embeddedChartIds,
+
+    chartTitle: resolveChartTitle(chartProps.rawFormData),
   };
 }

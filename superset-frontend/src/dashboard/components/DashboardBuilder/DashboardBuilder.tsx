@@ -363,14 +363,16 @@ const StyledDashboardContent = styled.div<{
       width: 0;
       flex: 1;
       position: relative;
-      margin: ${theme.sizeUnit * 4}px;
+      /* Tight edge-to-edge chrome: minimal margin in view mode, a little more
+         in edit mode so drop zones stay grabbable. */
+      margin: ${editMode ? theme.sizeUnit * 2 : theme.sizeUnit}px;
       margin-left: ${marginLeft}px;
       transition: margin ${theme.motionDurationMid} ease;
 
       ${editMode &&
       `
       max-width: calc(100% - ${
-        BUILDER_SIDEPANEL_WIDTH + theme.sizeUnit * 16
+        BUILDER_SIDEPANEL_WIDTH + theme.sizeUnit * 8
       }px);
     `}
 
@@ -404,8 +406,8 @@ const StyledDashboardContent = styled.div<{
     /* ── Responsive grid ── */
     @media (max-width: 1024px) {
       .grid-container {
-        margin: ${theme.sizeUnit * 2}px;
-        margin-left: ${theme.sizeUnit * 2}px;
+        margin: ${theme.sizeUnit}px;
+        margin-left: ${theme.sizeUnit}px;
       }
     }
 
@@ -438,7 +440,7 @@ const StyledDashboardContent = styled.div<{
       border-radius: ${theme.borderRadiusLG}px;
       border: 1px solid ${addAlpha(theme.colorBorderSecondary, 0.22)};
       position: relative;
-      padding: ${theme.sizeUnit * 4}px;
+      padding: ${theme.sizeUnit * 2}px;
       overflow: hidden;
       box-shadow: none;
 
@@ -715,10 +717,10 @@ const DashboardBuilder: React.FC<DashboardBuilderProps> = ({
   );
 
   const dashboardContentMarginLeft = isPublicView
-    ? theme.sizeUnit * 4
+    ? theme.sizeUnit
     : !editMode
-      ? theme.sizeUnit * 4
-      : theme.sizeUnit * 8;
+      ? theme.sizeUnit
+      : theme.sizeUnit * 4;
 
   const renderChild = useCallback(
     adjustedWidth => {

@@ -94,7 +94,15 @@ export type PivotTableQueryFormData = QueryFormData &
   PivotTableStylesProps &
   PivotTableCustomizeProps;
 
+export interface PivotChartTitle {
+  title?: string;
+  subtitle?: string;
+  titleColor?: string;
+  align?: 'left' | 'center';
+}
+
 export type PivotTableProps = PivotTableStylesProps &
   PivotTableCustomizeProps & {
     data: DataRecord[];
+    chartTitle?: PivotChartTitle;
   };

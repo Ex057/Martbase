@@ -60,6 +60,7 @@ import os
 import re
 import time
 from io import StringIO
+from collections.abc import Iterable
 from typing import Any, Iterator
 
 from superset.local_staging.admin_tools import (
@@ -76,6 +77,8 @@ logger = logging.getLogger(__name__)
 
 _IDENT_MAX = 63
 _SERVING_PREFIX = "sv"
+# Cap the number of distinct values returned per cascade-filter dropdown.
+_MAX_FILTER_OPTIONS = 1000
 _DEFAULT_CLICKHOUSE_HOST = os.environ.get("CLICKHOUSE_HOST", "127.0.0.1")
 _DEFAULT_CLICKHOUSE_HTTP_PORT = int(os.environ.get("CLICKHOUSE_HTTP_PORT", "8124"))
 _DEFAULT_CLICKHOUSE_NATIVE_PORT = int(
@@ -1414,6 +1417,7 @@ class ClickHouseStagingEngine(LocalStagingEngineBase):
         *,
         columns: list[dict[str, Any]] | None = None,
         filters: list[dict[str, Any]] | None = None,
+        only_columns: Iterable[str] | None = None,
     ) -> dict[str, Any]:
         """Return distinct org-unit hierarchy and period values from the serving table."""
         serving_ref = self.get_serving_sql_table_ref(staged_dataset)
@@ -1421,12 +1425,23 @@ class ClickHouseStagingEngine(LocalStagingEngineBase):
         if not available_col_names:
             return {"org_unit_filters": [], "period_filter": None}
 
+        # When a specific column is requested (a single cascade dropdown), skip
+        # computing options for every hierarchy level — the caller discards the
+        # rest, so it is pure wasted work.
+        only_column_set = (
+            {str(name).strip() for name in only_columns if str(name).strip()}
+            if only_columns is not None
+            else None
+        )
+
         hierarchy_columns: list[dict[str, Any]] = []
         period_filter: dict[str, Any] | None = None
 
         for col_spec in list(columns or []):
             col_name = str(col_spec.get("column_name") or "").strip()
             if not col_name or col_name not in available_col_names:
+                continue
+            if only_column_set is not None and col_name not in only_column_set:
                 continue
             raw_extra = col_spec.get("extra") or {}
             if isinstance(raw_extra, str):
@@ -1474,7 +1489,8 @@ class ClickHouseStagingEngine(LocalStagingEngineBase):
             sql = (
                 f"SELECT `{col_name}` AS option_value, count() AS row_count "
                 f"FROM {serving_ref}{where_sql} "
-                f"GROUP BY `{col_name}` ORDER BY `{col_name}`"
+                f"GROUP BY `{col_name}` ORDER BY `{col_name}` "
+                f"LIMIT {_MAX_FILTER_OPTIONS}"
             )
             try:
                 result = self._qry(sql)

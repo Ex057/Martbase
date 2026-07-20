@@ -21,6 +21,7 @@ import {
   ensureIsArray,
   QueryFormData,
 } from '@superset-ui/core';
+import { dhis2ColumnFilterClauses } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 export default function buildQuery(formData: QueryFormData) {
   const { x_axis, granularity_sqla, groupby } = formData;
@@ -28,11 +29,19 @@ export default function buildQuery(formData: QueryFormData) {
     ...ensureIsArray(x_axis || granularity_sqla),
     ...ensureIsArray(groupby),
   ];
-  return buildQueryContext(formData, baseQueryObject => [
-    {
-      ...baseQueryObject,
-      columns,
-      orderby: columns?.map(column => [column, true]),
-    },
-  ]);
+  return buildQueryContext(formData, baseQueryObject => {
+    const existingFilters = Array.isArray(baseQueryObject.filters)
+      ? baseQueryObject.filters
+      : [];
+    const dhis2Filters = dhis2ColumnFilterClauses(formData);
+
+    return [
+      {
+        ...baseQueryObject,
+        columns,
+        orderby: columns?.map(column => [column, true]),
+        filters: [...existingFilters, ...dhis2Filters],
+      },
+    ];
+  });
 }

@@ -28,14 +28,18 @@ import {
 import {
   AppstoreOutlined,
   ArrowLeftOutlined,
+  BgColorsOutlined,
+  BlockOutlined,
   CopyOutlined,
   DeleteOutlined,
   EyeOutlined,
   FileImageOutlined,
   FileTextOutlined,
   FilterOutlined,
+  FormatPainterOutlined,
   GlobalOutlined,
   LayoutOutlined,
+  MenuOutlined,
   PlusOutlined,
   RocketOutlined,
   SaveOutlined,
@@ -47,6 +51,7 @@ import {
   Alert,
   Badge,
   Button,
+  Collapse,
   Empty,
   Input,
   InputNumber,
@@ -139,7 +144,8 @@ const SHELL_STYLE: CSSProperties = {
 
 const AdminShell = styled.div`
   min-height: 100vh;
-  color: #172b4d;
+  color: #1e293b;
+  background: #f8fafc;
 `;
 
 const TopBar = styled.header`
@@ -150,184 +156,253 @@ const TopBar = styled.header`
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 24px;
-  background: #1e293b;
-  color: #f8fafc;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0 24px;
+  height: 64px;
+  background: linear-gradient(135deg, #0f766e 0%, #115e59 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.15);
 `;
 
 const TopBarBrand = styled.div`
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   min-width: 0;
+
+  .brand-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .brand-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .brand-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -0.01em;
+  }
 `;
 
 const TopBarBrandIcon = styled.div`
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #0f766e;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(8px);
   color: #ffffff;
-  font-size: 18px;
+  font-size: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 `;
 
 const TopBarActions = styled.div`
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
   justify-content: flex-end;
+
+  .ant-btn {
+    border-radius: 8px;
+    font-weight: 600;
+    height: 36px;
+    padding: 0 16px;
+  }
+
+  .ant-btn-default {
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: rgba(255, 255, 255, 0.4);
+      color: #ffffff;
+    }
+  }
+
+  .ant-btn-primary {
+    background: #ffffff;
+    border-color: #ffffff;
+    color: #0f766e;
+
+    &:hover {
+      background: #f0fdfa;
+      border-color: #f0fdfa;
+      color: #0d9488;
+    }
+  }
 `;
 
 const ShellBody = styled.div`
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  min-height: calc(100vh - 65px);
-
-  @media (max-width: 1080px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const LeftRail = styled.aside`
-  position: sticky;
-  top: 65px;
-  align-self: start;
-  height: calc(100vh - 65px);
-  overflow-y: auto;
-  padding: 20px 16px 28px;
-  background: #ffffff;
-  border-right: 1px solid rgba(148, 163, 184, 0.24);
-
-  @media (max-width: 1080px) {
-    position: static;
-    height: auto;
-    border-right: 0;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.24);
-  }
-`;
-
-const RailSection = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 22px;
+  min-height: calc(100vh - 64px);
 `;
 
-const RailLabel = styled.div`
-  padding: 0 10px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #64748b;
-`;
-
-const RailButton = styled.button<{ $active?: boolean }>`
-  width: 100%;
+const TabBar = styled.nav`
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 12px 14px;
-  border: 0;
-  border-radius: 12px;
-  background: ${({ $active }) => ($active ? '#e2e8f0' : 'transparent')};
-  color: ${({ $active }) => ($active ? '#0f172a' : '#334155')};
-  font-weight: ${({ $active }) => ($active ? 700 : 600)};
-  cursor: pointer;
-  text-align: left;
+  gap: 4px;
+  padding: 0 24px;
+  height: 48px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  overflow-x: auto;
+  flex-shrink: 0;
 
-  &:hover {
-    background: ${({ $active }) => ($active ? '#e2e8f0' : '#f8fafc')};
+  &::-webkit-scrollbar {
+    height: 0;
+  }
+
+  @media (max-width: 640px) {
+    padding: 0 12px;
+    gap: 2px;
   }
 `;
 
-const RailButtonContent = styled.span`
+const TabButton = styled.button<{ $active?: boolean }>`
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  min-width: 0;
+  gap: 8px;
+  padding: 0 16px;
+  height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: ${({ $active }) => ($active ? '#0f766e' : 'transparent')};
+  color: ${({ $active }) => ($active ? '#ffffff' : '#475569')};
+  font-weight: ${({ $active }) => ($active ? 600 : 500)};
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+
+  &:hover {
+    background: ${({ $active }) => ($active ? '#0f766e' : '#f1f5f9')};
+    color: ${({ $active }) => ($active ? '#ffffff' : '#0f766e')};
+  }
+
+  .anticon {
+    font-size: 16px;
+  }
+
+  @media (max-width: 640px) {
+    padding: 0 12px;
+    font-size: 13px;
+
+    span:not(.anticon) {
+      display: none;
+    }
+  }
+`;
+
+const TabDivider = styled.div`
+  width: 1px;
+  height: 24px;
+  background: #e2e8f0;
+  margin: 0 8px;
+  flex-shrink: 0;
 `;
 
 const ShellMain = styled.main`
-  padding: 24px;
+  padding: 28px 32px;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  min-height: 100%;
 
   @media (max-width: 720px) {
-    padding: 16px;
+    padding: 20px 16px;
   }
 `;
 
 const ContentStack = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 `;
 
 const Header = styled.div`
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 20px;
+  margin-bottom: 28px;
   flex-wrap: wrap;
 `;
 
 const TitleGroup = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 `;
 
 const Eyebrow = styled.div`
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: ${({ theme }) => theme.colorTextLabel};
+  color: #0f766e;
 `;
 
 const Title = styled.h1`
   margin: 0;
-  font-size: 30px;
+  font-size: 32px;
+  font-weight: 800;
   line-height: 1.1;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
+  color: #0f172a;
 `;
 
 const Subtitle = styled.p`
   margin: 0;
   max-width: 72ch;
-  color: ${({ theme }) => theme.colorTextSecondary};
+  color: #64748b;
+  font-size: 15px;
+  line-height: 1.5;
 `;
 
 const StatsGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
 `;
 
 const StatCard = styled.div`
-  padding: 18px;
-  border-radius: 18px;
+  padding: 24px;
+  border-radius: 16px;
   background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.05);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+  transition: all 0.2s ease;
+
+  &:hover {
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    transform: translateY(-2px);
+  }
 `;
 
 const StatValue = styled.div`
-  font-size: 30px;
+  font-size: 36px;
   font-weight: 800;
   letter-spacing: -0.04em;
+  color: #0f766e;
 `;
 
 const StatLabel = styled.div`
-  margin-top: 6px;
-  color: ${({ theme }) => theme.colorTextSecondary};
-  font-size: 13px;
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
 `;
 
 const Stack = styled.div`
@@ -337,11 +412,11 @@ const Stack = styled.div`
 `;
 
 const Panel = styled.div`
-  padding: 18px;
-  border-radius: 20px;
+  padding: 20px;
+  border-radius: 16px;
   background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.05);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 `;
 
 const PanelHeader = styled.div`
@@ -349,7 +424,7 @@ const PanelHeader = styled.div`
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   flex-wrap: wrap;
 `;
 
@@ -837,60 +912,72 @@ function appendChildAtPath(
 
 function renderDynamicPagesGuide() {
   return (
-    <Panel>
-      <PanelHeader>
-        <PanelTitle>{t('Dynamic Pages Guide')}</PanelTitle>
-      </PanelHeader>
-      <Stack>
-        <TinyMeta>
-          {t(
-            'Use this quick guide to create, style, preview, and publish your own portal pages without code changes.',
-          )}
-        </TinyMeta>
-        <SectionList>
-          <div>
-            <strong>{t('1. Start with Pages')}</strong>
-            <TinyMeta>
-              {t(
-                'Create a new page, define its title, slug, visibility, and publish state from the Pages workspace.',
-              )}
-            </TinyMeta>
-          </div>
-          <div>
-            <strong>{t('2. Build in Page Studio')}</strong>
-            <TinyMeta>
-              {t(
-                'Open Page Studio to arrange blocks, choose layouts, attach dashboards or charts, and tune content section by section.',
-              )}
-            </TinyMeta>
-          </div>
-          <div>
-            <strong>{t('3. Use Portal Settings for shared defaults')}</strong>
-            <TinyMeta>
-              {t(
-                'Set the beginner home dashboard, typography, colors, spacing, and other global defaults once so new pages inherit them.',
-              )}
-            </TinyMeta>
-          </div>
-          <div>
-            <strong>{t('4. Link pages from Menus')}</strong>
-            <TinyMeta>
-              {t(
-                'Add pages to the header or footer navigation so users can discover them quickly from the live portal.',
-              )}
-            </TinyMeta>
-          </div>
-          <div>
-            <strong>{t('5. Preview and publish carefully')}</strong>
-            <TinyMeta>
-              {t(
-                'Save drafts while iterating, preview public pages, and publish only after checking layout, links, and dashboard visibility.',
-              )}
-            </TinyMeta>
-          </div>
-        </SectionList>
-      </Stack>
-    </Panel>
+    <Collapse
+      ghost
+      size="small"
+      items={[
+        {
+          key: 'guide',
+          label: (
+            <span style={{ fontWeight: 600, fontSize: 14 }}>
+              {t('Dynamic Pages Guide')}
+            </span>
+          ),
+          children: (
+            <Stack>
+              <TinyMeta>
+                {t(
+                  'Use this quick guide to create, style, preview, and publish your own portal pages without code changes.',
+                )}
+              </TinyMeta>
+              <SectionList>
+                <div>
+                  <strong>{t('1. Start with Pages')}</strong>
+                  <TinyMeta>
+                    {t(
+                      'Create a new page, define its title, slug, visibility, and publish state from the Pages workspace.',
+                    )}
+                  </TinyMeta>
+                </div>
+                <div>
+                  <strong>{t('2. Build in Page Studio')}</strong>
+                  <TinyMeta>
+                    {t(
+                      'Open Page Studio to arrange blocks, choose layouts, attach dashboards or charts, and tune content section by section.',
+                    )}
+                  </TinyMeta>
+                </div>
+                <div>
+                  <strong>{t('3. Use Portal Settings for shared defaults')}</strong>
+                  <TinyMeta>
+                    {t(
+                      'Set the beginner home dashboard, typography, colors, spacing, and other global defaults once so new pages inherit them.',
+                    )}
+                  </TinyMeta>
+                </div>
+                <div>
+                  <strong>{t('4. Link pages from Menus')}</strong>
+                  <TinyMeta>
+                    {t(
+                      'Add pages to the header or footer navigation so users can discover them quickly from the live portal.',
+                    )}
+                  </TinyMeta>
+                </div>
+                <div>
+                  <strong>{t('5. Preview and publish carefully')}</strong>
+                  <TinyMeta>
+                    {t(
+                      'Save drafts while iterating, preview public pages, and publish only after checking layout, links, and dashboard visibility.',
+                    )}
+                  </TinyMeta>
+                </div>
+              </SectionList>
+            </Stack>
+          ),
+        },
+      ]}
+      style={{ background: '#fafafa', borderRadius: 8, marginBottom: 16 }}
+    />
   );
 }
 
@@ -954,6 +1041,7 @@ export default function CMSAdminPage() {
   const [uploadingAsset, setUploadingAsset] = useState(false);
   const isMountedRef = useRef(true);
   const bootstrapAbortControllerRef = useRef<AbortController | null>(null);
+  const isCreatingNewPageRef = useRef(false);
   const [assetDraft, setAssetDraft] = useState<{
     file: File | null;
     title: string;
@@ -1084,6 +1172,12 @@ export default function CMSAdminPage() {
   );
 
   useEffect(() => {
+    // Skip bootstrap reload if we're creating a new page
+    // This prevents the newly created draft from being overwritten
+    if (isCreatingNewPageRef.current) {
+      isCreatingNewPageRef.current = false;
+      return;
+    }
     loadBootstrap();
   }, [requestedPageSlug, canViewCms]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1224,6 +1318,8 @@ export default function CMSAdminPage() {
   }
 
   function loadNewPage() {
+    // Mark that we're creating a new page so bootstrap doesn't overwrite it
+    isCreatingNewPageRef.current = true;
     setDraftPage(
       createDraftPage({
         id: undefined,
@@ -1599,7 +1695,8 @@ export default function CMSAdminPage() {
             Number(portalLayout.authenticatedHomeDashboardId) || null,
           authenticatedHomeDashboardPath:
             selectedHomeDashboard?.url || '',
-          authenticatedHomeRoleDashboardPaths: {},
+          authenticatedHomeRoleDashboardPaths:
+            portalLayout.authenticatedHomeRoleDashboardPaths || {},
         },
       },
     })
@@ -3109,9 +3206,40 @@ export default function CMSAdminPage() {
       key: 'settings' as const,
       label: t('Settings'),
       icon: <SettingOutlined />,
-      // Settings tab contains: Portal, Menus, Themes, Templates, Styles
     },
   ].filter(item => !item.hidden);
+
+  const settingsSubNavItems: Array<{
+    key: AdminTab;
+    label: string;
+    icon: JSX.Element;
+  }> = [
+    {
+      key: 'portal' as const,
+      label: t('Portal'),
+      icon: <GlobalOutlined />,
+    },
+    {
+      key: 'menus' as const,
+      label: t('Menus'),
+      icon: <MenuOutlined />,
+    },
+    {
+      key: 'themes' as const,
+      label: t('Themes'),
+      icon: <BgColorsOutlined />,
+    },
+    {
+      key: 'templates' as const,
+      label: t('Templates'),
+      icon: <BlockOutlined />,
+    },
+    {
+      key: 'styles' as const,
+      label: t('Styles'),
+      icon: <FormatPainterOutlined />,
+    },
+  ];
 
   function renderActiveTab() {
     if (requestedTab === 'overview') {
@@ -4500,66 +4628,53 @@ export default function CMSAdminPage() {
           <TopBarBrandIcon>
             <LayoutOutlined />
           </TopBarBrandIcon>
-          <div>
-            <Eyebrow style={{ color: '#93c5fd' }}>
-              {t('Portal Administration')}
-            </Eyebrow>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>
-              {t('CMS Pages')}
-            </div>
+          <div className="brand-text">
+            <span className="brand-label">{t('Portal Administration')}</span>
+            <span className="brand-title">{t('CMS Pages')}</span>
           </div>
         </TopBarBrand>
         <TopBarActions>{adminActions}</TopBarActions>
       </TopBar>
       <ShellBody>
-        <LeftRail>
-          <RailSection>
-            <RailLabel>{t('Workspace')}</RailLabel>
-            {adminNavItems.map(item => (
-              <RailButton
-                key={item.key}
-                $active={requestedTab === item.key}
-                onClick={() =>
-                  setQueryState({
-                    pageSlug: draftPage?.slug || requestedPageSlug,
-                    tab: item.key,
-                  })
-                }
-              >
-                <RailButtonContent>
+        <TabBar>
+          {adminNavItems.map(item => (
+            <TabButton
+              key={item.key}
+              $active={requestedTab === item.key || (item.key === 'settings' && ['settings', 'portal', 'menus', 'themes', 'templates', 'styles'].includes(requestedTab))}
+              onClick={() =>
+                setQueryState({
+                  pageSlug: draftPage?.slug || requestedPageSlug,
+                  tab: item.key === 'settings' ? 'portal' : item.key,
+                })
+              }
+              title={item.label}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </TabButton>
+          ))}
+          {['settings', 'portal', 'menus', 'themes', 'templates', 'styles'].includes(requestedTab) && (
+            <>
+              <TabDivider />
+              {settingsSubNavItems.map(item => (
+                <TabButton
+                  key={item.key}
+                  $active={requestedTab === item.key}
+                  onClick={() =>
+                    setQueryState({
+                      pageSlug: draftPage?.slug || requestedPageSlug,
+                      tab: item.key,
+                    })
+                  }
+                  title={item.label}
+                >
                   {item.icon}
                   <span>{item.label}</span>
-                </RailButtonContent>
-              </RailButton>
-            ))}
-          </RailSection>
-          <RailSection>
-            <RailLabel>{t('Current Page')}</RailLabel>
-            <Panel>
-              {draftPage ? (
-                <Stack>
-                  <div>
-                    <strong>{draftPage.title}</strong>
-                    <TinyMeta>{currentPath || t('Unsaved draft')}</TinyMeta>
-                  </div>
-                  <Space wrap>
-                    <Tag color={pageStateColor(draftPage)}>
-                      {pageStateLabel(draftPage)}
-                    </Tag>
-                    {draftPage.is_homepage ? (
-                      <Tag color="gold">{t('Landing Page')}</Tag>
-                    ) : null}
-                  </Space>
-                </Stack>
-              ) : (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description={t('Select a page to start authoring.')}
-                />
-              )}
-            </Panel>
-          </RailSection>
-        </LeftRail>
+                </TabButton>
+              ))}
+            </>
+          )}
+        </TabBar>
         <ShellMain>
           <ContentStack>
             <Header>

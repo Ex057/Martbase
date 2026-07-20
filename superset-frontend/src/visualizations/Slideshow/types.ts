@@ -135,4 +135,11 @@ export interface SlideshowChartProps {
 
   // Embedded chart IDs
   embeddedChartIds: number[];
+
+  // Title & Subtitle
+  chartTitle?: {
+    title: string;
+    subtitle: string;
+    align?: 'left' | 'center';
+  } | null;
 }

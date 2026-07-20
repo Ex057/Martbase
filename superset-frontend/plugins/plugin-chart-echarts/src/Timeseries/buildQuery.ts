@@ -39,6 +39,7 @@ import {
   timeComparePivotOperator,
   timeCompareOperator,
 } from '@superset-ui/chart-controls';
+import { dhis2ColumnFilterClauses } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 export default function buildQuery(formData: QueryFormData) {
   const { groupby } = formData;
@@ -82,6 +83,12 @@ export default function buildQuery(formData: QueryFormData) {
       ? formData.time_compare
       : [];
 
+    // Merge DHIS2 column filters with existing filters (for relative period support)
+    const existingFilters = Array.isArray(baseQueryObject.filters)
+      ? baseQueryObject.filters
+      : [];
+    const dhis2Filters = dhis2ColumnFilterClauses(formData);
+
     return [
       {
         ...baseQueryObject,
@@ -92,6 +99,7 @@ export default function buildQuery(formData: QueryFormData) {
         // todo: move `normalizeOrderBy to extractQueryFields`
         orderby: normalizeOrderBy(baseQueryObject).orderby,
         time_offsets,
+        filters: [...existingFilters, ...dhis2Filters],
         /* Note that:
           1. The resample, rolling, cum, timeCompare operators should be after pivot.
           2. the flatOperator makes multiIndex Dataframe into flat Dataframe

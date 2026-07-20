@@ -21,6 +21,7 @@ import {
   ViolinDistributionChartProps,
   ViolinGroup,
 } from './types';
+import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
 
 /* ── Kernel Density Estimation (Gaussian) ──────────── */
 
@@ -155,5 +156,6 @@ export default function transformProps(
     showLegend: fd.show_legend ?? false,
     showMean: fd.show_mean ?? false,
     showQuartileLabels: fd.show_quartile_labels ?? false,
+    chartTitle: resolveChartTitle(chartProps.rawFormData),
   };
 }

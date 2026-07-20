@@ -136,6 +136,9 @@ interface MiniMapPanelProps {
   linearColors?: string[];
   formatter: (v: number) => string;
   nullText: string;
+  legendClasses?: number;
+  legendReverseColors?: boolean;
+  legendNoDataColor?: string;
 }
 
 export default function MiniMapPanel({
@@ -144,17 +147,23 @@ export default function MiniMapPanel({
   linearColors,
   formatter,
   nullText,
+  legendClasses = 7,
+  legendReverseColors = false,
+  legendNoDataColor = '#cccccc',
 }: MiniMapPanelProps) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
   const features = panel.geojson?.features || [];
-  const COLOR_STEPS = 7;
+  const colorSteps = Math.max(2, Math.min(9, legendClasses));
   const ramp = useMemo(() => {
+    let colors: string[];
     if (linearColors && linearColors.length >= 3) {
-      return linearColors.slice(0, Math.max(COLOR_STEPS, linearColors.length));
+      colors = linearColors.slice(0, Math.max(colorSteps, linearColors.length));
+    } else {
+      colors = FALLBACK_RAMP.slice(0, colorSteps);
     }
-    return FALLBACK_RAMP;
-  }, [linearColors]);
+    return legendReverseColors ? [...colors].reverse() : colors;
+  }, [linearColors, colorSteps, legendReverseColors]);
 
   const { bbox, values, min, max } = useMemo(() => {
     const vals = features.map(f => Number(f.properties?.value ?? 0));
@@ -201,8 +210,10 @@ export default function MiniMapPanel({
         {features.map((f, idx) => {
           const d = geometryToPath(f.geometry, bbox, 300, chartHeight, 8);
           if (!d) return null;
-          const colorIdx = quantize(values[idx], min, max, COLOR_STEPS);
-          const fill = ramp[colorIdx] || ramp[0];
+          const val = values[idx];
+          const isNull = val === null || val === undefined || Number.isNaN(val);
+          const colorIdx = isNull ? -1 : quantize(val, min, max, colorSteps);
+          const fill = isNull ? legendNoDataColor : (ramp[colorIdx] || ramp[0]);
           const isHovered = hoveredIdx === idx;
           return (
             <path

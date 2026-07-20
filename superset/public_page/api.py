@@ -5836,3 +5836,147 @@ class PublicPageRestApi(BaseApi):
             )
 
         return results
+
+    @expose("/admin/ai/generate", methods=("POST",))
+    @cms_auth_required
+    @safe
+    def generate_page_with_ai(self) -> Response:
+        """Generate CMS page blocks using AI based on a natural language prompt.
+
+        Request body:
+        {
+            "prompt": "Create a landing page with hero section and statistics",
+            "page_context": {
+                "available_charts": [...],
+                "available_dashboards": [...]
+            }
+        }
+
+        Returns:
+        {
+            "blocks": [...],
+            "suggestions": [...]
+        }
+        """
+        if not _can_create_pages():
+            return self.response(403, message="You do not have permission to generate pages")
+
+        try:
+            payload = request.json or {}
+            prompt = payload.get("prompt", "").strip()
+            if not prompt:
+                return self.response_400(message="Prompt is required")
+
+            page_context = payload.get("page_context", {})
+            blocks, suggestions = self._generate_page_blocks_with_ai(prompt, page_context)
+
+            return self.response(200, blocks=blocks, suggestions=suggestions)
+        except Exception as ex:  # pylint: disable=broad-except
+            logger.exception("Error generating page with AI")
+            return self.response_500(message=str(ex))
+
+    def _generate_page_blocks_with_ai(
+        self, prompt: str, page_context: dict[str, Any]
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        """Use AI provider to generate page blocks from a prompt."""
+        from superset.ai_insights.config import get_ai_insights_config, is_ai_insights_enabled
+        from superset.ai_insights.providers import ProviderRegistry
+
+        if not is_ai_insights_enabled():
+            raise ValueError("AI Insights is not enabled. Configure it in AI Management.")
+
+        block_definitions = list_block_definitions()
+        block_types_info = "\n".join(
+            f"- {bd['type']}: {bd.get('description', bd['label'])}"
+            for bd in block_definitions[:15]
+        )
+
+        available_charts = page_context.get("available_charts", [])[:10]
+        available_dashboards = page_context.get("available_dashboards", [])[:5]
+
+        charts_info = ""
+        if available_charts:
+            charts_info = "\nAvailable charts to embed:\n" + "\n".join(
+                f"- id={c.get('id')}: {c.get('name')}" for c in available_charts
+            )
+
+        dashboards_info = ""
+        if available_dashboards:
+            dashboards_info = "\nAvailable dashboards to embed:\n" + "\n".join(
+                f"- id={d.get('id')}: {d.get('name')}" for d in available_dashboards
+            )
+
+        system_prompt = f"""You are a CMS page builder assistant. Generate page content as a JSON array of blocks.
+
+Available block types:
+{block_types_info}
+{charts_info}
+{dashboards_info}
+
+Each block should have this structure:
+{{
+  "uid": "unique-id-string",
+  "block_type": "one of the available types",
+  "slot": "content",
+  "sort_order": 0,
+  "is_container": false,
+  "content": {{}},
+  "settings": {{}},
+  "styles": {{}},
+  "children": []
+}}
+
+For 'heading' blocks, use content: {{"text": "...", "level": 2}}
+For 'paragraph' blocks, use content: {{"text": "..."}}
+For 'section' blocks, use is_container: true and add children
+For 'columns' blocks, use is_container: true with children for each column
+For 'chart' blocks, use content: {{"chart_id": <id>}} if a chart is available
+For 'hero' blocks, use content: {{"title": "...", "subtitle": "...", "cta_text": "...", "cta_url": "..."}}
+For 'statistic' blocks, use content: {{"value": "...", "label": "...", "prefix": "", "suffix": ""}}
+
+Respond with ONLY valid JSON - an array of blocks. No explanations or markdown."""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ]
+
+        registry = ProviderRegistry()
+        response = registry.generate(messages=messages)
+
+        import json
+        import re
+
+        text = response.text.strip()
+        if text.startswith("```"):
+            text = re.sub(r"^```(?:json)?\s*\n?", "", text)
+            text = re.sub(r"\n?```\s*$", "", text)
+
+        blocks = json.loads(text)
+
+        if not isinstance(blocks, list):
+            blocks = [blocks] if isinstance(blocks, dict) else []
+
+        for i, block in enumerate(blocks):
+            if "uid" not in block:
+                block["uid"] = generate_block_uid()
+            if "sort_order" not in block:
+                block["sort_order"] = i
+            if "slot" not in block:
+                block["slot"] = "content"
+            if "is_container" not in block:
+                block["is_container"] = block.get("block_type") in ("section", "columns", "group", "card")
+            if "content" not in block:
+                block["content"] = {}
+            if "settings" not in block:
+                block["settings"] = {}
+            if "styles" not in block:
+                block["styles"] = {}
+            if "children" not in block:
+                block["children"] = []
+
+        suggestions = []
+        if available_charts and not any(b.get("block_type") == "chart" for b in blocks):
+            suggestions.append(f"Consider adding a chart block. Available: {available_charts[0].get('name')}")
+
+        return blocks, suggestions

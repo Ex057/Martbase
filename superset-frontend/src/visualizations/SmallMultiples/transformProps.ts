@@ -21,6 +21,7 @@ import {
   getCategoricalSchemeRegistry,
   getSequentialSchemeRegistry,
 } from '@superset-ui/core';
+import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
 import {
   SmallMultiplesFormData,
   SmallMultiplesChartProps,
@@ -445,5 +446,17 @@ export default function transformProps(
     dashboardId: fdValue<number>(fd, 'dashboardId', 'dashboard_id')
       ? Number(fdValue<number>(fd, 'dashboardId', 'dashboard_id'))
       : undefined,
+    legendClasses: fdValue<number>(fd, 'legendClasses', 'legend_classes') ?? 7,
+    legendReverseColors:
+      fdValue<boolean>(fd, 'legendReverseColors', 'legend_reverse_colors') ??
+      false,
+    legendNoDataColor: (() => {
+      const c = fdValue(fd, 'legendNoDataColor', 'legend_no_data_color') as
+        | { r: number; g: number; b: number; a?: number }
+        | undefined;
+      if (!c) return '#cccccc';
+      return `rgba(${c.r}, ${c.g}, ${c.b}, ${c.a ?? 1})`;
+    })(),
+    chartTitle: resolveChartTitle(chartProps.rawFormData),
   };
 }

@@ -17,6 +17,8 @@
  * under the License.
  */
 
+import { ResolvedChartTitle } from 'src/utils/chartAutoSubtitle';
+
 export type MarqueePlacement = 'top' | 'bottom' | 'left' | 'right' | 'custom_section';
 export type MarqueeOrientation = 'auto' | 'horizontal' | 'vertical';
 export type MarqueeDirection = 'forward' | 'reverse';
@@ -138,4 +140,5 @@ export interface MarqueeChartProps {
   showSubtitle: boolean;
   showDelta: boolean;
   showSeparators: boolean;
+  chartTitle?: ResolvedChartTitle | null;
 }

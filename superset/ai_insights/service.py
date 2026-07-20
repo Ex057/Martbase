@@ -18,6 +18,10 @@ from superset.ai_insights.config import (
     get_ai_insights_config,
     user_can_access_ai_mode,
 )
+from superset.ai_insights.training_examples import (
+    DHIS2_SYSTEM_PROMPT_RULES,
+    build_dhis2_context,
+)
 from superset.ai_insights.providers import AIProviderError, ProviderRegistry, StreamChunk
 from superset.ai_insights.sql import (
     AISQLValidationError,
@@ -1968,13 +1972,18 @@ _SYSTEM_PROMPT_CHART_GENERATE = (
     "16. For MAP visualizations: ALWAYS prefer dhis2_map when data has OU/orgunit/district "
     "   columns. Only use vital_maps if the data has lat/lon columns without DHIS2 OU. "
     "   NEVER use country_map.\n"
+    "19. CRITICAL MAP RULE: If the user's prompt contains 'map', 'choropleth', 'geographic', "
+    "   or 'by district/region', you MUST return a dhis2_map chart as the PRIMARY "
+    "   recommendation. Use the OU hierarchy column (district_city, region, etc.) as "
+    "   org_unit_column. Set boundary_levels based on the OU level (e.g., [3] for district). "
+    "   Do NOT substitute with bar/pie/table charts when maps are requested.\n"
     "17. ALWAYS populate alt_viz_types with 2-4 RELEVANT alternatives per chart. "
     "   Only include chart types that genuinely fit the data shape and the user's request. "
     "   Do NOT pad with unrelated chart types. For example, a time-series request should "
     "   only show time-series variants (bar, line, area, smooth), not pie or table. "
     "   A KPI request should show big_number_total, summary, comparison_kpi — not scatter.\n"
     "18. Return ONLY the JSON array. No markdown, no explanation, no code fences.\n"
-)
+) + DHIS2_SYSTEM_PROMPT_RULES
 
 
 _SYSTEM_PROMPT_LOCAL_CHART = (
@@ -5758,7 +5767,16 @@ def _build_chart_configs_python(
         "time", "timestamp",
     }
 
+    # Check if user explicitly requested a map
+    prompt_lower = prompt.lower()
+    wants_map = any(kw in prompt_lower for kw in ["map", "choropleth", "geographic"])
+
     charts: list[dict[str, Any]] = []
+
+    logger.info(
+        "_build_chart_configs_python: %d datasets, prompt=%s, wants_map=%s",
+        len(datasets_context), prompt[:50] if prompt else None, wants_map
+    )
 
     for ds in datasets_context:
         ds_id = ds["dataset_id"]
@@ -5767,10 +5785,16 @@ def _build_chart_configs_python(
         metrics = ds.get("metrics") or []
         sample = ds.get("sample_rows") or []
 
+        logger.info(
+            "_build_chart_configs_python: processing dataset_id=%s, table=%s, columns=%d",
+            ds_id, table_name, len(columns)
+        )
+
         # Classify columns
         numeric_cols: list[str] = []
         label_cols: list[str] = []
         period_cols: list[str] = []
+        ou_cols: list[tuple[str, int]] = []  # (column_name, ou_level)
 
         for col_info in columns:
             col_name = col_info["name"]
@@ -5784,6 +5808,12 @@ def _build_chart_configs_python(
                 numeric_cols.append(col_name)
             elif any(t in col_type for t in ("VARCHAR", "STRING", "TEXT", "CHAR")):
                 label_cols.append(col_name)
+
+            # Check for DHIS2 OU hierarchy columns
+            col_extra = col_info.get("extra") or {}
+            if col_extra.get("dhis2_is_ou_hierarchy"):
+                ou_level = col_extra.get("dhis2_ou_level", 0)
+                ou_cols.append((col_name, ou_level))
 
         # Also check sample data to refine classification
         if sample and not numeric_cols:
@@ -5826,6 +5856,56 @@ def _build_chart_configs_python(
         label_col = label_cols[0] if label_cols else None
         period_col = period_cols[0] if period_cols else None
         clean_table = table_name.replace("_", " ").title()
+
+        # Sort OU columns by level (prefer district level 3 for maps)
+        ou_cols_sorted = sorted(ou_cols, key=lambda x: abs(x[1] - 3))  # Prefer level 3
+
+        # 0. DHIS2 Map if user requested map OR we have OU columns
+        if ou_cols_sorted and numeric_cols and (wants_map or len(charts) == 0):
+            ou_col_name, ou_level = ou_cols_sorted[0]
+            # Use the first numeric column for the map metric (not ou_level itself)
+            map_metric_col = None
+            for nc in numeric_cols:
+                # Skip ou_level column - use actual data columns
+                if nc.lower() != "ou_level":
+                    map_metric_col = nc
+                    break
+            if not map_metric_col and numeric_cols:
+                map_metric_col = numeric_cols[0]
+
+            if map_metric_col:
+                map_chart = {
+                    "slice_name": f"{clean_table} — Map by {ou_col_name.replace('_', ' ').title()}",
+                    "viz_type": "dhis2_map",
+                    "description": f"Geographic distribution across {ou_col_name.replace('_', ' ')}",
+                    "dataset_id": ds_id,
+                    "params": {
+                        "org_unit_column": ou_col_name,
+                        "metric": {
+                            "expressionType": "SIMPLE",
+                            "column": {"column_name": map_metric_col},
+                            "aggregate": "SUM",
+                            "label": map_metric_col.replace("_", " ").title(),
+                        },
+                        "boundary_levels": [ou_level] if ou_level else [3],
+                        "aggregation_method": "sum",
+                        "enable_drill": True,
+                        "show_labels": True,
+                        "linear_color_scheme": "superset_seq_1",
+                        "viz_type": "dhis2_map",
+                        "datasource": f"{ds_id}__table",
+                    },
+                    "alt_viz_types": [
+                        {"viz_type": "dhis2_map", "label": "DHIS2 Map", "reason": "Best for geographic visualization with drill-down"},
+                        {"viz_type": "echarts_timeseries_bar", "label": "Bar Chart", "reason": "Compare values across locations"},
+                        {"viz_type": "ranked_variance", "label": "Ranked Variance", "reason": "Rank locations by performance"},
+                    ],
+                }
+                # If user explicitly wants map, put it first
+                if wants_map:
+                    charts.insert(0, map_chart)
+                else:
+                    charts.append(map_chart)
 
         # 1. Big Number KPI for top metric
         if metric_exprs:
@@ -6738,6 +6818,11 @@ class AIInsightService:
         prompt = str(payload.get("prompt") or "").strip()
         num_charts = min(int(payload.get("num_charts") or 6), 20)
 
+        logger.info(
+            "generate_chart_configs: dataset_id=%s, prompt=%s, num_charts=%s",
+            dataset_id, prompt[:100] if prompt else None, num_charts
+        )
+
         # Build dataset schemas for context
         datasets_context: list[dict[str, Any]] = []
         valid_dataset_ids: set[int] = set()
@@ -6837,6 +6922,17 @@ class AIInsightService:
 
         schemas_json = _compact_json(datasets_context)
 
+        # Build DHIS2-specific context if any dataset has DHIS2 metadata
+        dhis2_context_parts = []
+        for ds_ctx in datasets_context:
+            ds_columns = ds_ctx.get("columns", [])
+            ds_dhis2_ctx = build_dhis2_context(ds_columns)
+            if ds_dhis2_ctx:
+                dhis2_context_parts.append(
+                    f"Dataset '{ds_ctx.get('table_name', 'unknown')}':\n{ds_dhis2_ctx}"
+                )
+        dhis2_context = "\n".join(dhis2_context_parts)
+
         # ── LocalAI / local provider fallback ──
         # Local models cannot reliably produce valid JSON chart configs.
         # Generate chart proposals in Python using the dataset schema.
@@ -6850,12 +6946,22 @@ class AIInsightService:
             )
             return self._finalize_chart_configs(charts, valid_dataset_ids, payload, datasets_context)
 
+        # Build user content with optional DHIS2 context
+        user_content = f"{question}\n\nAvailable MART dataset schemas:\n{schemas_json}"
+        if dhis2_context:
+            user_content += f"\n\n{dhis2_context}"
+            logger.info("DHIS2 context injected into AI prompt:\n%s", dhis2_context)
+        else:
+            logger.info("No DHIS2 context detected for datasets")
+
+        # Log if user is requesting a map
+        prompt_lower = prompt.lower() if prompt else ""
+        if any(kw in prompt_lower for kw in ["map", "choropleth", "geographic"]):
+            logger.info("User requested MAP visualization - prompt: %s", prompt)
+
         messages: list[dict[str, str]] = [
             {"role": "system", "content": _SYSTEM_PROMPT_CHART_GENERATE},
-            {
-                "role": "user",
-                "content": f"{question}\n\nAvailable MART dataset schemas:\n{schemas_json}",
-            },
+            {"role": "user", "content": user_content},
         ]
 
         response = self.registry.generate(
@@ -7055,13 +7161,35 @@ class AIInsightService:
         """Build schema context for a single MART dataset."""
         resolved_schema, resolved_table = _resolve_dataset_table_ref(dataset)
         columns_info = []
-        for col in (dataset.columns or [])[:30]:
+        # Include up to 100 columns to capture DHIS2 metadata (period, OU hierarchy, etc.)
+        for col in (dataset.columns or [])[:100]:
             col_info: dict[str, Any] = {
                 "name": col.column_name,
                 "type": str(col.type or ""),
             }
             if col.description:
                 col_info["description"] = col.description[:80]
+            # Include DHIS2 metadata from column extra for AI context
+            col_extra = col.extra if hasattr(col, "extra") and col.extra else {}
+            if isinstance(col_extra, str):
+                try:
+                    col_extra = json.loads(col_extra)
+                except (json.JSONDecodeError, TypeError):
+                    col_extra = {}
+            # Include relevant DHIS2 markers
+            dhis2_markers = {}
+            if col_extra.get("dhis2_is_indicator"):
+                dhis2_markers["dhis2_is_indicator"] = True
+            if col_extra.get("dhis2_default_agg"):
+                dhis2_markers["dhis2_default_agg"] = col_extra["dhis2_default_agg"]
+            if col_extra.get("dhis2_is_period"):
+                dhis2_markers["dhis2_is_period"] = True
+            if col_extra.get("dhis2_is_ou_hierarchy"):
+                dhis2_markers["dhis2_is_ou_hierarchy"] = True
+                if col_extra.get("dhis2_ou_level"):
+                    dhis2_markers["dhis2_ou_level"] = col_extra["dhis2_ou_level"]
+            if dhis2_markers:
+                col_info["extra"] = dhis2_markers
             columns_info.append(col_info)
 
         metrics_info = []

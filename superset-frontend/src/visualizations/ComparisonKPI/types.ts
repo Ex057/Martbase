@@ -95,4 +95,5 @@ export interface ComparisonKPIChartProps {
   thresholdWarning: number | null;
   thresholdCritical: number | null;
   colorMode: string;
+  chartTitle?: { title: string; subtitle: string } | null;
 }

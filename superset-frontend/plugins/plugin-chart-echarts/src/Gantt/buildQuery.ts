@@ -22,6 +22,7 @@ import {
   buildQueryContext,
   ensureIsArray,
 } from '@superset-ui/core';
+import { dhis2ColumnFilterClauses } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 export default function buildQuery(formData: QueryFormData) {
   const {
@@ -49,13 +50,21 @@ export default function buildQuery(formData: QueryFormData) {
     ]),
   );
 
-  return buildQueryContext(formData, (baseQueryObject: QueryObject) => [
-    {
-      ...baseQueryObject,
-      columns,
-      metrics: ensureIsArray(tooltip_metrics),
-      orderby,
-      series_columns: groupBy,
-    },
-  ]);
+  return buildQueryContext(formData, (baseQueryObject: QueryObject) => {
+    const existingFilters = Array.isArray(baseQueryObject.filters)
+      ? baseQueryObject.filters
+      : [];
+    const dhis2Filters = dhis2ColumnFilterClauses(formData);
+
+    return [
+      {
+        ...baseQueryObject,
+        columns,
+        metrics: ensureIsArray(tooltip_metrics),
+        orderby,
+        series_columns: groupBy,
+        filters: [...existingFilters, ...dhis2Filters],
+      },
+    ];
+  });
 }

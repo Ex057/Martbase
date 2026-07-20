@@ -25,6 +25,7 @@ import {
   QueryFormOrderBy,
 } from '@superset-ui/core';
 import { PivotTableQueryFormData } from '../types';
+import { dhis2ColumnFilterClauses } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 export default function buildQuery(formData: PivotTableQueryFormData) {
   const { groupbyColumns = [], groupbyRows = [], extra_form_data } = formData;
@@ -63,11 +64,19 @@ export default function buildQuery(formData: PivotTableQueryFormData) {
     } else if (Array.isArray(metrics) && metrics[0]) {
       orderBy = [[metrics[0], !order_desc]];
     }
+
+    // Merge DHIS2 column filters with existing filters
+    const existingFilters = Array.isArray(baseQueryObject.filters)
+      ? baseQueryObject.filters
+      : [];
+    const dhis2Filters = dhis2ColumnFilterClauses(formData);
+
     return [
       {
         ...baseQueryObject,
         orderby: orderBy,
         columns,
+        filters: [...existingFilters, ...dhis2Filters],
       },
     ];
   });

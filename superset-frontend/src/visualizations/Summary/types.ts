@@ -263,4 +263,13 @@ export interface SummaryTransformedProps {
   borderWidth: number;
   borderColor: string;
   borderStyle: BorderStyle;
+
+  /* Title & Subtitle */
+  chartTitle?: {
+    title: string;
+    subtitle: string;
+    titleColor?: string;
+    subtitleColor?: string;
+    align: 'left' | 'center';
+  } | null;
 }

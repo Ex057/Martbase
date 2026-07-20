@@ -457,6 +457,105 @@ const config: ControlPanelConfig = {
         ],
       ],
     },
+    {
+      label: t('Title & Subtitle'),
+      tabOverride: 'customize',
+      expanded: false,
+      controlSetRows: [
+        [
+          {
+            name: 'chart_title',
+            config: {
+              type: 'TextControl',
+              label: t('Title'),
+              renderTrigger: true,
+              default: '',
+              description: t('Title shown on the chart.'),
+            },
+          },
+        ],
+        [
+          {
+            name: 'chart_auto_subtitle',
+            config: {
+              type: 'CheckboxControl',
+              label: t('Auto subtitle'),
+              renderTrigger: true,
+              default: false,
+              description: t(
+                "Automatically build the subtitle from the chart's active filters.",
+              ),
+            },
+          },
+        ],
+        [
+          {
+            name: 'chart_auto_subtitle_metrics',
+            config: {
+              type: 'CheckboxControl',
+              label: t('Include metrics in subtitle'),
+              renderTrigger: true,
+              default: true,
+              description: t('Prepend metric names to the auto subtitle.'),
+              visibility: ({ controls }: { controls: Record<string, { value?: unknown }> }) =>
+                Boolean(controls?.chart_auto_subtitle?.value),
+            },
+          },
+        ],
+        [
+          {
+            name: 'chart_subtitle',
+            config: {
+              type: 'TextControl',
+              label: t('Subtitle'),
+              renderTrigger: true,
+              default: '',
+              description: t('Optional subtitle shown beneath the title.'),
+              visibility: ({ controls }: { controls: Record<string, { value?: unknown }> }) =>
+                !controls?.chart_auto_subtitle?.value,
+            },
+          },
+        ],
+        [
+          {
+            name: 'chart_title_align',
+            config: {
+              type: 'SelectControl',
+              label: t('Alignment'),
+              default: 'left',
+              choices: [
+                ['left', t('Left')],
+                ['center', t('Center')],
+              ],
+              renderTrigger: true,
+            },
+          },
+        ],
+      ],
+    },
+    {
+      label: t('Data Filters'),
+      tabOverride: 'customize',
+      expanded: false,
+      controlSetRows: [
+        [
+          {
+            name: 'dhis2_column_filters',
+            config: {
+              type: 'DHIS2ColumnFilterControl',
+              label: t('Period / Org Unit Filters'),
+              description: t(
+                'Select columns for period and organization unit filtering',
+              ),
+              default: [],
+              mapStateToProps: (state: { datasource?: unknown }) => ({
+                datasource: state.datasource,
+              }),
+            },
+          },
+        ],
+      ],
+    },
   ],
   formDataOverrides: formData => {
     const groupbyColumns = getStandardizedControls().controls.columns.filter(

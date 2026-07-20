@@ -39,6 +39,8 @@ import {
   valueColorControl,
   textAlignControl,
 } from '../sharedControls';
+import { dhis2DataFiltersSection } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
+import { chartTitleSection } from '../../controls';
 
 const config: ControlPanelConfig = {
   controlPanelSections: [
@@ -53,6 +55,8 @@ const config: ControlPanelConfig = {
         ['adhoc_filters'],
       ],
     },
+    chartTitleSection,
+    dhis2DataFiltersSection,
     {
       label: t('Options'),
       tabOverride: 'data',

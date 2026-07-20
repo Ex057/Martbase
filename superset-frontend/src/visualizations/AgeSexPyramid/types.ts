@@ -55,4 +55,5 @@ export interface AgeSexPyramidChartProps {
   femaleLabel: string;
   maleColor: string;
   femaleColor: string;
+  chartTitle?: { title: string; subtitle: string } | null;
 }

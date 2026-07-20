@@ -36,6 +36,7 @@ import {
   PopKPIProps,
 } from './types';
 import { useOverflowDetection } from './useOverflowDetection';
+import { ChartTitleBlock } from 'src/components/ChartTitleBlock';
 
 const MetricNameText = styled.div<{ metricNameFontSize?: number }>`
   ${({ theme, metricNameFontSize }) => `
@@ -100,6 +101,7 @@ export default function PopKPI(props: PopKPIProps) {
     subtitleFontSize,
     dashboardTimeRange,
     showMetricName,
+    chartTitle,
   } = props;
   const [comparisonRange, setComparisonRange] = useState<string>('');
 
@@ -263,7 +265,8 @@ export default function PopKPI(props: PopKPIProps) {
     useOverflowDetection(flexGap);
 
   return (
-    <div css={wrapperDivStyles} ref={wrapperRef}>
+    <div css={wrapperDivStyles} ref={wrapperRef} style={{ height }}>
+      {chartTitle && <ChartTitleBlock {...chartTitle} />}
       <NumbersContainer
         css={
           isOverflowing &&

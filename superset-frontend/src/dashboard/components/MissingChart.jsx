@@ -59,17 +59,32 @@ export default function MissingChart({ height }) {
         {showMessage ? (
           <>
             <div style={{
-              fontSize: 20,
+              fontSize: 24,
               marginBottom: 8,
-              color: theme?.colorWarning || '#F9A825',
+              color: theme?.colorError || '#DC2626',
             }}>
-              ⚠
+              ✕
             </div>
-            {t('Chart data could not be loaded. The chart may have been deleted.')}
-            <br />
-            <span style={{ fontSize: 12, opacity: 0.7 }}>
-              {t('Remove this component in edit mode to clear this placeholder.')}
-            </span>
+            <div style={{
+              fontWeight: 600,
+              marginBottom: 4,
+              color: theme?.colorError || '#DC2626',
+            }}>
+              {t('Missing Chart')}
+            </div>
+            <div style={{ marginBottom: 8 }}>
+              {t('This chart could not be loaded — it may have been deleted.')}
+            </div>
+            <div style={{
+              fontSize: 12,
+              padding: '6px 12px',
+              borderRadius: 4,
+              background: theme?.colorErrorBg || '#FEE2E2',
+              color: theme?.colorError || '#DC2626',
+              border: `1px solid ${theme?.colorError || '#DC2626'}`,
+            }}>
+              {t('Click the red × button to remove this placeholder')}
+            </div>
           </>
         ) : (
           <span style={{ opacity: 0.6 }}>

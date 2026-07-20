@@ -17,6 +17,7 @@
  * under the License.
  */
 import { getMetricLabel, getNumberFormatter } from '@superset-ui/core';
+import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
 import { ComparisonKPIFormData, ComparisonKPIChartProps } from './types';
 
 export default function transformProps(chartProps: any): ComparisonKPIChartProps {
@@ -131,5 +132,6 @@ export default function transformProps(chartProps: any): ComparisonKPIChartProps
     thresholdWarning: Number.isFinite(thresholdWarning) ? thresholdWarning : null,
     thresholdCritical: Number.isFinite(thresholdCritical) ? thresholdCritical : null,
     colorMode: fd.color_mode || 'semantic',
+    chartTitle: resolveChartTitle(chartProps.rawFormData),
   };
 }

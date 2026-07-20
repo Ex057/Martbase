@@ -27,6 +27,7 @@ import {
   getXAxisColumn,
 } from '@superset-ui/core';
 import { rankOperator } from '@superset-ui/chart-controls';
+import { dhis2ColumnFilterClauses } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 export default function buildQuery(formData: QueryFormData) {
   const { groupby, normalize_across, sort_x_axis, sort_y_axis, x_axis } =
@@ -55,17 +56,25 @@ export default function buildQuery(formData: QueryFormData) {
       : normalize_across === 'y'
         ? getColumnLabel(groupby as unknown as QueryFormColumn)
         : undefined;
-  return buildQueryContext(formData, baseQueryObject => [
-    {
-      ...baseQueryObject,
-      columns,
-      orderby,
-      post_processing: [
-        rankOperator(formData, baseQueryObject, {
-          metric,
-          group_by,
-        }),
-      ],
-    },
-  ]);
+  return buildQueryContext(formData, baseQueryObject => {
+    const existingFilters = Array.isArray(baseQueryObject.filters)
+      ? baseQueryObject.filters
+      : [];
+    const dhis2Filters = dhis2ColumnFilterClauses(formData);
+
+    return [
+      {
+        ...baseQueryObject,
+        columns,
+        orderby,
+        filters: [...existingFilters, ...dhis2Filters],
+        post_processing: [
+          rankOperator(formData, baseQueryObject, {
+            metric,
+            group_by,
+          }),
+        ],
+      },
+    ];
+  });
 }

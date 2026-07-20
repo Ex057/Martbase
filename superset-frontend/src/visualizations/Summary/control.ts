@@ -24,6 +24,8 @@ import {
   getStandardizedControls,
   sharedControls,
 } from '@superset-ui/chart-controls';
+import { dhis2DataFiltersSection } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
+import { chartAutoSubtitleSection } from 'src/components/ChartTitleBlock';
 
 const config: ControlPanelConfig = {
   controlPanelSections: [
@@ -83,6 +85,8 @@ const config: ControlPanelConfig = {
         ['row_limit'],
       ],
     },
+    dhis2DataFiltersSection,
+    chartAutoSubtitleSection,
 
     /* ── Per-Variable Configuration ────────────────── */
     {

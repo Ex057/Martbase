@@ -57,7 +57,7 @@ import {
 import { RESPONSIVE_WIDTH } from 'src/filters/components/common';
 import { dispatchHoverAction, dispatchFocusAction } from './utils';
 import { FilterControlProps } from './types';
-import { getFormData } from '../../utils';
+import { getFormData, getDefaultRowLimit } from '../../utils';
 import { useFilterDependencies } from './state';
 import { useFilterOutlined } from '../useFilterOutlined';
 import { useFilters } from '../state';
@@ -73,6 +73,11 @@ const StyledDiv = styled.div`
 `;
 
 const queriesDataPlaceholder = [{ data: [{}] }];
+
+// Session-scoped cache of DHIS2 repository cascade-filter options. Keyed by the
+// full request signature so re-selecting a previously visited parent renders the
+// child dropdown instantly instead of re-hitting the backend. Reset on reload.
+const dhis2OptionsCache = new Map<string, Record<string, unknown>[]>();
 const behaviors = [Behavior.NativeFilter];
 
 type DHis2FilterMeta = {
@@ -279,9 +284,40 @@ const FilterValue: FC<FilterControlProps> = ({
         dhis2FilterMeta?.category === 'ou_hierarchy' &&
         !!dashboardId &&
         !!datasetId &&
-        !!groupby;
-      setIsRefreshing(true);
+        !!groupby &&
+        // Defensive: don't kick off a repository refetch while a Clear All is in
+        // flight, otherwise the async result can resurrect the just-cleared value.
+        !clearAllTrigger;
       if (shouldUseRepositoryOptions) {
+        const parentVal = cascadeParentInfo.cascade_parent_value;
+        const cacheKey = JSON.stringify([
+          dashboardId,
+          datasetId,
+          groupby,
+          dhis2FilterMeta?.level,
+          Array.isArray(parentVal) ? [...parentVal].sort() : parentVal,
+          cascadeParentLevel,
+        ]);
+        const applyOptions = (options: Record<string, unknown>[]) => {
+          setState([
+            {
+              data: options.map((option: Record<string, unknown>) => ({
+                [groupby]: option.value,
+              })),
+              colnames: [groupby],
+              coltypes: [GenericDataType.String],
+            } as ChartDataResponseResult,
+          ]);
+          setError(undefined);
+          handleFilterLoadFinish();
+        };
+        const cached = dhis2OptionsCache.get(cacheKey);
+        if (cached) {
+          // Instant: reuse a previously fetched level, no network round-trip.
+          applyOptions(cached);
+          return;
+        }
+        setIsRefreshing(true);
         SupersetClient.post({
           endpoint: `/api/v1/dashboard/${dashboardId}/dhis2-filter-options`,
           jsonPayload: {
@@ -291,6 +327,7 @@ const FilterValue: FC<FilterControlProps> = ({
             level: dhis2FilterMeta?.level,
             parent_value: cascadeParentInfo.cascade_parent_value,
             parent_level: cascadeParentLevel,
+            row_limit: getDefaultRowLimit(),
           },
         })
           .then(({ json }) => {
@@ -298,17 +335,8 @@ const FilterValue: FC<FilterControlProps> = ({
             const options = Array.isArray(json?.result?.options)
               ? json.result.options
               : [];
-            setState([
-              {
-                data: options.map((option: Record<string, unknown>) => ({
-                  [groupby]: option.value,
-                })),
-                colnames: [groupby],
-                coltypes: [GenericDataType.String],
-              } as ChartDataResponseResult,
-            ]);
-            setError(undefined);
-            handleFilterLoadFinish();
+            dhis2OptionsCache.set(cacheKey, options);
+            applyOptions(options);
           })
           .catch((error: Response) => {
             if (!mountedRef.current) return;
@@ -320,6 +348,7 @@ const FilterValue: FC<FilterControlProps> = ({
           });
         return;
       }
+      setIsRefreshing(true);
       getChartDataRequest({
         formData: newFormData,
         force: shouldRefresh,
@@ -384,6 +413,7 @@ const FilterValue: FC<FilterControlProps> = ({
     dhis2FilterMeta,
     dashboardId,
     cascadeParentLevel,
+    clearAllTrigger,
   ]);
 
   useEffect(() => {

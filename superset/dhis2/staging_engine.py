@@ -69,6 +69,7 @@ import json
 import logging
 import os
 import re
+from collections.abc import Iterable
 from typing import Any, Mapping
 
 from sqlalchemy import inspect, text
@@ -1218,17 +1219,31 @@ class DHIS2StagingEngine:
         *,
         columns: list[dict[str, Any]] | None = None,
         filters: list[dict[str, Any]] | None = None,
+        only_columns: Iterable[str] | None = None,
     ) -> dict[str, Any]:
         full_name = self.get_serving_sql_table_ref(staged_dataset)
         available_columns = self.get_serving_table_columns(staged_dataset)
         if not available_columns:
             return {"org_unit_filters": [], "period_filter": None}
 
+        # When a specific column is requested (a single cascade dropdown), skip
+        # computing options for every hierarchy level — the caller discards the
+        # rest, so it is pure wasted work.
+        only_column_set = (
+            {str(name).strip() for name in only_columns if str(name).strip()}
+            if only_columns is not None
+            else None
+        )
+
         column_specs = [
             column
             for column in list(columns or [])
             if isinstance(column, dict)
             and str(column.get("column_name") or "").strip() in available_columns
+            and (
+                only_column_set is None
+                or str(column.get("column_name") or "").strip() in only_column_set
+            )
         ]
 
         hierarchy_columns: list[dict[str, Any]] = []
@@ -1283,7 +1298,8 @@ class DHIS2StagingEngine:
                 f"SELECT {quoted_column} AS option_value, COUNT(*) AS row_count "
                 f"FROM {full_name}{where_sql} "
                 f"GROUP BY {quoted_column} "
-                f"ORDER BY {quoted_column}"
+                f"ORDER BY {quoted_column} "
+                f"LIMIT {_MAX_QUERY_LIMIT}"
             )
             result = conn.execute(text(sql), params)
             return [

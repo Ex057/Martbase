@@ -27,6 +27,7 @@ import {
   timeCompareOperator,
 } from '@superset-ui/chart-controls';
 import { isEmpty } from 'lodash';
+import { dhis2ColumnFilterClauses } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 export default function buildQuery(formData: QueryFormData) {
   const { cols: groupby } = formData;
@@ -58,11 +59,19 @@ export default function buildQuery(formData: QueryFormData) {
         timeOffsets = timeOffsets.concat(['inherit']);
       }
     }
+
+    // Merge DHIS2 column filters
+    const existingFilters = Array.isArray(baseQueryObject.filters)
+      ? baseQueryObject.filters
+      : [];
+    const dhis2Filters = dhis2ColumnFilterClauses(formData);
+
     return [
       {
         ...baseQueryObject,
         groupby,
         post_processing: postProcessing,
+        filters: [...existingFilters, ...dhis2Filters],
         time_offsets: isTimeComparison(formData, baseQueryObject)
           ? ensureIsArray(timeOffsets)
           : [],

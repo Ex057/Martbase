@@ -31,6 +31,7 @@ import {
   tooltipTimeFormatControl,
   tooltipValuesFormatControl,
 } from '../controls';
+import { dhis2DataFiltersSection } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 const config: ControlPanelConfig = {
   controlPanelSections: [
@@ -96,6 +97,7 @@ const config: ControlPanelConfig = {
       ],
     },
     chartTitleSection,
+    dhis2DataFiltersSection,
     {
       ...sections.titleControls,
       controlSetRows: [...sections.titleControls.controlSetRows.slice(0, -1)],

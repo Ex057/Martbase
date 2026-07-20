@@ -673,6 +673,34 @@ export function AppGlobalStyles() {
           border-radius: var(--pro-radius-input);
         }
 
+        /* Pro Theme Presets popup - fixed overlay with contained scroll */
+        .pro-theme-presets-popup {
+          z-index: 1050 !important;
+
+          > .ant-menu {
+            max-height: min(600px, calc(100vh - 150px)) !important;
+            overflow-y: auto !important;
+            overflow-x: hidden;
+            overscroll-behavior: contain;
+            padding-bottom: 16px;
+
+            /* Custom scrollbar */
+            &::-webkit-scrollbar {
+              width: 6px;
+            }
+            &::-webkit-scrollbar-track {
+              background: transparent;
+            }
+            &::-webkit-scrollbar-thumb {
+              background: rgba(0, 0, 0, 0.2);
+              border-radius: 3px;
+            }
+            &::-webkit-scrollbar-thumb:hover {
+              background: rgba(0, 0, 0, 0.3);
+            }
+          }
+        }
+
         /* ============================================================
            ALERTS AND NOTIFICATIONS
            ============================================================ */

@@ -231,6 +231,8 @@ export const useThemeMenuItems = ({
         </>
       ),
       children: presetChildren,
+      popupOffset: [-4, 0],
+      popupClassName: 'pro-theme-presets-popup',
     });
   }
 

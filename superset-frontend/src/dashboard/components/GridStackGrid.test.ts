@@ -4,6 +4,26 @@
  * The main GridStackGrid component depends heavily on GridStack.js DOM APIs
  * and React portals, so we test its pure logic separately.
  */
+
+// Mock gridstack before importing the component
+jest.mock('gridstack', () => ({
+  GridStack: {
+    init: jest.fn(() => ({
+      on: jest.fn(),
+      off: jest.fn(),
+      getGridItems: jest.fn(() => []),
+      destroy: jest.fn(),
+      setStatic: jest.fn(),
+      enableMove: jest.fn(),
+      enableResize: jest.fn(),
+      compact: jest.fn(),
+      removeWidget: jest.fn(),
+    })),
+  },
+}));
+
+jest.mock('gridstack/dist/gridstack.min.css', () => ({}));
+
 import { calcDropPosition, stableIdKey } from './GridStackGrid';
 import type { DashboardWidget } from '../util/gridstackConverter';
 

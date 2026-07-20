@@ -17,6 +17,7 @@
  * under the License.
  */
 import { buildQueryContext, QueryFormData } from '@superset-ui/core';
+import { dhis2ColumnFilterClauses } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 import { resolvePresetColumn } from './dhis2Presets';
 
 const DEFAULT_SMALL_MULTIPLES_ROW_LIMIT = 50000;
@@ -190,6 +191,13 @@ export default function buildQuery(formData: QueryFormData) {
     }
     const queryWithRowLimit = applySmallMultiplesRowLimit(query);
 
-    return [queryWithRowLimit];
+    // Merge DHIS2 column filters
+    const existingFilters = Array.isArray(query.filters) ? query.filters : [];
+    const dhis2Filters = dhis2ColumnFilterClauses(normalizedFormData);
+
+    return [{
+      ...queryWithRowLimit,
+      filters: [...existingFilters, ...dhis2Filters],
+    }];
   });
 }

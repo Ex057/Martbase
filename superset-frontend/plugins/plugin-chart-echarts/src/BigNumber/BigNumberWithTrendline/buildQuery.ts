@@ -31,6 +31,7 @@ import {
   resampleOperator,
   rollingWindowOperator,
 } from '@superset-ui/chart-controls';
+import { dhis2ColumnFilterClauses } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 export default function buildQuery(formData: QueryFormData) {
   const isRawMetric = formData.aggregation === 'raw';
@@ -40,11 +41,18 @@ export default function buildQuery(formData: QueryFormData) {
     : [];
 
   return buildQueryContext(formData, baseQueryObject => {
+    const existingFilters = Array.isArray(baseQueryObject.filters)
+      ? baseQueryObject.filters
+      : [];
+    const dhis2Filters = dhis2ColumnFilterClauses(formData);
+    const mergedFilters = [...existingFilters, ...dhis2Filters];
+
     const queries = [
       {
         ...baseQueryObject,
         columns: [...timeColumn],
         ...(timeColumn.length ? {} : { is_timeseries: true }),
+        filters: mergedFilters,
         post_processing: [
           pivotOperator(formData, baseQueryObject),
           rollingWindowOperator(formData, baseQueryObject),
@@ -61,6 +69,7 @@ export default function buildQuery(formData: QueryFormData) {
         ...baseQueryObject,
         columns: [...(isRawMetric ? [] : timeColumn)],
         is_timeseries: !isRawMetric,
+        filters: mergedFilters,
         post_processing: isRawMetric
           ? []
           : ([

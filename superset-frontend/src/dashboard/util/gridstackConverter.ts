@@ -208,13 +208,16 @@ export function widgetsToLayout(
       rowChildren.push(widget.id);
     }
 
+    // Preserve ALL existing row metadata (not just background) to avoid
+    // losing custom row properties during sync operations
+    const existingRow = layout[rowId];
     layout[rowId] = {
-      ...(layout[rowId] || {}),
+      ...(existingRow || {}),
       id: rowId,
       type: ROW_TYPE,
       children: rowChildren,
       parents: [DASHBOARD_ROOT_ID, gridId],
-      meta: layout[rowId]?.meta || { background: 'BACKGROUND_TRANSPARENT' },
+      meta: existingRow?.meta || { background: 'BACKGROUND_TRANSPARENT' },
     };
 
     gridChildren.push(rowId);

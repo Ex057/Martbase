@@ -18,6 +18,7 @@
  */
 /* eslint-disable theme-colors/no-literal-colors */
 import { getMetricLabel, getNumberFormatter } from '@superset-ui/core';
+import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
 import { StockStatusFormData, StockStatusChartProps, CommodityRow, StockBand } from './types';
 
 const BAND_CONFIG: Record<StockBand, { color: string; label: string }> = {
@@ -114,5 +115,6 @@ export default function transformProps(chartProps: any): StockStatusChartProps {
     densityTier,
     nullValueText,
     showStatusHeader: fd.show_status_header ?? true,
+    chartTitle: resolveChartTitle(chartProps.rawFormData),
   };
 }

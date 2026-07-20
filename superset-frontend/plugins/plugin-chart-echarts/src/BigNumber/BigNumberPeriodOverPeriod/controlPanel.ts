@@ -34,6 +34,8 @@ import {
   metricNameFontSizeWithVisibility,
 } from '../sharedControls';
 import { ColorSchemeEnum } from './types';
+import { dhis2DataFiltersSection } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
+import { chartTitleSection } from '../../controls';
 
 const config: ControlPanelConfig = {
   controlPanelSections: [
@@ -51,6 +53,8 @@ const config: ControlPanelConfig = {
         ],
       ],
     },
+    chartTitleSection,
+    dhis2DataFiltersSection,
     {
       label: t('Chart Options'),
       expanded: true,

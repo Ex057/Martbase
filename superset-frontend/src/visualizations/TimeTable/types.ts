@@ -73,6 +73,13 @@ export interface TimeTableProps {
   rowType: 'column' | 'metric';
   rows: Row[];
   url?: string;
+  chartTitle?: {
+    title?: string;
+    subtitle?: string;
+    titleColor?: string;
+    subtitleColor?: string;
+    align?: 'left' | 'center';
+  };
 }
 
 export interface Entry {

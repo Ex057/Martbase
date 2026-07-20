@@ -45,6 +45,7 @@ import {
   xAxisLabelInterval,
   forceMaxInterval,
 } from '../controls';
+import { dhis2DataFiltersSection } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 const {
   area,
@@ -340,6 +341,7 @@ const config: ControlPanelConfig = {
       controlSetRows: [['x_axis'], ['time_grain_sqla']],
     },
     chartTitleSection,
+    dhis2DataFiltersSection,
     createQuerySection(t('Query A'), ''),
     createAdvancedAnalyticsSection(t('Advanced analytics Query A'), ''),
     createQuerySection(t('Query B'), '_b'),

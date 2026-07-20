@@ -34,6 +34,7 @@ import {
 } from './utils';
 
 import { getOriginalLabel } from '../utils';
+import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
 
 export const parseMetricValue = (metricValue: number | string | null) => {
   if (typeof metricValue === 'string') {
@@ -191,6 +192,11 @@ export default function transformProps(chartProps: ChartProps) {
   valueDifference = numberFormatter(valueDifference);
   const percentDifference: string = formatPercentChange(percentDifferenceNum);
 
+  const chartTitle = resolveChartTitle(
+    formData,
+    chartProps.datasource?.columns,
+  );
+
   return {
     width,
     height,
@@ -217,5 +223,6 @@ export default function transformProps(chartProps: ChartProps) {
     shift: timeComparison,
     dashboardTimeRange: formData?.extraFormData?.time_range,
     columnConfig,
+    chartTitle,
   };
 }

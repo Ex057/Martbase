@@ -37,6 +37,8 @@ import {
   valueColorControl,
   textAlignControl,
 } from '../sharedControls';
+import { dhis2DataFiltersSection } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
+import { chartTitleSection } from '../../controls';
 
 export default {
   controlPanelSections: [
@@ -45,6 +47,8 @@ export default {
       expanded: true,
       controlSetRows: [['metric'], ['adhoc_filters']],
     },
+    chartTitleSection,
+    dhis2DataFiltersSection,
     {
       label: t('Chart Options'),
       expanded: true,

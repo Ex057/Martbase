@@ -19,6 +19,7 @@
 
 import { ChartProps, QueryFormData } from '@superset-ui/core';
 import { colorValueToCss } from 'src/utils/colorValue';
+import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
 import {
   sanitizeDHIS2ColumnName,
   findMetricColumn,
@@ -1259,15 +1260,14 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     compassVisible: compass_visible === true,
     compassPosition: compass_position || 'topright',
     compassStyle: compass_style || 'north_badge',
-    chartTitle: formDataAny?.chartTitle ?? formDataAny?.chart_title ?? '',
-    chartSubtitle:
-      formDataAny?.chartSubtitle ?? formDataAny?.chart_subtitle ?? '',
-    chartTitleColor:
-      formDataAny?.chartTitleColor ?? formDataAny?.chart_title_color,
-    chartSubtitleColor:
-      formDataAny?.chartSubtitleColor ?? formDataAny?.chart_subtitle_color,
-    chartTitleAlign:
-      formDataAny?.chartTitleAlign ?? formDataAny?.chart_title_align ?? 'center',
+    ...(() => {
+      const resolved = resolveChartTitle(formData);
+      return {
+        chartTitle: resolved.title || '',
+        chartSubtitle: resolved.subtitle || '',
+        chartTitleAlign: resolved.align || 'center',
+      };
+    })(),
     tooltipColumns: sanitizedTooltipColumns,
     hideQuickFilters: hide_quick_filters === true,
     setDataMask: hooks?.setDataMask,

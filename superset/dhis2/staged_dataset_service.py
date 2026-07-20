@@ -1748,6 +1748,7 @@ def get_local_filter_options(
     dataset_id: int,
     *,
     filters: list[dict[str, Any]] | None = None,
+    only_columns: Iterable[str] | None = None,
 ) -> dict[str, Any]:
     dataset = get_staged_dataset(dataset_id)
     if dataset is None:
@@ -1755,17 +1756,27 @@ def get_local_filter_options(
 
     engine = _get_engine(dataset.database_id)
 
+    # Read path: populating a cascade dropdown must NOT pay for a serving-table
+    # rebuild-check + Superset dataset re-registration (the dominant cost of
+    # ensure_serving_table). When the physical serving table already exists,
+    # read its columns cheaply; only fall back to the full ensure_serving_table
+    # (build + register) if the table is genuinely missing. Rebuilds after a
+    # DHIS2 sync stay on the sync/refresh path, not here.
+    serving_columns: list[dict[str, Any]]
     try:
-        _serving_table_ref, serving_columns = ensure_serving_table(dataset.id)
+        if engine.serving_table_exists(dataset):
+            serving_columns = get_serving_columns(dataset.id)
+        else:
+            _serving_table_ref, serving_columns = ensure_serving_table(dataset.id)
     except Exception:  # pylint: disable=broad-except
         logger.warning(
-            "get_local_filter_options: serving table build failed for dataset id=%s; "
+            "get_local_filter_options: serving table lookup failed for dataset id=%s; "
             "falling back to manifest columns",
             dataset_id,
             exc_info=True,
         )
-        # Graceful degradation: use manifest columns if rebuild fails so the
-        # filters endpoint still returns a response instead of a 500.
+        # Graceful degradation: use manifest columns if lookup/rebuild fails so
+        # the filters endpoint still returns a response instead of a 500.
         from superset.dhis2.analytical_serving import (
             build_serving_manifest,
             dataset_columns_payload,
@@ -1780,6 +1791,7 @@ def get_local_filter_options(
         dataset,
         columns=serving_columns,
         filters=filters,
+        only_columns=only_columns,
     )
 
 

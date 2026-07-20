@@ -17,6 +17,7 @@
  * under the License.
  */
 import { QueryFormData } from '@superset-ui/core';
+import { ResolvedChartTitle } from 'src/utils/chartAutoSubtitle';
 
 export type CascadeOrientation = 'horizontal' | 'vertical';
 
@@ -74,4 +75,5 @@ export interface CohortCascadeChartProps {
   densityTier: string;
   referenceStage: string;
   nullValueText: string;
+  chartTitle?: ResolvedChartTitle | null;
 }

@@ -23,6 +23,7 @@ import {
   getStandardizedControls,
 } from '@superset-ui/chart-controls';
 import { chartTitleSection, xAxisLabelRotation } from '../controls';
+import { dhis2DataFiltersSection } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 const sortAxisChoices = [
   ['alpha_asc', t('Axis ascending')],
@@ -104,6 +105,7 @@ const config: ControlPanelConfig = {
       ],
     },
     chartTitleSection,
+    dhis2DataFiltersSection,
     {
       label: t('Chart Options'),
       expanded: true,

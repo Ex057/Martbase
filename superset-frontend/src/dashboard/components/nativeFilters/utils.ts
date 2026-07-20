@@ -37,7 +37,7 @@ import { isIterable, OnlyKeyWithType } from 'src/utils/types';
 import { TAB_TYPE } from '../../util/componentTypes';
 import getBootstrapData from '../../../utils/getBootstrapData';
 
-const getDefaultRowLimit = (): number => {
+export const getDefaultRowLimit = (): number => {
   const bootstrapData = getBootstrapData();
   const nativeFilterDefaultRowLimit =
     bootstrapData?.common?.conf?.NATIVE_FILTER_DEFAULT_ROW_LIMIT;

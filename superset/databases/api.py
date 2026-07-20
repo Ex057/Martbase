@@ -2400,7 +2400,13 @@ class DatabaseRestApi(BaseSupersetModelRestApi):
             500:
               $ref: '#/components/responses/500'
         """
-        database = DatabaseDAO.find_by_id(pk)
+        # Resolve without the Database list base filter (which only passes for
+        # users holding all_database_access / per-database access) and enforce
+        # access explicitly via can_access_database(). That check honors
+        # all_datasource_access, so datasource-level viewers (e.g. the "End user"
+        # role) can load DHIS2 geo/boundary metadata for a database whose data
+        # they're already allowed to see, without being granted broad DB access.
+        database = DatabaseDAO.find_by_id(pk, skip_base_filter=True)
         if not database:
             return self.response_404()
         chart = self._resolve_authenticated_dhis2_chart()
@@ -2413,6 +2419,8 @@ class DatabaseRestApi(BaseSupersetModelRestApi):
             else database
         )
         if not resolved_database:
+            return self.response_404()
+        if not security_manager.can_access_database(resolved_database):
             return self.response_404()
         return self._handle_dhis2_metadata_request(resolved_database, chart=chart)
 

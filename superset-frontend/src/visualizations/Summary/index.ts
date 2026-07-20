@@ -19,6 +19,7 @@
 import { Behavior, t, ChartMetadata, ChartPlugin } from '@superset-ui/core';
 import transformProps from './transformProps';
 import controlPanel from './control';
+import buildQuery from './buildQuery';
 import thumbnail from './images/thumbnailUrl';
 
 export default class SummaryChartPlugin extends ChartPlugin {
@@ -41,6 +42,7 @@ export default class SummaryChartPlugin extends ChartPlugin {
         ],
         behaviors: [Behavior.InteractiveChart],
       }),
+      buildQuery,
       controlPanel,
       transformProps,
       loadChart: () => import('./Summary'),

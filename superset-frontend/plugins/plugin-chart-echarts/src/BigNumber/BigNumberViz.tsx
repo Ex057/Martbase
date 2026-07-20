@@ -24,13 +24,14 @@ import {
   SMART_DATE_VERBOSE_ID,
   computeMaxFontSize,
   BRAND_COLOR,
-  styled,
   BinaryQueryObjectFilterClause,
   useTheme,
+  styled,
 } from '@superset-ui/core';
 import Echart from '../components/Echart';
 import { BigNumberVizProps } from './types';
 import { EventHandlers } from '../types';
+import { ChartTitleBlock, chartTitleHeight } from 'src/components/ChartTitleBlock';
 
 const defaultNumberFormatter = getNumberFormatter();
 
@@ -79,6 +80,7 @@ function BigNumberVis({
   cardBorderRadius = 8,
   valueColor,
   textAlign = 'left',
+  chartTitle,
   ...props
 }: BigNumberVizProps) {
   const theme = useTheme();
@@ -468,79 +470,87 @@ function BigNumberVis({
       ? {}
       : { alignItems: textAlign === 'center' ? 'center' : 'flex-end' };
 
+  const titleHeight = chartTitle ? chartTitleHeight(chartTitle) : 0;
+  const contentHeight = height - titleHeight;
+
   if (showTrendLine) {
-    const chartHeight = Math.floor(PROPORTION.TRENDLINE * height);
-    const allTextHeight = height - chartHeight;
+    const chartHeight = Math.floor(PROPORTION.TRENDLINE * contentHeight);
+    const allTextHeight = contentHeight - chartHeight;
     const overflow = shouldApplyOverflow(allTextHeight);
 
     return (
-      <div className={componentClassName} style={{ ...cardStyle, ...alignStyle }}>
-        <div
-          className="text-container"
-          style={{
-            height: allTextHeight,
-            ...(overflow
-              ? {
-                  display: 'block',
-                  boxSizing: 'border-box',
-                  overflowX: 'hidden',
-                  overflowY: 'auto',
-                  width: '100%',
-                }
-              : {}),
-          }}
-        >
-          {renderFallbackWarning()}
-          {renderMetricName(
-            Math.ceil(
-              (metricNameFontSize || 0) * (1 - PROPORTION.TRENDLINE) * height,
-            ),
-          )}
-          {renderKicker(
-            Math.ceil(
-              (kickerFontSize || 0) * (1 - PROPORTION.TRENDLINE) * height,
-            ),
-          )}
-          {renderHeader(
-            Math.ceil(headerFontSize * (1 - PROPORTION.TRENDLINE) * height),
-          )}
-          {rendermetricComparisonSummary(
-            Math.ceil(subheaderFontSize * (1 - PROPORTION.TRENDLINE) * height),
-          )}
-          {renderSubtitle(
-            Math.ceil(subtitleFontSize * (1 - PROPORTION.TRENDLINE) * height),
-          )}
+      <div className={componentClassName} style={{ height }}>
+        {chartTitle && <ChartTitleBlock {...chartTitle} />}
+        <div style={{ ...cardStyle, ...alignStyle, height: contentHeight }}>
+          <div
+            className="text-container"
+            style={{
+              height: allTextHeight,
+              ...(overflow
+                ? {
+                    display: 'block',
+                    boxSizing: 'border-box',
+                    overflowX: 'hidden',
+                    overflowY: 'auto',
+                    width: '100%',
+                  }
+                : {}),
+            }}
+          >
+            {renderFallbackWarning()}
+            {renderMetricName(
+              Math.ceil(
+                (metricNameFontSize || 0) * (1 - PROPORTION.TRENDLINE) * contentHeight,
+              ),
+            )}
+            {renderKicker(
+              Math.ceil(
+                (kickerFontSize || 0) * (1 - PROPORTION.TRENDLINE) * contentHeight,
+              ),
+            )}
+            {renderHeader(
+              Math.ceil(headerFontSize * (1 - PROPORTION.TRENDLINE) * contentHeight),
+            )}
+            {rendermetricComparisonSummary(
+              Math.ceil(subheaderFontSize * (1 - PROPORTION.TRENDLINE) * contentHeight),
+            )}
+            {renderSubtitle(
+              Math.ceil(subtitleFontSize * (1 - PROPORTION.TRENDLINE) * contentHeight),
+            )}
+          </div>
+          {renderTrendline(chartHeight)}
         </div>
-        {renderTrendline(chartHeight)}
       </div>
     );
   }
-  const overflow = shouldApplyOverflow(height);
+  const overflow = shouldApplyOverflow(contentHeight);
   return (
-    <div
-      className={componentClassName}
-      style={{
-        height,
-        ...cardStyle,
-        ...alignStyle,
-        ...(overflow
-          ? {
-              display: 'block',
-              boxSizing: 'border-box',
-              overflowX: 'hidden',
-              overflowY: 'auto',
-              width: '100%',
-            }
-          : {}),
-      }}
-    >
-      <div className="text-container">
-        {renderFallbackWarning()}
-        {renderMetricName((metricNameFontSize || 0) * height)}
-        {renderKicker((kickerFontSize || 0) * height)}
-        {renderHeader(Math.ceil(headerFontSize * height))}
-        {rendermetricComparisonSummary(Math.ceil(subheaderFontSize * height))}
-        {renderSubtitle(Math.ceil(subtitleFontSize * height))}
+    <div className={componentClassName} style={{ height }}>
+      {chartTitle && <ChartTitleBlock {...chartTitle} />}
+      <div
+        style={{
+          height: contentHeight,
+          ...cardStyle,
+          ...alignStyle,
+          ...(overflow
+            ? {
+                display: 'block',
+                boxSizing: 'border-box',
+                overflowX: 'hidden',
+                overflowY: 'auto',
+                width: '100%',
+              }
+            : {}),
+        }}
+      >
+        <div className="text-container">
+          {renderFallbackWarning()}
+          {renderMetricName((metricNameFontSize || 0) * contentHeight)}
+          {renderKicker((kickerFontSize || 0) * contentHeight)}
+          {renderHeader(Math.ceil(headerFontSize * contentHeight))}
+          {rendermetricComparisonSummary(Math.ceil(subheaderFontSize * contentHeight))}
+          {renderSubtitle(Math.ceil(subtitleFontSize * contentHeight))}
+        </div>
       </div>
     </div>
   );

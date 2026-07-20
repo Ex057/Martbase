@@ -17,14 +17,23 @@
  * under the License.
  */
 import { buildQueryContext, QueryFormData } from '@superset-ui/core';
+import { dhis2ColumnFilterClauses } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 export default function buildQuery(formData: QueryFormData) {
   const { metric, sort_by_metric } = formData;
 
-  return buildQueryContext(formData, baseQueryObject => [
-    {
-      ...baseQueryObject,
-      ...(sort_by_metric && { orderby: [[metric, false]] }),
-    },
-  ]);
+  return buildQueryContext(formData, baseQueryObject => {
+    const existingFilters = Array.isArray(baseQueryObject.filters)
+      ? baseQueryObject.filters
+      : [];
+    const dhis2Filters = dhis2ColumnFilterClauses(formData);
+
+    return [
+      {
+        ...baseQueryObject,
+        ...(sort_by_metric && { orderby: [[metric, false]] }),
+        filters: [...existingFilters, ...dhis2Filters],
+      },
+    ];
+  });
 }

@@ -17,6 +17,10 @@
  * under the License.
  */
 import { ChartProps, DataRecord, Metric } from '@superset-ui/core';
+import {
+  resolveChartTitle,
+  ResolvedChartTitle,
+} from 'src/utils/chartAutoSubtitle';
 
 interface FormData {
   groupby: string[];
@@ -75,6 +79,11 @@ export function transformProps(chartProps: TableChartProps) {
       c.timeLag = parseInt(c.timeLag, 10);
   });
 
+  const chartTitle: ResolvedChartTitle | undefined = resolveChartTitle(
+    chartProps.rawFormData || formData,
+    chartProps.datasource?.columns,
+  );
+
   return {
     height,
     data: records,
@@ -82,5 +91,6 @@ export function transformProps(chartProps: TableChartProps) {
     rows,
     rowType: isGroupBy ? 'column' : 'metric',
     url,
+    chartTitle,
   };
 }

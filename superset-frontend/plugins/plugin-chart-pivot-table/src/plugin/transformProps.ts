@@ -32,9 +32,17 @@ import {
 import { GenericDataType } from '@apache-superset/core/api/core';
 import { ColorFormatters, getColorFormatters } from '@superset-ui/chart-controls';
 import { matchesBreakpoint } from 'src/explore/components/controls/ColorBreakpointsControl/colorBreakpointUtils';
+import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
 import { DateFormatter } from '../types';
 
 const { DATABASE_DATETIME } = TimeFormats;
+
+interface PivotChartTitle {
+  title?: string;
+  subtitle?: string;
+  titleColor?: string;
+  align?: 'left' | 'center';
+}
 
 function isNumeric(key: string, data: DataRecord[] = []) {
   return data.every(
@@ -241,6 +249,17 @@ export default function transformProps(chartProps: ChartProps<QueryFormData>) {
       ? customColorFormatters
       : [...customColorFormatters, ...conditionalColorFormatters];
 
+  const resolvedTitle = resolveChartTitle(rawFormData || formData);
+  const chartTitle: PivotChartTitle | undefined =
+    resolvedTitle.title || resolvedTitle.subtitle
+      ? {
+          title: resolvedTitle.title || undefined,
+          subtitle: resolvedTitle.subtitle || undefined,
+          titleColor: resolvedTitle.titleColor,
+          align: resolvedTitle.align,
+        }
+      : undefined;
+
   return {
     width,
     height,
@@ -274,5 +293,6 @@ export default function transformProps(chartProps: ChartProps<QueryFormData>) {
     onContextMenu,
     timeGrainSqla,
     allowRenderHtml,
+    chartTitle,
   };
 }

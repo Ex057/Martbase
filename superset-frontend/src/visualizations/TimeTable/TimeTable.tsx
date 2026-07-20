@@ -21,6 +21,10 @@ import { InfoTooltip, TableView } from '@superset-ui/core/components';
 import { styled, t } from '@superset-ui/core';
 import { sortNumberWithMixedTypes, processTimeTableData } from './utils';
 import { ValueCell, LeftCell, Sparkline } from './components';
+import {
+  ChartTitleBlock,
+  chartTitleHeight,
+} from 'src/components/ChartTitleBlock';
 import type { TimeTableProps } from './types';
 
 // @z-index-above-dashboard-charts + 1 = 11
@@ -41,7 +45,16 @@ const TimeTable = ({
   rowType,
   rows,
   url = '',
+  chartTitle,
 }: TimeTableProps) => {
+  const titleHeight =
+    chartTitle?.title || chartTitle?.subtitle
+      ? chartTitleHeight({
+          title: chartTitle?.title || '',
+          subtitle: chartTitle?.subtitle || '',
+        })
+      : 0;
+  const contentHeight = (height || 0) - titleHeight;
   const memoizedColumns = useMemo(
     () => [
       {
@@ -125,19 +138,30 @@ const TimeTable = ({
       : [];
 
   return (
-    <TimeTableStyles
-      data-test="time-table"
-      className={className}
-      height={height}
-    >
-      <TableView
-        className="table-no-hover"
-        columns={memoizedColumns}
-        data={memoizedRows}
-        initialSortBy={defaultSort}
-        withPagination={false}
-      />
-    </TimeTableStyles>
+    <div style={{ height }}>
+      {(chartTitle?.title || chartTitle?.subtitle) && (
+        <ChartTitleBlock
+          title={chartTitle.title || ''}
+          subtitle={chartTitle.subtitle || ''}
+          titleColor={chartTitle.titleColor}
+          subtitleColor={chartTitle.subtitleColor}
+          align={chartTitle.align || 'center'}
+        />
+      )}
+      <TimeTableStyles
+        data-test="time-table"
+        className={className}
+        height={contentHeight}
+      >
+        <TableView
+          className="table-no-hover"
+          columns={memoizedColumns}
+          data={memoizedRows}
+          initialSortBy={defaultSort}
+          withPagination={false}
+        />
+      </TimeTableStyles>
+    </div>
   );
 };
 

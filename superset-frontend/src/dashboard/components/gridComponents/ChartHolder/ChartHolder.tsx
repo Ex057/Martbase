@@ -57,11 +57,26 @@ const PersistentDeleteMenu = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: ${({ theme }) => theme.sizeUnit}px;
-  border: 1px solid ${({ theme }) => theme.colorBorder};
+  padding: ${({ theme }) => theme.sizeUnit * 1.5}px;
+  border: 2px solid ${({ theme }) => theme.colorError};
   border-radius: ${({ theme }) => theme.borderRadius}px;
-  background: ${({ theme }) => theme.colorBgContainer};
+  background: ${({ theme }) => theme.colorErrorBg};
   box-shadow: ${({ theme }) => theme.boxShadowSecondary};
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: ${({ theme }) => theme.colorError};
+    transform: scale(1.1);
+
+    svg {
+      color: white;
+    }
+  }
+
+  svg {
+    color: ${({ theme }) => theme.colorError};
+  }
 `;
 
 interface ChartHolderProps {

@@ -19,6 +19,8 @@
 
 import { t } from '@superset-ui/core';
 import { ControlPanelConfig } from '@superset-ui/chart-controls';
+import { dhis2DataFiltersSection } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
+import { chartAutoSubtitleSection } from 'src/components/ChartTitleBlock';
 
 const controlPanel: ControlPanelConfig = {
   controlPanelSections: [
@@ -54,6 +56,8 @@ const controlPanel: ControlPanelConfig = {
         ],
       ],
     },
+    dhis2DataFiltersSection,
+    chartAutoSubtitleSection,
     {
       label: t('Layout & Placement'),
       expanded: true,
@@ -428,6 +432,18 @@ const controlPanel: ControlPanelConfig = {
               type: 'ColorPickerControl',
               label: t('Item Background'),
               default: { r: 255, g: 255, b: 255, a: 1 },
+              renderTrigger: true,
+            },
+          },
+        ],
+        [
+          {
+            name: 'hover_background',
+            config: {
+              type: 'ColorPickerControl',
+              label: t('Hover Background'),
+              description: t('Background color when hovering over an item.'),
+              default: { r: 249, g: 250, b: 251, a: 1 },
               renderTrigger: true,
             },
           },

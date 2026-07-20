@@ -38,6 +38,31 @@ import { isEmpty } from 'lodash';
 import { TableChartFormData } from './types';
 import { updateTableOwnState } from './DataTable/utils/externalAPIs';
 
+/** Simplified DHIS2 filter clause builder for the Table plugin. */
+function dhis2ColumnFilterClauses(
+  formData: Record<string, unknown> | undefined,
+): Array<{ col: string; op: 'IN'; val: string[] }> {
+  const raw = (formData?.dhis2ColumnFilters ??
+    formData?.dhis2_column_filters) as
+    | Array<{ column: string; values: string[] }>
+    | undefined;
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .filter(
+      filter =>
+        filter?.column &&
+        Array.isArray(filter.values) &&
+        filter.values.length > 0,
+    )
+    .map(filter => ({
+      col: filter.column,
+      op: 'IN' as const,
+      val: filter.values,
+    }))
+    .filter(clause => clause.val.length > 0);
+}
+
 /**
  * Infer query mode from form data. If `all_columns` is set, then raw records mode,
  * otherwise defaults to aggregation mode.
@@ -243,6 +268,12 @@ const buildQuery: BuildQuery<TableChartFormData> = (
       sortByFromOwnState = [[sortByItem?.key, !sortByItem?.desc]];
     }
 
+    // Merge DHIS2 column filters with existing filters
+    const existingFilters = Array.isArray(baseQueryObject.filters)
+      ? baseQueryObject.filters
+      : [];
+    const dhis2Filters = dhis2ColumnFilterClauses(formData);
+
     let queryObject = {
       ...baseQueryObject,
       columns,
@@ -254,6 +285,7 @@ const buildQuery: BuildQuery<TableChartFormData> = (
       metrics,
       post_processing: postProcessing,
       time_offsets: timeOffsets,
+      filters: [...existingFilters, ...dhis2Filters],
       ...moreProps,
     };
 

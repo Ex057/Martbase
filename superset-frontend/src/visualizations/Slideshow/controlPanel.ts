@@ -18,6 +18,8 @@
  */
 import { t } from '@superset-ui/core';
 import { ControlPanelConfig, getStandardizedControls } from '@superset-ui/chart-controls';
+import { dhis2DataFiltersSection } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
+import { chartAutoSubtitleSection } from 'src/components/ChartTitleBlock';
 
 const config: ControlPanelConfig = {
   controlPanelSections: [
@@ -26,6 +28,8 @@ const config: ControlPanelConfig = {
       expanded: true,
       controlSetRows: [['metrics'], ['adhoc_filters']],
     },
+    dhis2DataFiltersSection,
+    chartAutoSubtitleSection,
     {
       label: t('Playback'),
       expanded: true,

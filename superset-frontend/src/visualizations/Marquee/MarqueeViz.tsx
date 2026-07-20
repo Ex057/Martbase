@@ -19,6 +19,10 @@
 
 import React, { FC, useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { styled, t } from '@superset-ui/core';
+import {
+  ChartTitleBlock,
+  chartTitleHeight,
+} from 'src/components/ChartTitleBlock';
 import { MarqueeChartProps, MarqueeKpiItem, MarqueePlacement, MarqueeOrientation } from './types';
 
 // ─── Styled Components ───────────────────────────────────────────────────────
@@ -357,7 +361,11 @@ const MarqueeViz: FC<MarqueeChartProps> = (props) => {
     showSeparators,
     height,
     width: _width,
+    chartTitle,
   } = props;
+
+  const titleHeight = chartTitle ? chartTitleHeight(chartTitle) : 0;
+  const contentHeight = height - titleHeight;
 
   const [paused, setPaused] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -407,18 +415,23 @@ const MarqueeViz: FC<MarqueeChartProps> = (props) => {
   }
 
   // Duplicate items for seamless loop when autoLoop is enabled
-  const displayItems = autoLoop ? [...items, ...items] : items;
+  const displayItems = useMemo(
+    () => (autoLoop ? [...items, ...items] : items),
+    [items, autoLoop],
+  );
 
   return (
-    <Wrapper
-      ref={wrapperRef}
-      $containerBackground={cssRgba(containerBackground)}
-      $containerHeight={containerHeight}
-      $isVertical={isVertical}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      style={{ height: isVertical ? height : containerHeight }}
-    >
+    <>
+      {chartTitle && <ChartTitleBlock {...chartTitle} />}
+      <Wrapper
+        ref={wrapperRef}
+        $containerBackground={cssRgba(containerBackground)}
+        $containerHeight={containerHeight}
+        $isVertical={isVertical}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        style={{ height: isVertical ? contentHeight : containerHeight }}
+      >
       <Track
         ref={trackRef}
         $isVertical={isVertical}
@@ -438,7 +451,8 @@ const MarqueeViz: FC<MarqueeChartProps> = (props) => {
           </React.Fragment>
         ))}
       </Track>
-    </Wrapper>
+      </Wrapper>
+    </>
   );
 };
 

@@ -21,6 +21,7 @@ import {
   QueryFormData,
   ensureIsArray,
 } from '@superset-ui/core';
+import { dhis2ColumnFilterClauses } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 export default function buildQuery(formData: QueryFormData) {
   const { series_limit_metric } = formData;
@@ -37,10 +38,17 @@ export default function buildQuery(formData: QueryFormData) {
       // when no "sort by" metric is set (regardless if "SORT DESC" is set to true)
       orderby = [[metrics[0], false]];
     }
+
+    const existingFilters = Array.isArray(baseQueryObject.filters)
+      ? baseQueryObject.filters
+      : [];
+    const dhis2Filters = dhis2ColumnFilterClauses(formData);
+
     return [
       {
         ...baseQueryObject,
         orderby,
+        filters: [...existingFilters, ...dhis2Filters],
       },
     ];
   });

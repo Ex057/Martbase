@@ -18,16 +18,25 @@
  */
 import { buildQueryContext } from '@superset-ui/core';
 import { histogramOperator } from '@superset-ui/chart-controls';
+import { dhis2ColumnFilterClauses } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 import { HistogramFormData } from './types';
 
 export default function buildQuery(formData: HistogramFormData) {
   const { column, groupby = [] } = formData;
-  return buildQueryContext(formData, baseQueryObject => [
-    {
-      ...baseQueryObject,
-      columns: [...groupby, column],
-      post_processing: [histogramOperator(formData, baseQueryObject)],
-      metrics: undefined,
-    },
-  ]);
+  return buildQueryContext(formData, baseQueryObject => {
+    const existingFilters = Array.isArray(baseQueryObject.filters)
+      ? baseQueryObject.filters
+      : [];
+    const dhis2Filters = dhis2ColumnFilterClauses(formData);
+
+    return [
+      {
+        ...baseQueryObject,
+        columns: [...groupby, column],
+        filters: [...existingFilters, ...dhis2Filters],
+        post_processing: [histogramOperator(formData, baseQueryObject)],
+        metrics: undefined,
+      },
+    ];
+  });
 }

@@ -18,6 +18,7 @@
  */
 /* eslint-disable theme-colors/no-literal-colors */
 import { getMetricLabel, getNumberFormatter } from '@superset-ui/core';
+import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
 import { AgeSexPyramidFormData, AgeSexPyramidChartProps } from './types';
 
 export default function transformProps(chartProps: any): AgeSexPyramidChartProps {
@@ -241,5 +242,6 @@ export default function transformProps(chartProps: any): AgeSexPyramidChartProps
     femaleLabel,
     maleColor,
     femaleColor,
+    chartTitle: resolveChartTitle(chartProps.rawFormData),
   };
 }

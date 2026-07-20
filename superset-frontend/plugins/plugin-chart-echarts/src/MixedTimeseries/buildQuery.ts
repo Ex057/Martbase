@@ -36,6 +36,7 @@ import {
   timeCompareOperator,
   resampleOperator,
 } from '@superset-ui/chart-controls';
+import { dhis2ColumnFilterClauses } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 import {
   retainFormDataSuffix,
   removeFormDataSuffix,
@@ -49,8 +50,15 @@ export default function buildQuery(formData: QueryFormData) {
   const formData1 = removeFormDataSuffix(baseFormData, '_b');
   const formData2 = retainFormDataSuffix(baseFormData, '_b');
 
+  // Get DHIS2 filters from the main formData (not the split versions)
+  const dhis2Filters = dhis2ColumnFilterClauses(formData);
+
   const queryContexts = [formData1, formData2].map(fd =>
     buildQueryContext(fd, baseQueryObject => {
+      const existingFilters = Array.isArray(baseQueryObject.filters)
+        ? baseQueryObject.filters
+        : [];
+
       const queryObject = {
         ...baseQueryObject,
         columns: [
@@ -60,6 +68,7 @@ export default function buildQuery(formData: QueryFormData) {
           ...ensureIsArray(fd.groupby),
         ],
         series_columns: fd.groupby,
+        filters: [...existingFilters, ...dhis2Filters],
         ...(isXAxisSet(formData) ? {} : { is_timeseries: true }),
       };
 

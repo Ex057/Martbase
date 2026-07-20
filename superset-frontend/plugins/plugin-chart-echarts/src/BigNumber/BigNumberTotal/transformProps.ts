@@ -31,6 +31,7 @@ import { GenericDataType } from '@apache-superset/core/api/core';
 import { BigNumberTotalChartProps, BigNumberVizProps } from '../types';
 import { getDateFormatter, getOriginalLabel, parseMetricValue } from '../utils';
 import { Refs } from '../../types';
+import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
 
 export default function transformProps(
   chartProps: BigNumberTotalChartProps,
@@ -113,6 +114,10 @@ export default function transformProps(
   const colorThresholdFormatters =
     getColorFormatters(conditionalFormatting, data, theme, false) ??
     defaultColorFormatters;
+  const chartTitle = resolveChartTitle(
+    formData,
+    chartProps.datasource?.columns,
+  );
   return {
     width,
     height,
@@ -133,5 +138,6 @@ export default function transformProps(
     cardBorderRadius,
     valueColor,
     textAlign,
+    chartTitle,
   };
 }

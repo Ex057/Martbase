@@ -234,24 +234,39 @@ export const getRecentActivityObjs = (
   filters: Filter[],
   signal?: AbortSignal,
 ) =>
-  SupersetClient.get({ endpoint: recent, signal }).then(recentsRes => {
-    const res: any = {};
-    const distinctRes = lruCache<RecentActivity>(6);
-    recentsRes.json.result.reverse().forEach((record: RecentActivity) => {
-      distinctRes.set(record.item_url, record);
+  SupersetClient.get({ endpoint: recent, signal })
+    .then(recentsRes => {
+      const res: any = {};
+      const distinctRes = lruCache<RecentActivity>(6);
+      (recentsRes.json.result || []).reverse().forEach((record: RecentActivity) => {
+        distinctRes.set(record.item_url, record);
+      });
+      return getFilteredChartsandDashboards(
+        addDangerToast,
+        filters,
+        undefined,
+        undefined,
+        signal,
+      ).then(({ other }) => {
+        res.other = other;
+        res.viewed = distinctRes.values().reverse();
+        return res;
+      });
+    })
+    .catch(err => {
+      // Handle 404 or permission errors gracefully - return empty data
+      // This can happen if user doesn't have Log read permissions
+      return getFilteredChartsandDashboards(
+        addDangerToast,
+        filters,
+        undefined,
+        undefined,
+        signal,
+      ).then(({ other }) => ({
+        other,
+        viewed: [],
+      }));
     });
-    return getFilteredChartsandDashboards(
-      addDangerToast,
-      filters,
-      undefined,
-      undefined,
-      signal,
-    ).then(({ other }) => {
-      res.other = other;
-      res.viewed = distinctRes.values().reverse();
-      return res;
-    });
-  });
 
 export const createFetchRelated = createFetchResourceMethod('related');
 export const createFetchDistinct = createFetchResourceMethod('distinct');

@@ -54,6 +54,26 @@ const Styles = styled.div<PivotTableStylesProps>`
  `}
 `;
 
+const TitleBlock = styled.div<{
+  $align?: 'left' | 'center';
+  $titleColor?: string;
+}>`
+  padding: 8px 16px 4px;
+  text-align: ${({ $align }) => $align || 'left'};
+  .chart-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: ${({ $titleColor, theme }) => $titleColor || theme.colorText};
+    margin-bottom: 2px;
+  }
+  .chart-subtitle {
+    font-size: 12px;
+    color: ${({ theme }) => theme.colorTextSecondary};
+  }
+`;
+
+const TITLE_HEIGHT = 48;
+
 const PivotTableWrapper = styled.div`
   ${({ theme }) => `
     height: 100%;
@@ -184,7 +204,12 @@ export default function PivotTableChart(props: PivotTableProps) {
     onContextMenu,
     timeGrainSqla,
     allowRenderHtml,
+    chartTitle,
   } = props;
+
+  const hasTitleContent = chartTitle?.title || chartTitle?.subtitle;
+  const titleHeight = hasTitleContent ? TITLE_HEIGHT : 0;
+  const adjustedHeight = height - titleHeight;
 
   const theme = useTheme();
   const defaultFormatter = useMemo(
@@ -601,27 +626,39 @@ export default function PivotTableChart(props: PivotTableProps) {
   );
 
   return (
-    <Styles height={height} width={width} margin={theme.sizeUnit * 4}>
-      <PivotTableWrapper>
-        <PivotTable
-          data={unpivotedData}
-          rows={rows}
-          cols={cols}
-          aggregatorsFactory={aggregatorsFactory}
-          defaultFormatter={defaultFormatter}
-          customFormatters={metricFormatters}
-          aggregatorName={aggregateFunction}
-          vals={vals}
-          colOrder={colOrder}
-          rowOrder={rowOrder}
-          sorters={sorters}
-          tableOptions={tableOptions}
-          subtotalOptions={subtotalOptions}
-          namesMapping={verboseMap}
-          onContextMenu={handleContextMenu}
-          allowRenderHtml={allowRenderHtml}
-        />
-      </PivotTableWrapper>
-    </Styles>
+    <div style={{ height }}>
+      {hasTitleContent && (
+        <TitleBlock $align={chartTitle?.align} $titleColor={chartTitle?.titleColor}>
+          {chartTitle?.title && (
+            <div className="chart-title">{chartTitle.title}</div>
+          )}
+          {chartTitle?.subtitle && (
+            <div className="chart-subtitle">{chartTitle.subtitle}</div>
+          )}
+        </TitleBlock>
+      )}
+      <Styles height={adjustedHeight} width={width} margin={theme.sizeUnit * 4}>
+        <PivotTableWrapper>
+          <PivotTable
+            data={unpivotedData}
+            rows={rows}
+            cols={cols}
+            aggregatorsFactory={aggregatorsFactory}
+            defaultFormatter={defaultFormatter}
+            customFormatters={metricFormatters}
+            aggregatorName={aggregateFunction}
+            vals={vals}
+            colOrder={colOrder}
+            rowOrder={rowOrder}
+            sorters={sorters}
+            tableOptions={tableOptions}
+            subtotalOptions={subtotalOptions}
+            namesMapping={verboseMap}
+            onContextMenu={handleContextMenu}
+            allowRenderHtml={allowRenderHtml}
+          />
+        </PivotTableWrapper>
+      </Styles>
+    </div>
   );
 }

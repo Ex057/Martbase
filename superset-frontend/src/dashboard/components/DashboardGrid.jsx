@@ -79,7 +79,7 @@ const GridContent = styled.div`
     flex-direction: column;
     /* gutters between rows */
     & > div:not(:last-child):not(.empty-droptarget) {
-      ${!editMode && `margin-bottom: ${theme.sizeUnit * 4}px`};
+      ${!editMode && `margin-bottom: ${theme.sizeUnit * 2}px`};
     }
 
     /* Smooth transitions for layout reflow */
@@ -113,7 +113,8 @@ const GridContent = styled.div`
     }
 
     & > .empty-droptarget:last-child {
-      height: ${theme.sizeUnit * 24}px;
+      /* Large drop target while editing; minimal trailing space in view mode. */
+      height: ${editMode ? theme.sizeUnit * 24 : theme.sizeUnit * 8}px;
     }
 
     & > .empty-droptarget.empty-droptarget--full:only-child {

@@ -29,6 +29,8 @@ import {
 } from '@superset-ui/chart-controls';
 import { detectAvailablePresets, resolvePresetColumn } from './dhis2Presets';
 import { getDatasourceBoundaryLevels } from '../DHIS2Map/boundaryLevels';
+import { dhis2DataFiltersSection } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
+import { chartAutoSubtitleSection } from 'src/components/ChartTitleBlock';
 
 const categoricalSchemeRegistry = getCategoricalSchemeRegistry();
 const sequentialSchemeRegistry = getSequentialSchemeRegistry();
@@ -223,6 +225,8 @@ const config: ControlPanelConfig = {
         ['adhoc_filters'],
       ],
     },
+    chartAutoSubtitleSection,
+    dhis2DataFiltersSection,
     {
       label: t('Layout'),
       tabOverride: 'customize',
@@ -465,6 +469,49 @@ const config: ControlPanelConfig = {
                 });
                 return merged;
               },
+            },
+          },
+        ],
+        [
+          {
+            name: 'legend_classes',
+            config: {
+              type: 'SliderControl',
+              label: t('Color Classes'),
+              description: t(
+                'Number of color steps for mini-map panels. More classes show finer gradations.',
+              ),
+              default: 7,
+              min: 2,
+              max: 9,
+              step: 1,
+              renderTrigger: true,
+            },
+          },
+        ],
+        [
+          {
+            name: 'legend_reverse_colors',
+            config: {
+              type: 'CheckboxControl',
+              label: t('Reverse Colors'),
+              description: t(
+                'Invert the color ramp so low values get dark colors and high values get light colors.',
+              ),
+              default: false,
+              renderTrigger: true,
+            },
+          },
+        ],
+        [
+          {
+            name: 'legend_no_data_color',
+            config: {
+              type: 'ColorPickerControl',
+              label: t('No Data Color'),
+              description: t('Color for areas with missing or null values.'),
+              default: { r: 204, g: 204, b: 204, a: 1 },
+              renderTrigger: true,
             },
           },
         ],

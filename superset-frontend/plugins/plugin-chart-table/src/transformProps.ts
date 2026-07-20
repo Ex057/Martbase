@@ -44,6 +44,32 @@ import {
   getColorFormatters,
 } from '@superset-ui/chart-controls';
 
+/** Simplified chart title resolver for the Table plugin. */
+function resolveChartTitle(
+  formData: Record<string, unknown> | undefined,
+): {
+  title: string;
+  subtitle: string;
+  titleColor?: string;
+  subtitleColor?: string;
+  align: 'left' | 'center';
+} {
+  const readKey = (camel: string, snake: string) =>
+    formData?.[camel] ?? formData?.[snake];
+  const title = String(readKey('chartTitle', 'chart_title') || '').trim();
+  const subtitle = String(
+    readKey('chartSubtitle', 'chart_subtitle') || '',
+  ).trim();
+  const alignRaw = readKey('chartTitleAlign', 'chart_title_align');
+  return {
+    title,
+    subtitle,
+    titleColor: undefined,
+    subtitleColor: undefined,
+    align: alignRaw === 'left' ? 'left' : 'center',
+  };
+}
+
 import { isEmpty, merge } from 'lodash';
 import isEqualColumns from './utils/isEqualColumns';
 import DateWithFormatter from './utils/DateWithFormatter';
@@ -52,6 +78,7 @@ import {
   ColorSchemeEnum,
   DataColumnMeta,
   TableChartProps,
+  TableChartTitle,
   TableChartTransformedProps,
   TableColumnConfig,
 } from './types';
@@ -694,9 +721,99 @@ const transformProps = (
 
   const basicColorFormatters =
     comparisonColorEnabled && getBasicColorFormatter(baseQuery?.data, columns);
-  const columnColorFormatters =
-    getColorFormatters(conditionalFormatting, passedData, theme) ??
+
+  // When using time comparison, expand conditional formatting to include prefixed column names
+  // Original column "COUNT(*)" becomes "Main COUNT(*)", "# COUNT(*)", "△ COUNT(*)", "% COUNT(*)"
+  const expandedConditionalFormatting = isUsingTimeComparison
+    ? (conditionalFormatting || []).flatMap(
+        (config: ConditionalFormattingConfig) => {
+          if (!config?.column) return [config];
+          return [
+            { ...config, column: `${t('Main')} ${config.column}` },
+            { ...config, column: `# ${config.column}` },
+            { ...config, column: `△ ${config.column}` },
+            { ...config, column: `% ${config.column}` },
+          ];
+        },
+      )
+    : conditionalFormatting;
+
+  const conditionalColorFormatters =
+    getColorFormatters(expandedConditionalFormatting, passedData, theme) ??
     defaultColorFormatters;
+
+  // Color breakpoints support (from Color schemes panel)
+  const colorMode: string | undefined = (formData as Record<string, unknown>)
+    .color_mode as string | undefined;
+  const breakpointsRaw: Array<{
+    min?: number;
+    max?: number;
+    color?: { r: number; g: number; b: number; a?: number };
+  }> = ((formData as Record<string, unknown>).color_breakpoints as any[]) || [];
+  const defaultBreakpointColor = (formData as Record<string, unknown>)
+    .default_breakpoint_color as
+    | { r: number; g: number; b: number; a?: number }
+    | undefined;
+
+  const hasBreakpoints = breakpointsRaw.length > 0;
+
+  let breakpointColorFormatters: ColorFormatters = [];
+
+  const applyBreakpoints =
+    colorMode === 'breakpoints' || (colorMode == null && hasBreakpoints);
+
+  if (applyBreakpoints && hasBreakpoints) {
+    const metricLabels: string[] = (metrics || []).map((m: unknown) => {
+      try {
+        return getMetricLabel(m as Parameters<typeof getMetricLabel>[0]);
+      } catch {
+        return String(m);
+      }
+    });
+
+    // Generate column names that match actual column.key values
+    // When using time comparison, columns become prefixed: "Main X", "# X", "△ X", "% X"
+    const columnNames = isUsingTimeComparison
+      ? metricLabels.flatMap(label => [
+          `${t('Main')} ${label}`,
+          `# ${label}`,
+          `△ ${label}`,
+          `% ${label}`,
+        ])
+      : metricLabels;
+
+    const hasDefault =
+      defaultBreakpointColor != null &&
+      typeof defaultBreakpointColor.a === 'number' &&
+      defaultBreakpointColor.a > 0;
+
+    breakpointColorFormatters = columnNames.map(columnName => ({
+      column: columnName,
+      getColorFromValue: (value: number | string) => {
+        if (typeof value !== 'number') return undefined;
+        const bp = breakpointsRaw.find(b => {
+          const { min, max } = b;
+          if (min != null && max != null) return value >= min && value < max;
+          if (min != null) return value >= min;
+          if (max != null) return value < max;
+          return false;
+        });
+        if (bp?.color) {
+          return `rgba(${bp.color.r},${bp.color.g},${bp.color.b},1)`;
+        }
+        if (hasDefault) {
+          return `rgba(${defaultBreakpointColor.r},${defaultBreakpointColor.g},${defaultBreakpointColor.b},1)`;
+        }
+        return undefined;
+      },
+    }));
+  }
+
+  // Merge formatters: breakpoints take priority when color_mode is set
+  const columnColorFormatters: ColorFormatters =
+    colorMode === 'breakpoints'
+      ? breakpointColorFormatters
+      : [...breakpointColorFormatters, ...conditionalColorFormatters];
 
   const basicColorColumnFormatters = getBasicColorFormatterForColumn(
     baseQuery?.data,
@@ -725,6 +842,17 @@ const transformProps = (
   });
 
   const startDateOffset = chartProps.rawFormData?.start_date_offset;
+  const resolvedTitle = resolveChartTitle(chartProps.rawFormData);
+  const chartTitle: TableChartTitle | undefined =
+    resolvedTitle.title || resolvedTitle.subtitle
+      ? {
+          title: resolvedTitle.title || undefined,
+          subtitle: resolvedTitle.subtitle || undefined,
+          titleColor: resolvedTitle.titleColor,
+          align: resolvedTitle.align,
+        }
+      : undefined;
+
   return {
     height,
     width,
@@ -768,6 +896,7 @@ const transformProps = (
     hasServerPageLengthChanged,
     serverPageLength,
     slice_id,
+    chartTitle,
   };
 };
 

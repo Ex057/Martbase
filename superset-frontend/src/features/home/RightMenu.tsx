@@ -54,6 +54,7 @@ import UploadDataModal from 'src/features/databases/UploadDataModel';
 import { uploadUserPerms } from 'src/views/CRUD/utils';
 import { useThemeContext } from 'src/theme/ThemeProvider';
 import { useThemeMenuItems } from 'src/hooks/useThemeMenuItems';
+import applyPresetChartPalette from 'src/theme/applyChartPalette';
 import type { ThemePreset } from 'src/theme/presets';
 import { useLanguageMenuItems } from './LanguagePicker';
 import {
@@ -395,6 +396,12 @@ const RightMenu = ({
         '--pro-chart-palette',
         preset.chartPalette.join(','),
       );
+
+      // Route the palette into actual chart series colors (recolor live).
+      applyPresetChartPalette(preset.chartPalette, {
+        setAsDefault: true,
+        forceRecolor: true,
+      });
 
       // Persist which preset ID was applied (for checkmark in menu)
       try {
@@ -807,6 +814,11 @@ const RightMenu = ({
               inset-inline: ${theme.sizeUnit}px;
             }
           }
+
+          /* Submenu styling */
+          .ant-menu-submenu-popup .ant-menu-sub {
+            min-width: 200px;
+          }
         `}
         selectable={false}
         mode="horizontal"
@@ -814,6 +826,9 @@ const RightMenu = ({
         onOpenChange={onMenuOpen}
         disabledOverflow
         items={menuItems}
+        subMenuOpenDelay={0}
+        subMenuCloseDelay={0.8}
+        triggerSubMenuAction="click"
       />
       {navbarRight.documentation_url && (
         <>

@@ -66,10 +66,10 @@ interface GridStackGridProps {
 const GridStackContainer = styled.div<{ $editMode: boolean }>`
   ${({ theme, $editMode }) => css`
     position: relative;
-    min-height: 200px;
+    min-height: 120px;
 
     .grid-stack {
-      min-height: 100px !important;
+      min-height: 60px !important;
       ${$editMode &&
       css`
         background: repeating-linear-gradient(
@@ -90,13 +90,23 @@ const GridStackContainer = styled.div<{ $editMode: boolean }>`
       overflow: hidden !important;
       border-radius: ${theme.borderRadiusLG}px;
       background: ${theme.colorBgContainer};
-      border: 1px solid rgba(148, 163, 184, 0.22);
-      box-shadow: none;
-      transition: border-color 0.2s ease;
+      /* Theme-adaptive card: border + accent follow the active preset and
+         light/dark mode; a gentle hover lift makes tiles feel tactile. */
+      border: 1px solid ${theme.colorBorderSecondary};
+      box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.05),
+        0 1px 2px rgba(0, 0, 0, 0.03);
+      transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease,
+        transform 0.15s ease;
 
       &:hover {
-        border-color: rgba(148, 163, 184, 0.4);
-        box-shadow: none;
+        border-color: ${theme.colorPrimaryBorder};
+        box-shadow:
+          0 6px 18px rgba(0, 0, 0, 0.1),
+          0 2px 6px rgba(0, 0, 0, 0.06);
+        transform: translateY(-2px);
       }
     }
 
@@ -207,25 +217,67 @@ const GridStackContainer = styled.div<{ $editMode: boolean }>`
 
     /* Empty grid placeholder — visible drop zone when dashboard has no content */
     .gs-empty-placeholder {
-      min-height: 300px;
+      min-height: 200px;
       display: flex;
       align-items: center;
       justify-content: center;
       flex-direction: column;
-      gap: 12px;
+      gap: 16px;
       border: 2px dashed ${theme.colorBorderSecondary};
       border-radius: ${theme.borderRadiusLG}px;
       color: ${theme.colorTextDescription};
       font-size: 14px;
-      padding: 32px;
+      padding: 24px;
       text-align: center;
+      background: linear-gradient(
+        135deg,
+        rgba(248, 250, 252, 0.5) 0%,
+        rgba(241, 245, 249, 0.3) 100%
+      );
       transition:
         border-color 0.2s ease,
-        background 0.2s ease;
+        background 0.2s ease,
+        transform 0.2s ease;
+    }
+    .gs-empty-placeholder:hover {
+      border-color: ${theme.colorPrimaryBorderHover};
+      background: linear-gradient(
+        135deg,
+        rgba(248, 250, 252, 0.8) 0%,
+        rgba(241, 245, 249, 0.5) 100%
+      );
     }
     .gs-empty-placeholder.gs-empty-placeholder--active {
       border-color: ${theme.colorPrimary};
       background: ${theme.colorPrimaryBg};
+      transform: scale(1.005);
+    }
+    .gs-empty-placeholder-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: ${theme.colorPrimaryBg};
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 8px;
+    }
+    .gs-empty-placeholder-icon svg {
+      width: 28px;
+      height: 28px;
+      color: ${theme.colorPrimary};
+    }
+    .gs-empty-placeholder-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: ${theme.colorText};
+      margin-bottom: 4px;
+    }
+    .gs-empty-placeholder-hint {
+      font-size: 13px;
+      color: ${theme.colorTextSecondary};
+      max-width: 320px;
+      line-height: 1.5;
     }
 
     /* ---- Widget inner content ---- */
@@ -256,22 +308,30 @@ const GridStackContainer = styled.div<{ $editMode: boolean }>`
       width: 100%;
       height: 100%;
     }
-    /* Chart header — flat design aligned with Page Studio */
+    /* Chart header — clean, modern design */
     .gs-widget-inner .slice-header,
     .gs-widget-inner .chart-header,
     .gs-widget-inner [data-test='slice-header'] {
-      min-height: 32px;
+      min-height: 36px;
       flex-shrink: 0;
-      padding: 6px 10px !important;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.22) !important;
-      background: ${theme.colorBgContainer};
+      padding: 8px 12px !important;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.15) !important;
+      background: linear-gradient(
+        180deg,
+        ${theme.colorBgContainer} 0%,
+        rgba(248, 250, 252, 0.5) 100%
+      );
       margin: 0 !important;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
     .gs-widget-inner [data-test='slice-header'] .header-title {
       font-size: var(--pro-density-chart-title, 13px);
       font-weight: 600;
       color: var(--pro-navy, ${theme.colorText});
       letter-spacing: -0.01em;
+      line-height: 1.3;
     }
     .gs-widget-inner [data-test='slice-header'] .editable-title input,
     .gs-widget-inner [data-test='slice-header'] .editable-title span {
@@ -281,8 +341,18 @@ const GridStackContainer = styled.div<{ $editMode: boolean }>`
     .gs-widget-inner .chart-filter-context {
       font-size: 11px;
       color: var(--pro-text-secondary, ${theme.colorTextDescription});
-      margin-top: 1px;
-      opacity: 0.8;
+      margin-top: 2px;
+      opacity: 0.75;
+    }
+    /* Chart action buttons - subtle by default */
+    .gs-widget-inner .slice-header .right-side,
+    .gs-widget-inner [data-test='slice-header'] .chart-controls {
+      opacity: 0.5;
+      transition: opacity 0.15s ease;
+    }
+    .grid-stack-item:hover .gs-widget-inner .slice-header .right-side,
+    .grid-stack-item:hover .gs-widget-inner [data-test='slice-header'] .chart-controls {
+      opacity: 1;
     }
     .gs-widget-inner .chart-container,
     .gs-widget-inner .slice_container {
@@ -373,6 +443,67 @@ const GridStackContainer = styled.div<{ $editMode: boolean }>`
       font-size: 12px;
       padding: ${theme.sizeUnit * 4}px;
       text-align: center;
+    }
+
+    /* Orphaned widget - component doesn't exist in layout */
+    .gs-widget-orphaned {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: repeating-linear-gradient(
+        45deg,
+        ${theme.colorErrorBg},
+        ${theme.colorErrorBg} 10px,
+        transparent 10px,
+        transparent 20px
+      );
+      border: 2px dashed ${theme.colorError};
+      border-radius: ${theme.borderRadius}px;
+    }
+    .gs-widget-orphaned-delete {
+      position: absolute;
+      top: ${theme.sizeUnit * 2}px;
+      right: ${theme.sizeUnit * 2}px;
+      z-index: 10;
+      padding: ${theme.sizeUnit * 1.5}px;
+      border: 2px solid ${theme.colorError};
+      border-radius: ${theme.borderRadius}px;
+      background: ${theme.colorError};
+      cursor: pointer;
+      transition: transform 0.2s ease;
+
+      &:hover {
+        transform: scale(1.15);
+      }
+
+      svg {
+        color: white;
+      }
+    }
+    .gs-widget-orphaned-message {
+      text-align: center;
+      padding: ${theme.sizeUnit * 4}px;
+      background: ${theme.colorBgContainer};
+      border-radius: ${theme.borderRadius}px;
+      box-shadow: ${theme.boxShadowSecondary};
+    }
+    .gs-widget-orphaned-icon {
+      font-size: 28px;
+      color: ${theme.colorError};
+      margin-bottom: ${theme.sizeUnit}px;
+    }
+    .gs-widget-orphaned-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: ${theme.colorError};
+      margin-bottom: ${theme.sizeUnit}px;
+    }
+    .gs-widget-orphaned-hint {
+      font-size: 12px;
+      color: ${theme.colorTextSecondary};
     }
   `}
 `;
@@ -533,7 +664,33 @@ const WidgetContent = memo(
       return Number.isFinite(corrected) ? Math.max(corrected, 10) : columnWidth;
     }, [measuredWidth, columnWidth, component?.meta?.width]);
 
-    if (!component) return null;
+    // If component doesn't exist in layout, show orphaned widget placeholder
+    // with delete button so user can remove it
+    if (!component) {
+      return (
+        <div className="gs-widget-inner gs-widget-orphaned" ref={containerRef}>
+          {editMode && (
+            <div
+              className="gs-widget-orphaned-delete"
+              data-test="dashboard-delete-component-button"
+              role="presentation"
+              onMouseDown={event => event.stopPropagation()}
+            >
+              <DeleteComponentButton onDelete={handleDelete} iconSize="m" />
+            </div>
+          )}
+          <div className="gs-widget-orphaned-message">
+            <div className="gs-widget-orphaned-icon">✕</div>
+            <div className="gs-widget-orphaned-title">{t('Orphaned Container')}</div>
+            <div className="gs-widget-orphaned-hint">
+              {editMode
+                ? t('Click the delete button to remove')
+                : t('Enter edit mode to remove')}
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     // If chart ID exists but chart/slice data is missing, show a
     // graceful placeholder instead of the MissingChart error
@@ -738,8 +895,14 @@ const GridStackGrid = ({
   // the idSetKey to change mid-drag and trigger a full grid rebuild
   // (destroying portal targets and charts).
   const knownWidgetIdsRef = useRef<Set<string>>(new Set());
+  // Track if a rebuild was requested while dragging - will be executed on drag stop
+  const pendingRebuildRef = useRef(false);
+  // Track the sync version to detect stale updates
+  const syncVersionRef = useRef(0);
   const [dropIndicator, setDropIndicator] = useState<DropIndicatorState>(null);
   const [portalRevision, setPortalRevision] = useState(0);
+  // Force rebuild trigger - incremented when a deferred rebuild should execute
+  const [rebuildTrigger, setRebuildTrigger] = useState(0);
 
   const layout = useSelector(
     (state: any) => state.dashboardLayout?.present || state.dashboardLayout,
@@ -900,24 +1063,53 @@ const GridStackGrid = ({
       if (!(gs as any).engine) return;
 
       const items = gs.getGridItems();
+      const orphanedElements: HTMLElement[] = [];
       const currentWidgets: DashboardWidget[] = items
         .map(el => {
           const n = el.gridstackNode;
           const id = n?.id || el.getAttribute('gs-id') || '';
           if (!id) return null;
           const orig = widgets.find(w => w.id === id);
+
+          // CRITICAL: If we can't find the original widget, we MUST preserve
+          // the existing layout data to avoid losing chartId and other metadata.
+          // Skip widgets that have no corresponding layout entry - they are
+          // orphaned GridStack DOM elements that should not corrupt the state.
+          if (!orig) {
+            console.warn(`GridStack sync: widget ${id} not found in layout - scheduling cleanup`);
+            orphanedElements.push(el);
+            return null;
+          }
+
           return {
             id,
             x: n?.x ?? 0,
             y: n?.y ?? 0,
             w: n?.w ?? 4,
             h: n?.h ?? 4,
-            componentType: orig?.componentType || 'CHART',
-            meta: orig?.meta || {},
-            parentRowId: orig?.parentRowId,
+            componentType: orig.componentType || 'CHART',
+            meta: orig.meta || {},
+            parentRowId: orig.parentRowId,
           };
         })
         .filter(Boolean) as DashboardWidget[];
+
+      // Clean up orphaned DOM elements from GridStack after a short delay
+      // to avoid disrupting the current sync cycle
+      if (orphanedElements.length > 0 && !isDraggingRef.current) {
+        requestAnimationFrame(() => {
+          safeGs(currentGs => {
+            for (const el of orphanedElements) {
+              try {
+                currentGs.removeWidget(el, false);
+                portalTargets.current.delete(el.getAttribute('gs-id') || '');
+              } catch {
+                // Element may already be removed
+              }
+            }
+          });
+        });
+      }
 
       if (currentWidgets.length === 0) return;
 
@@ -951,6 +1143,8 @@ const GridStackGrid = ({
 
       if (Object.keys(diff).length > 0) {
         suppressSync.current = true;
+        // Track sync version to detect stale updates
+        const thisVersion = ++syncVersionRef.current;
         dispatch(updateComponents(diff));
         dispatch(setUnsavedChanges(true));
         // Double-rAF: let React commit the Redux update so the
@@ -959,14 +1153,17 @@ const GridStackGrid = ({
         // widgetKey change → full rebuild during a drag.
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            suppressSync.current = false;
+            // Only unsuppress if no newer sync has started
+            if (syncVersionRef.current === thisVersion) {
+              suppressSync.current = false;
+            }
           });
         });
       }
     } catch (e) {
       console.warn('GridStack sync error (safe to ignore):', e);
     }
-  }, [dispatch, layout, widgets, gridComponent?.id]);
+  }, [dispatch, layout, widgets, gridComponent?.id, safeGs]);
 
   /* ---- Build / rebuild GridStack ---- */
   useEffect(() => {
@@ -977,7 +1174,12 @@ const GridStackGrid = ({
     // grid mid-drag leaves those listeners dangling, and the subsequent
     // mouseup fires _triggerChangeEvent on a destroyed engine (the
     // "Cannot read properties of undefined (reading 'batchMode')" crash).
-    if (isDraggingRef.current) return;
+    if (isDraggingRef.current) {
+      // Mark that a rebuild is needed once drag completes
+      pendingRebuildRef.current = true;
+      return;
+    }
+    pendingRebuildRef.current = false;
 
     // --- Tear down any existing grid ---
     if (gsRef.current) {
@@ -1030,7 +1232,10 @@ const GridStackGrid = ({
       {
         column: GRID_COLUMN_COUNT,
         cellHeight: CELL_HEIGHT,
-        margin: GRID_GUTTER_SIZE / 2,
+        // Tight visual gutter between tiles (4px). This is GridStack's own render
+        // margin and is independent of the ChartHolder width formula, which
+        // measures actual container width — so tiles just pack closer.
+        margin: GRID_GUTTER_SIZE / 4,
         float: false,
         animate: true,
         staticGrid: !editMode,
@@ -1077,8 +1282,9 @@ const GridStackGrid = ({
       }
     };
     // ONLY rebuild when the set of widget IDs changes (add / remove),
-    // NOT when positions change (drag / resize).
-  }, [idSetKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    // NOT when positions change (drag / resize). Also rebuild when
+    // rebuildTrigger changes (deferred rebuild after drag completes).
+  }, [idSetKey, rebuildTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---- Toggle static / interactive ---- */
   useEffect(() => {
@@ -1109,6 +1315,11 @@ const GridStackGrid = ({
         }
       });
       syncToRedux();
+      // If a rebuild was requested during drag, trigger it now
+      if (pendingRebuildRef.current) {
+        pendingRebuildRef.current = false;
+        setRebuildTrigger(prev => prev + 1);
+      }
     };
 
     const onChange = () => {
@@ -1158,9 +1369,24 @@ const GridStackGrid = ({
             isOver && canDrop ? ' gs-empty-placeholder--active' : ''
           }`}
         >
-          {isOver && canDrop
-            ? t('Release to add to dashboard')
-            : t('Drag charts or components here')}
+          <div className="gs-empty-placeholder-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+          </div>
+          <div className="gs-empty-placeholder-title">
+            {isOver && canDrop
+              ? t('Release to add')
+              : t('Build your dashboard')}
+          </div>
+          <div className="gs-empty-placeholder-hint">
+            {isOver && canDrop
+              ? t('Drop to add this component to your dashboard')
+              : t('Drag charts and components from the sidebar to create your visualization')}
+          </div>
         </div>
       )}
 

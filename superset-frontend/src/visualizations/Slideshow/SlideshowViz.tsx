@@ -24,6 +24,7 @@ import React, {
   useMemo,
 } from 'react';
 import { styled, useTheme, t } from '@superset-ui/core';
+import { ChartTitleBlock } from 'src/components/ChartTitleBlock';
 import { SlideshowChartProps, SlideshowSlide, TransitionType } from './types';
 
 // ---------------------------------------------------------------------------
@@ -394,6 +395,7 @@ const SlideshowViz: React.FC<SlideshowChartProps> = ({
   arrowColor,
   progressBarColor,
   embeddedChartIds,
+  chartTitle,
 }) => {
   const theme = useTheme();
 
@@ -563,6 +565,13 @@ const SlideshowViz: React.FC<SlideshowChartProps> = ({
       aria-label={t('Slideshow')}
       aria-roledescription="carousel"
     >
+      {chartTitle && (
+        <ChartTitleBlock
+          title={chartTitle.title}
+          subtitle={chartTitle.subtitle}
+          align={chartTitle.align || 'center'}
+        />
+      )}
       {/* Slides */}
       <SlideViewport style={{ height: slideHeight }}>
         {entries.map((entry, idx) => {

@@ -978,6 +978,37 @@ const config: ControlPanelConfig = {
         ],
         [
           {
+            name: 'chart_auto_subtitle',
+            config: {
+              type: 'CheckboxControl',
+              label: t('Auto subtitle'),
+              renderTrigger: true,
+              default: false,
+              description: t(
+                "Automatically build the subtitle from the chart's active filters, " +
+                  'e.g. "Region: Bukedi, Busoga - Year > 2020". Uncheck to type your own subtitle.',
+              ),
+            },
+          },
+        ],
+        [
+          {
+            name: 'chart_auto_subtitle_metrics',
+            config: {
+              type: 'CheckboxControl',
+              label: t('Include metrics in subtitle'),
+              renderTrigger: true,
+              default: true,
+              description: t(
+                'Prepend metric names to the auto subtitle (e.g. "Malaria Cases · Last 12 months").',
+              ),
+              visibility: ({ controls }: any) =>
+                Boolean(controls?.chart_auto_subtitle?.value),
+            },
+          },
+        ],
+        [
+          {
             name: 'chart_subtitle',
             config: {
               type: 'TextControl',
@@ -985,6 +1016,8 @@ const config: ControlPanelConfig = {
               renderTrigger: true,
               default: '',
               description: t('Optional subtitle shown beneath the title.'),
+              visibility: ({ controls }: any) =>
+                !controls?.chart_auto_subtitle?.value,
             },
           },
         ],

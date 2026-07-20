@@ -604,6 +604,7 @@ const buildRelativePeriodOptions = (
 
 type DataMaskAction =
   | { type: 'ownState'; ownState: JsonObject }
+  | { type: 'reset' }
   | {
       type: 'filterState';
       extraFormData: ExtraFormData;
@@ -621,6 +622,13 @@ function reducer(draft: DataMask, action: DataMaskAction) {
         ...draft.ownState,
         ...action.ownState,
       };
+      return draft;
+    case 'reset':
+      // Authoritative clear: wipe filterState AND ownState so a cascade filter's
+      // groupby/ownState can't resurrect the selection after "Clear all".
+      draft.extraFormData = {};
+      draft.filterState = { value: undefined, label: undefined };
+      draft.ownState = {};
       return draft;
     case 'filterState':
       if (
@@ -780,6 +788,11 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
   const [search, setSearch] = useState('');
   const isChangedByUser = useRef(false);
   const prevDataRef = useRef(data);
+  // True from when a "Clear all" trigger fires until the cleared (undefined)
+  // value is confirmed written back. While set, the init / defaultToFirstItem
+  // effects must not re-apply a value, otherwise an async options refetch would
+  // resurrect the just-cleared selection.
+  const pendingClearRef = useRef(false);
   const [dataMask, dispatchDataMask] = useImmerReducer(reducer, {
     extraFormData: {},
     filterState,
@@ -1324,6 +1337,11 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
       return;
     }
 
+    // Don't re-apply any value while a Clear all is being processed.
+    if (pendingClearRef.current) {
+      return;
+    }
+
     // Case 1: Handle disabled state first
     if (isDisabled) {
       updateDataMask(null);
@@ -1382,6 +1400,11 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
   }, [data, col]);
 
   useEffect(() => {
+    // Don't re-default a value while a Clear all is being processed.
+    if (pendingClearRef.current) {
+      return;
+    }
+
     if (
       isChangedByUser.current &&
       filterState.value &&
@@ -1417,28 +1440,30 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
 
   useEffect(() => {
     setDataMask(dataMask);
+    // Complete the clear only once the cleared (undefined) value has actually
+    // been written back. Firing onClearAllComplete earlier (e.g. in the same
+    // tick as the trigger) lets the parent delete the trigger before cascade
+    // children have cleared, leaving stale selections behind.
+    if (
+      pendingClearRef.current &&
+      (dataMask.filterState?.value === undefined ||
+        dataMask.filterState?.value === null)
+    ) {
+      pendingClearRef.current = false;
+      onClearAllComplete?.(formData.nativeFilterId);
+    }
   }, [JSON.stringify(dataMask)]);
 
   useEffect(() => {
     if (clearAllTrigger) {
-      dispatchDataMask({
-        type: 'filterState',
-        extraFormData: {},
-        filterState: {
-          value: undefined,
-          label: undefined,
-        },
-      });
-
+      // Mark the clear as pending and wipe both filterState and ownState. The
+      // completion callback fires from the write-back effect above once the
+      // cleared value is confirmed, so it can't race the async cascade refetch.
+      pendingClearRef.current = true;
+      dispatchDataMask({ type: 'reset' });
       setSearch('');
-      onClearAllComplete?.(formData.nativeFilterId);
     }
-  }, [
-    clearAllTrigger,
-    dispatchDataMask,
-    formData.nativeFilterId,
-    onClearAllComplete,
-  ]);
+  }, [clearAllTrigger, dispatchDataMask]);
 
   useEffect(() => {
     if (prevExcludeFilterValues.current !== excludeFilterValues) {
@@ -1515,6 +1540,15 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
             ref={inputRef}
             loading={isRefreshing}
             oneLine={filterBarOrientation === FilterBarOrientation.Horizontal}
+            // In the vertical bar, collapse selected chips to fit a single line
+            // with a "+N" overflow tag instead of wrapping onto multiple rows
+            // (which overflowed into the next filter). Horizontal already uses
+            // `oneLine`, which sets its own maxTagCount.
+            maxTagCount={
+              filterBarOrientation === FilterBarOrientation.Vertical
+                ? 'responsive'
+                : undefined
+            }
             invertSelection={inverseSelection && excludeFilterValues}
             options={options}
             sortComparator={sortComparator}

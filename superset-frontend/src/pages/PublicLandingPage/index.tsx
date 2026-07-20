@@ -43,6 +43,7 @@ import {
 } from 'antd';
 import { useHistory, useLocation } from 'react-router-dom';
 import logoImage from 'src/assets/images/loog.jpg';
+import getBootstrapData from 'src/utils/getBootstrapData';
 import DashboardPage from 'src/dashboard/containers/DashboardPage';
 import {
   createDraftPage,
@@ -64,6 +65,18 @@ import type {
 import usePublicPortal from './usePublicPortal';
 
 type VisualMode = 'light' | 'dark';
+
+// Auth state for the portal navbar. The public shell embeds the current user and
+// logout URL in bootstrap data (see get_spa_payload), so an already-authenticated
+// visitor can be shown a real "Logout" (which hits the server and clears the
+// session) instead of a "Login" that would silently re-admit them.
+// NB: anonymous visitors get an empty user payload (no `isAnonymous`, no `userId`)
+// from bootstrap_user_data, so only a present `userId` reliably means logged-in.
+const bootstrapData = getBootstrapData();
+const isAuthenticatedVisitor = bootstrapData.user?.userId != null;
+const userLogoutUrl =
+  bootstrapData.common?.menu_data?.navbar_right?.user_logout_url ||
+  '/login/logout/';
 
 const PAGE_QUERY_PARAM = 'page';
 const DASHBOARD_QUERY_PARAM = 'dashboard';
@@ -112,11 +125,9 @@ const StickyHeader = styled.header`
   color: var(--portal-header-text, #ffffff);
 `;
 
-const HeaderInner = styled.div<{ $maxWidth: string }>`
+const HeaderInner = styled.div`
   width: 100%;
-  max-width: ${({ $maxWidth }) => $maxWidth};
-  margin: 0 auto;
-  padding: 16px 24px;
+  padding: 16px 32px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -349,11 +360,9 @@ const Footer = styled.footer`
   background: var(--portal-footer-bg);
 `;
 
-const FooterInner = styled.div<{ $maxWidth: string }>`
+const FooterInner = styled.div`
   width: 100%;
-  max-width: ${({ $maxWidth }) => $maxWidth};
-  margin: 0 auto;
-  padding: 22px 24px 28px;
+  padding: 22px 32px 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -686,9 +695,6 @@ export default function PublicLandingPage() {
   const themeTokens = currentPage?.rendering?.theme?.tokens || {};
   const themeColors = themeTokens.colors || {};
   const themeContainers = themeTokens.containers || {};
-  const shellMaxWidth = resolveMaxWidth(
-    data?.portal_layout.config.pageMaxWidth,
-  );
   const contentMaxWidth = resolveMaxWidth(
     currentPage?.settings?.pageMaxWidth,
     themeContainers.pageMaxWidth,
@@ -1443,7 +1449,7 @@ export default function PublicLandingPage() {
         `}
       </style>
       <StickyHeader ref={stickyHeaderRef}>
-        <HeaderInner $maxWidth={shellMaxWidth}>
+        <HeaderInner>
           {/* ── Left: Brand | Welcome | Dashboard Select ── */}
           <HeaderLeft>
             <Brand type="button" onClick={openHomepage}>
@@ -1521,20 +1527,29 @@ export default function PublicLandingPage() {
             >
               {t('About')}
             </NavButton>
-            {data?.config.navbar.loginButton.enabled !== false && (
+            {isAuthenticatedVisitor ? (
               <Button
                 type={data?.config.navbar.loginButton?.type || 'primary'}
-                onClick={() =>
-                  navigateToPath(
-                    data?.portal_layout.config.loginButtonUrl ||
-                      data?.config.navbar.loginButton?.url,
-                  )
-                }
+                onClick={() => navigateToPath(userLogoutUrl)}
               >
-                {data?.portal_layout.config.loginButtonText ||
-                  data?.config.navbar.loginButton?.text ||
-                  t('Sign in')}
+                {t('Logout')}
               </Button>
+            ) : (
+              data?.config.navbar.loginButton.enabled !== false && (
+                <Button
+                  type={data?.config.navbar.loginButton?.type || 'primary'}
+                  onClick={() =>
+                    navigateToPath(
+                      data?.portal_layout.config.loginButtonUrl ||
+                        data?.config.navbar.loginButton?.url,
+                    )
+                  }
+                >
+                  {data?.portal_layout.config.loginButtonText ||
+                    data?.config.navbar.loginButton?.text ||
+                    t('Sign in')}
+                </Button>
+              )
             )}
           </HeaderRight>
         </HeaderInner>
@@ -1719,7 +1734,7 @@ export default function PublicLandingPage() {
       </PageContentShell>
 
       <Footer>
-        <FooterInner $maxWidth={shellMaxWidth}>
+        <FooterInner>
           <div>
             {data?.portal_layout.config.footerText ||
               data?.config.footer.text ||

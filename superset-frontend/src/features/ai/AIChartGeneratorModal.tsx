@@ -430,15 +430,58 @@ const CUSTOM_VIZ_TYPES = new Set([
   'cartodiagram',
 ]);
 
+// Categorized DHIS2-aware suggestions for health analytics
+const SUGGESTIONS_BY_CATEGORY = {
+  disease_surveillance: [
+    'Show disease case trends over time by district',
+    'Map confirmed cases by region with drill-down to facility',
+    'Compare test positivity rates across facilities',
+    'Create outbreak monitoring dashboard with trend lines and maps',
+    'Show weekly/monthly incidence rates with threshold alerts',
+  ],
+  service_delivery: [
+    'Track ANC/PNC coverage trends by facility over time',
+    'Compare immunization coverage vs targets by district',
+    'Show OPD attendance patterns by age group and sex',
+    'Rank facilities by service delivery performance',
+    'Create maternal health cascade visualization',
+  ],
+  supply_chain: [
+    'Monitor commodity stock levels and consumption rates',
+    'Show stock-out rates by product and facility',
+    'Track months of stock with understock/overstock alerts',
+    'Compare stock availability across regions',
+  ],
+  cascade_analysis: [
+    'Create HIV 90-90-90 cascade by district',
+    'Show TB treatment cascade with drop-off analysis',
+    'Visualize PMTCT cascade progression',
+    'Build care continuum funnel chart',
+  ],
+  geographic: [
+    'Choropleth map of key indicators by district',
+    'Compare regions on health performance metrics',
+    'Drill-down map from national to facility level',
+    'Show geographic distribution with boundary layers',
+  ],
+  kpi_summary: [
+    'Create KPI summary cards for key health indicators',
+    'Build executive dashboard with sparklines and trends',
+    'Show headline metrics with period comparisons',
+    'Create scrolling KPI ticker for public display',
+  ],
+};
+
+// Default suggestions shown (mix from different categories)
 const SUGGESTIONS = [
-  'Create a dashboard for malaria case analysis with trends, positivity rates, and district comparisons',
-  'Show testing volumes and positivity rates over time by facility',
-  'Compare treatment outcomes across districts with bar and pie charts',
-  'Create summary KPI cards for total cases, tests, and positivity rate',
-  'Visualize commodity stock levels and consumption trends',
-  'Show geographic distribution of malaria cases on a DHIS2 map',
-  'Create time series charts for monthly malaria incidence trends',
-  'Build a pivot table of cases by period and organisation unit',
+  SUGGESTIONS_BY_CATEGORY.disease_surveillance[0],
+  SUGGESTIONS_BY_CATEGORY.service_delivery[0],
+  SUGGESTIONS_BY_CATEGORY.geographic[0],
+  SUGGESTIONS_BY_CATEGORY.kpi_summary[0],
+  SUGGESTIONS_BY_CATEGORY.cascade_analysis[0],
+  SUGGESTIONS_BY_CATEGORY.supply_chain[0],
+  SUGGESTIONS_BY_CATEGORY.disease_surveillance[1],
+  SUGGESTIONS_BY_CATEGORY.service_delivery[1],
 ];
 
 type DatasetOption = {

@@ -343,16 +343,74 @@ export function datasourcePeriodColumns(columns: LabelledColumn[] = []) {
     .map(column => column.column_name as string);
 }
 
+/** Options for buildFilterSubtitle. */
+export interface BuildFilterSubtitleOptions {
+  /** Include metric names as a prefix (e.g., "Malaria Cases · Last 12 months"). */
+  includeMetricPrefix?: boolean;
+}
+
+/**
+ * Extract a display label from a metric definition.
+ * Handles string metrics, object metrics with label/column, and aggregate expressions.
+ */
+function getMetricDisplayLabel(metric: any): string | null {
+  if (!metric) return null;
+  if (typeof metric === 'string') return metric;
+  if (typeof metric === 'object') {
+    // Check for explicit label first
+    if (metric.label) return String(metric.label);
+    // Then column-based metric
+    if (metric.column?.column_name) return String(metric.column.column_name);
+    if (metric.column?.verbose_name) return String(metric.column.verbose_name);
+    // SQL expression metric
+    if (metric.sqlExpression) {
+      const expr = String(metric.sqlExpression);
+      // Try to extract a readable name from simple aggregates like SUM(column)
+      const match = expr.match(/^\s*\w+\s*\(\s*(\w+)\s*\)\s*$/);
+      return match ? match[1] : expr.slice(0, 30);
+    }
+  }
+  return null;
+}
+
+/**
+ * Build a prefix string from the chart's selected metrics.
+ * Shows up to 2 metric names, then "+N" for additional ones.
+ */
+function buildMetricPrefix(formData: Record<string, any> | undefined): string {
+  const metrics = readFormDataKey(formData, 'metrics', 'metrics');
+  const metric = readFormDataKey(formData, 'metric', 'metric');
+
+  // Normalize to array
+  const allMetrics = [
+    ...(Array.isArray(metrics) ? metrics : metrics ? [metrics] : []),
+    ...(metric && !metrics ? [metric] : []),
+  ];
+
+  const labels = allMetrics
+    .map(getMetricDisplayLabel)
+    .filter((label): label is string => !!label);
+
+  if (labels.length === 0) return '';
+  if (labels.length <= 2) return labels.join(', ');
+  return `${labels.slice(0, 2).join(', ')} +${labels.length - 2}`;
+}
+
 /**
  * The subtitle for a chart that has no context of its own: every active filter,
  * in the order the user added them. This is what the shared ECharts title
  * helper calls, so all 22 chart types behave identically.
+ *
+ * With `includeMetricPrefix: true`, prepends metric names:
+ *   "Malaria Cases · Last 12 months · Region: Bukedi"
  */
 export function buildFilterSubtitle(
   formData: Record<string, any> | undefined,
   columns: LabelledColumn[] = [],
   extraPrefix: string[] = [],
+  options: BuildFilterSubtitleOptions = {},
 ): string {
+  const { includeMetricPrefix = false } = options;
   const columnLabel = makeColumnLabeller(columns);
   const timeColumn = readFormDataKey(
     formData,
@@ -367,8 +425,15 @@ export function buildFilterSubtitle(
     'dhis2_column_filters',
   );
 
+  // Build prefix: extra prefix + optional metric names
+  const prefix = [...extraPrefix];
+  if (includeMetricPrefix) {
+    const metricPrefix = buildMetricPrefix(formData);
+    if (metricPrefix) prefix.push(metricPrefix);
+  }
+
   return buildAutoSubtitle({
-    prefix: extraPrefix,
+    prefix,
     filters: [
       ...dhis2FilterSegments(Array.isArray(dhis2) ? dhis2 : [], {
         columnLabel,
@@ -447,8 +512,15 @@ export function resolveChartTitle(
     'chart_subtitle',
   );
   const manualSubtitle = rawSubtitle ? String(rawSubtitle).trim() : '';
+  const includeMetricPrefix = Boolean(
+    readFormDataKey(
+      formData,
+      'chartAutoSubtitleMetrics',
+      'chart_auto_subtitle_metrics',
+    ) ?? true, // Default to true when not explicitly set
+  );
   const subtitle = isAutoSubtitleEnabled(formData)
-    ? buildFilterSubtitle(formData, columns, extraPrefix)
+    ? buildFilterSubtitle(formData, columns, extraPrefix, { includeMetricPrefix })
     : manualSubtitle;
 
   return {

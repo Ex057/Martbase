@@ -213,10 +213,6 @@ const MapCanvas = styled.div<{ $backgroundColor?: string }>`
     will-change: transform;
   }
 
-  .leaflet-pane {
-    z-index: auto;
-  }
-
   .leaflet-container .leaflet-interactive:focus,
   .leaflet-container .leaflet-interactive:focus-visible,
   .leaflet-container svg path:focus,
@@ -431,13 +427,13 @@ function fitMapToBoundaries(
     });
   };
 
-  map.invalidateSize({ pan: false, reset: true });
+  map.invalidateSize({ pan: false });
   applyFit();
 
   // Re-fit after the browser has settled layout, so a container that was still
   // sizing on the first pass ends up correctly framed.
   requestAnimationFrame(() => {
-    map.invalidateSize({ pan: false, reset: true });
+    map.invalidateSize({ pan: false });
     applyFit();
   });
 
@@ -570,7 +566,7 @@ function MapInstanceBridge({
         cancelAnimationFrame(animationFrame);
       }
       animationFrame = requestAnimationFrame(() => {
-        map.invalidateSize({ pan: false, reset: true });
+        map.invalidateSize({ pan: false });
         animationFrame = null;
       });
     };
@@ -3629,6 +3625,7 @@ function DHIS2Map({
         </div>
       `;
 
+      console.log('[DHIS2Map] bindTooltip for:', feature.properties?.name, { value, metricDisplayName });
       layer.bindTooltip(tooltipContent, {
         sticky: true,
         permanent: false,
@@ -3640,6 +3637,7 @@ function DHIS2Map({
 
       // Add hover handlers for better interactivity
       handlers.mouseover = () => {
+        console.log('[DHIS2Map] mouseover:', feature.properties?.name, { value, tooltipRow });
         const originalStyle = getFeatureStyle(feature);
         vectorLayer.setStyle({
           ...originalStyle,

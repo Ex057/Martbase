@@ -17,6 +17,7 @@
  * under the License.
  */
 import { QueryFormData } from '@superset-ui/core';
+import { ResolvedChartTitle } from 'src/utils/chartAutoSubtitle';
 
 export type MiniChartType =
   | 'line'
@@ -152,4 +153,9 @@ export interface SmallMultiplesChartProps {
   panelIconUrl?: string;
   panelIconText?: string;
   panelIconSize?: number;
+  /* Color range settings */
+  legendClasses?: number;
+  legendReverseColors?: boolean;
+  legendNoDataColor?: string;
+  chartTitle?: ResolvedChartTitle | null;
 }

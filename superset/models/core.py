@@ -456,6 +456,19 @@ class Database(Model, AuditMixinNullable, ImportExportMixin):  # pylint: disable
 
     @property
     def repository_org_units_data(self) -> list[dict[str, Any]]:
+        # Cross-request memoization: rebuilding this payload calls `to_dict()`
+        # over every persisted org unit (can be tens of thousands) and runs on
+        # every DHIS2 cascade-filter dropdown request. The cache key includes
+        # `changed_on`, which is bumped whenever org units are (re)finalized
+        # (see DatabaseRepositoryOrgUnitService._set_status writing status /
+        # last_finalized_at columns), so a sync automatically busts the entry.
+        return self._repository_org_units_data_cached()
+
+    @cache_util.memoized_func(
+        key="db:{self.id}:repo_org_units:{self.changed_on}",
+        cache=cache_manager.cache,
+    )
+    def _repository_org_units_data_cached(self) -> list[dict[str, Any]]:
         status = self.repository_org_unit_effective_status
         persisted_units = getattr(self, "repository_org_units", None) or []
         persisted_payload = [

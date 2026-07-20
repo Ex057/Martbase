@@ -428,17 +428,14 @@ const FilterBar: FC<FiltersBarProps> = ({
       chartCustomizationItems.forEach(item => {
         if (item.customization?.column) {
           const customizationFilterId = `chart_customization_${item.id}`;
-          const dataMask = {
-            filterState: {
-              value: item.customization.column,
-            },
-            ownState: {
-              column: item.customization.column,
-            },
-            extraFormData: {},
-          };
-
-          dispatch(updateDataMask(customizationFilterId, dataMask));
+          // Clear the customization's data mask (reset filterState/ownState),
+          // not re-set it to the column value — this is the "Clear all" path.
+          dispatch(
+            updateDataMask(
+              customizationFilterId,
+              getInitialDataMask(customizationFilterId),
+            ),
+          );
           hasChartCustomizationsToClear = true;
         }
       });

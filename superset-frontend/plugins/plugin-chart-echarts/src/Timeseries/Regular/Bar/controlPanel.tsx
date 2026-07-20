@@ -42,6 +42,7 @@ import {
   xAxisLabelInterval,
   forceMaxInterval,
 } from '../../../controls';
+import { dhis2DataFiltersSection } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 import { OrientationType } from '../../types';
 import {
@@ -286,6 +287,7 @@ const config: ControlPanelConfig = {
     sections.annotationsAndLayersControls,
     sections.forecastIntervalControls,
     chartTitleSection,
+    dhis2DataFiltersSection,
     {
       label: t('Chart Orientation'),
       expanded: true,

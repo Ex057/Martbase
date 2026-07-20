@@ -78,4 +78,5 @@ export interface StockStatusChartProps {
   densityTier: string;
   nullValueText: string;
   showStatusHeader: boolean;
+  chartTitle?: { title: string; subtitle: string } | null;
 }

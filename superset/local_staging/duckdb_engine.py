@@ -49,6 +49,7 @@ import json
 import logging
 import os
 import re
+from collections.abc import Iterable
 from typing import Any, Iterator
 
 from superset.local_staging.admin_tools import (
@@ -86,6 +87,8 @@ _STAGING_COLUMNS = [
 
 _PG_IDENT_MAX = 63
 _SERVING_PREFIX = "sv"
+# Cap the number of distinct values returned per cascade-filter dropdown.
+_MAX_FILTER_OPTIONS = 1000
 
 
 def _sanitize_name(name: str) -> str:
@@ -1059,6 +1062,7 @@ class DuckDBStagingEngine(LocalStagingEngineBase):
         *,
         columns: list[dict[str, Any]] | None = None,
         filters: list[dict[str, Any]] | None = None,
+        only_columns: Iterable[str] | None = None,
     ) -> dict[str, Any]:
         """Return distinct org-unit hierarchy and period values from the serving table.
 
@@ -1072,12 +1076,23 @@ class DuckDBStagingEngine(LocalStagingEngineBase):
         if not available_col_names:
             return {"org_unit_filters": [], "period_filter": None}
 
+        # When a specific column is requested (a single cascade dropdown), skip
+        # computing options for every hierarchy level — the caller discards the
+        # rest, so it is pure wasted work.
+        only_column_set = (
+            {str(name).strip() for name in only_columns if str(name).strip()}
+            if only_columns is not None
+            else None
+        )
+
         # Parse column metadata to identify hierarchy / period columns
         hierarchy_columns: list[dict[str, Any]] = []
         period_filter: dict[str, Any] | None = None
         for col_spec in list(columns or []):
             col_name = str(col_spec.get("column_name") or "").strip()
             if not col_name or col_name not in available_col_names:
+                continue
+            if only_column_set is not None and col_name not in only_column_set:
                 continue
             raw_extra = col_spec.get("extra") or {}
             if isinstance(raw_extra, str):
@@ -1127,7 +1142,8 @@ class DuckDBStagingEngine(LocalStagingEngineBase):
             sql = (
                 f'SELECT "{col_name}" AS option_value, COUNT(*) AS row_count '
                 f"FROM {serving}{where_sql} "
-                f'GROUP BY "{col_name}" ORDER BY "{col_name}"'
+                f'GROUP BY "{col_name}" ORDER BY "{col_name}" '
+                f"LIMIT {_MAX_FILTER_OPTIONS}"
             )
             try:
                 rows = conn.execute(sql, params).fetchall()

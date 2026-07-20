@@ -38,6 +38,7 @@ import {
 } from '../types';
 import { getDateFormatter, parseMetricValue, getOriginalLabel } from '../utils';
 import { getDefaultTooltip } from '../../utils/tooltip';
+import { resolveChartTitle } from 'src/utils/chartAutoSubtitle';
 import { Refs } from '../../types';
 
 const formatPercentChange = getNumberFormatter(
@@ -336,6 +337,11 @@ export default function transformProps(
 
   const { onContextMenu } = hooks;
 
+  const chartTitle = resolveChartTitle(
+    formData,
+    chartProps.datasource?.columns,
+  );
+
   return {
     width,
     height,
@@ -369,5 +375,6 @@ export default function transformProps(
     cardBorderRadius,
     valueColor,
     textAlign,
+    chartTitle,
   };
 }

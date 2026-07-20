@@ -71,4 +71,5 @@ export interface ViolinDistributionChartProps {
   showLegend: boolean;
   showMean: boolean;
   showQuartileLabels: boolean;
+  chartTitle?: { title: string; subtitle: string } | null;
 }

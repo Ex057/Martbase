@@ -22,6 +22,8 @@ import {
   getStandardizedControls,
   sections,
 } from '@superset-ui/chart-controls';
+import { dhis2DataFiltersSection } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
+import { chartAutoSubtitleSection } from 'src/components/ChartTitleBlock';
 
 export const controlPanel: ControlPanelConfig = {
   controlPanelSections: [
@@ -63,6 +65,8 @@ export const controlPanel: ControlPanelConfig = {
         ],
       ],
     },
+    chartAutoSubtitleSection,
+    dhis2DataFiltersSection,
   ],
   controlOverrides: {
     groupby: {

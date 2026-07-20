@@ -18,6 +18,7 @@
  */
 import { t, ChartMetadata, ChartPlugin } from '@superset-ui/core';
 import { transformProps, controlPanel } from './config';
+import buildQuery from './buildQuery';
 import thumbnail from './images/thumbnail.png';
 import thumbnailDark from './images/thumbnail-dark.png';
 import example from './images/example.jpg';
@@ -34,7 +35,6 @@ const metadata = new ChartMetadata({
     t('Health'),
     t('Multi-Variables'),
     t('Comparison'),
-    t('Legacy'),
     t('Percentages'),
     t('Tabular'),
     t('Text'),
@@ -42,13 +42,13 @@ const metadata = new ChartMetadata({
   ],
   thumbnail,
   thumbnailDark,
-  useLegacyApi: true,
 });
 
 export default class TimeTableChartPlugin extends ChartPlugin {
   constructor() {
     super({
       metadata,
+      buildQuery,
       transformProps,
       loadChart: () => import('./TimeTable'),
       controlPanel,

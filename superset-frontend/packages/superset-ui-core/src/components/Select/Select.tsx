@@ -715,8 +715,17 @@ const Select = forwardRef(
       return num_selected - num_shown - (selectAllMode ? 1 : 0);
     }, [stableMaxTagCount, selectAllMode, selectValue]);
 
-    const customMaxTagPlaceholder = () =>
-      `+ ${omittedCount > 0 ? omittedCount : 1} ...`;
+    const customMaxTagPlaceholder = (omittedValues?: unknown[]) => {
+      // When maxTagCount is 'responsive', stableMaxTagCount is not a number, so
+      // `omittedCount` is NaN. Prefer the actual overflow list antd passes in;
+      // fall back to the computed count for fixed numeric maxTagCount.
+      const responsiveCount = Array.isArray(omittedValues)
+        ? omittedValues.length
+        : undefined;
+      const count =
+        responsiveCount ?? (omittedCount > 0 ? omittedCount : 1);
+      return `+ ${count} ...`;
+    };
 
     // We can't remove the + tag so when Select All
     // is the only item omitted, we subtract one from maxTagCount

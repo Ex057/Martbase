@@ -29,6 +29,7 @@ import {
 } from '@superset-ui/core';
 import { ColorFormatters } from '@superset-ui/chart-controls';
 import { BaseChartProps, Refs } from '../types';
+import { ResolvedChartTitle } from 'src/utils/chartAutoSubtitle';
 
 export interface BigNumberDatum {
   [key: string]: number | null;
@@ -116,4 +117,5 @@ export type BigNumberVizProps = {
   cardBorderRadius?: number;
   valueColor?: { r: number; g: number; b: number; a: number } | null;
   textAlign?: TextAlign;
+  chartTitle?: ResolvedChartTitle;
 };

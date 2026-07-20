@@ -22,6 +22,7 @@ import {
   Metric,
   SimpleAdhocFilter,
 } from '@superset-ui/core';
+import { ResolvedChartTitle } from 'src/utils/chartAutoSubtitle';
 
 export type FontSizeOptions = 'xs' | 's' | 'm' | 'l' | 'xl' | 'xxl';
 
@@ -78,6 +79,7 @@ export type PopKPIProps = PopKPIStylesProps &
     shift: string;
     dashboardTimeRange?: string;
     columnConfig?: Record<string, TableColumnConfig>;
+    chartTitle?: ResolvedChartTitle;
   };
 
 export enum ColorSchemeEnum {

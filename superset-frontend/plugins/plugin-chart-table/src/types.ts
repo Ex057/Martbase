@@ -176,11 +176,19 @@ export interface TableChartTransformedProps<D extends DataRecord = DataRecord> {
   hasServerPageLengthChanged: boolean;
   serverPageLength: number;
   slice_id: number;
+  chartTitle?: TableChartTitle;
 }
 
 export enum ColorSchemeEnum {
   'Green' = 'Green',
   'Red' = 'Red',
+}
+
+export interface TableChartTitle {
+  title?: string;
+  subtitle?: string;
+  titleColor?: string;
+  align?: 'left' | 'center';
 }
 
 export default {};

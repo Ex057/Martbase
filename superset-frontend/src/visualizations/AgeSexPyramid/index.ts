@@ -19,6 +19,7 @@
 import { Behavior, t, ChartMetadata, ChartPlugin } from '@superset-ui/core';
 import transformProps from './transformProps';
 import controlPanel from './controlPanel';
+import buildQuery from './buildQuery';
 import thumbnail from './images/thumbnailUrl';
 
 export default class AgeSexPyramidChartPlugin extends ChartPlugin {
@@ -40,6 +41,7 @@ export default class AgeSexPyramidChartPlugin extends ChartPlugin {
         ],
         behaviors: [Behavior.InteractiveChart],
       }),
+      buildQuery,
       controlPanel,
       transformProps,
       loadChart: () => import('./AgeSexPyramidViz'),

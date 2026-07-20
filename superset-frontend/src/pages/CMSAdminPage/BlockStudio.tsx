@@ -18,7 +18,7 @@
  */
 /* eslint-disable no-restricted-imports, theme-colors/no-literal-colors, import/no-extraneous-dependencies */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AppstoreOutlined,
   BarChartOutlined,
@@ -47,7 +47,6 @@ import {
   PictureOutlined,
   ProfileOutlined,
   SaveOutlined,
-  SettingOutlined,
   TableOutlined,
   TabletOutlined,
   VideoCameraOutlined,
@@ -111,19 +110,476 @@ import type {
 } from 'src/pages/PublicLandingPage/types';
 import { resolvePortalPagePath } from 'src/pages/PublicLandingPage/portalUtils';
 import RichTextComposer, { extractPlainText } from './RichTextComposer';
+import AIPageGenerator from './AIPageGenerator';
 
-const StudioLayout = styled.div`
+// ============================================================================
+// NEW 3-PANEL LAYOUT COMPONENTS
+// ============================================================================
+
+const StudioRoot = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  height: calc(100vh - 76px);
+  overflow: hidden;
+  background: #f1f5f9;
 `;
 
-const Panel = styled.div`
-  padding: 18px 20px;
-  border-radius: 14px;
+const StudioHeader = styled.header`
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  height: 52px;
+  padding: 0 16px;
   background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  flex-shrink: 0;
 `;
+
+const HeaderLeft = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+`;
+
+const HeaderCenter = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+`;
+
+const HeaderRight = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const StudioWorkspace = styled.div<{ $leftCollapsed?: boolean }>`
+  display: grid;
+  grid-template-columns: ${({ $leftCollapsed }) =>
+    $leftCollapsed ? '56px 1fr 280px' : '260px 1fr 280px'};
+  flex: 1;
+  overflow: hidden;
+  transition: grid-template-columns 0.2s ease;
+
+  @media (max-width: 1200px) {
+    grid-template-columns: ${({ $leftCollapsed }) =>
+      $leftCollapsed ? '56px 1fr 260px' : '220px 1fr 260px'};
+  }
+
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const LibraryPanel = styled.aside<{ $collapsed?: boolean }>`
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border-right: 1px solid #e2e8f0;
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+  @media (max-width: 900px) {
+    position: absolute;
+    left: 0;
+    top: 52px;
+    height: calc(100vh - 128px);
+    width: 280px;
+    transform: translateX(${({ $collapsed }) => ($collapsed ? '-100%' : '0')});
+    transition: transform 0.3s ease;
+    z-index: 50;
+    box-shadow: ${({ $collapsed }) =>
+      $collapsed ? 'none' : '4px 0 24px rgba(0,0,0,0.12)'};
+  }
+`;
+
+const LibraryHeader = styled.div<{ $collapsed?: boolean }>`
+  padding: ${({ $collapsed }) => ($collapsed ? '12px 8px' : '14px 16px')};
+  border-bottom: 1px solid #e2e8f0;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: ${({ $collapsed }) => ($collapsed ? 'center' : 'space-between')};
+  flex-shrink: 0;
+`;
+
+const LibraryTitle = styled.h3<{ $collapsed?: boolean }>`
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #1e293b;
+  display: ${({ $collapsed }) => ($collapsed ? 'none' : 'block')};
+`;
+
+const LibraryCollapseBtn = styled.button`
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: #f1f5f9;
+    border-color: #0f766e;
+    color: #0f766e;
+  }
+`;
+
+const LibraryIconTabs = styled.div<{ $collapsed?: boolean }>`
+  display: flex;
+  flex-direction: ${({ $collapsed }) => ($collapsed ? 'column' : 'row')};
+  gap: ${({ $collapsed }) => ($collapsed ? '8px' : '6px')};
+  padding: ${({ $collapsed }) => ($collapsed ? '16px 8px' : '14px 16px')};
+  border-bottom: ${({ $collapsed }) => ($collapsed ? 'none' : '1px solid #e2e8f0')};
+  background: ${({ $collapsed }) => ($collapsed ? 'transparent' : '#fafbfc')};
+  align-items: center;
+  justify-content: ${({ $collapsed }) => ($collapsed ? 'flex-start' : 'flex-start')};
+  flex: ${({ $collapsed }) => ($collapsed ? '1' : '0 0 auto')};
+  overflow-y: ${({ $collapsed }) => ($collapsed ? 'auto' : 'visible')};
+`;
+
+const LibraryIconTab = styled.button<{ $active?: boolean; $collapsed?: boolean }>`
+  width: ${({ $collapsed }) => ($collapsed ? '40px' : '42px')};
+  height: ${({ $collapsed }) => ($collapsed ? '40px' : '42px')};
+  border-radius: 10px;
+  border: 1px solid ${({ $active }) => ($active ? '#0f766e' : 'transparent')};
+  background: ${({ $active }) =>
+    $active
+      ? 'linear-gradient(135deg, rgba(15, 118, 110, 0.12) 0%, rgba(15, 118, 110, 0.06) 100%)'
+      : 'transparent'};
+  color: ${({ $active }) => ($active ? '#0f766e' : '#64748b')};
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: ${({ $collapsed }) => ($collapsed ? '18px' : '20px')};
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+
+  &:hover {
+    background: rgba(15, 118, 110, 0.08);
+    color: #0f766e;
+    border-color: rgba(15, 118, 110, 0.3);
+  }
+`;
+
+const LibraryContent = styled.div<{ $collapsed?: boolean }>`
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: ${({ $collapsed }) => ($collapsed ? '0' : '16px')};
+  display: ${({ $collapsed }) => ($collapsed ? 'none' : 'block')};
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+  }
+`;
+
+const ComponentCategory = styled.div`
+  margin-bottom: 24px;
+`;
+
+const ComponentCategoryLabel = styled.h4`
+  margin: 0 0 12px 0;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #0f766e;
+  background: linear-gradient(90deg, rgba(15, 118, 110, 0.08) 0%, transparent 100%);
+  border-radius: 8px;
+  border-left: 3px solid #0f766e;
+`;
+
+const ComponentGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+`;
+
+const ComponentCard = styled.button<{ disabled?: boolean }>`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 10px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  cursor: ${({ disabled }) => (disabled ? 'not-allowed' : 'pointer')};
+  opacity: ${({ disabled }) => (disabled ? 0.5 : 1)};
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+
+  &:hover:not(:disabled) {
+    background: #f0fdfa;
+    border-color: #0f766e;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(15, 118, 110, 0.12);
+  }
+
+  .icon {
+    font-size: 26px;
+    color: #0f766e;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    background: rgba(15, 118, 110, 0.08);
+    border-radius: 12px;
+  }
+
+  .label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1e293b;
+    text-align: center;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+`;
+
+const CanvasPanel = styled.main`
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
+  overflow: hidden;
+  position: relative;
+`;
+
+const CanvasTopBar = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+`;
+
+const CanvasContainer = styled.div`
+  flex: 1;
+  padding: 32px;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+  }
+`;
+
+const SelectionBreadcrumb = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  color: #f1f5f9;
+  font-size: 13px;
+  flex-shrink: 0;
+  font-weight: 500;
+
+  .separator {
+    color: #64748b;
+  }
+  .item {
+    cursor: pointer;
+    transition: color 0.15s ease;
+    &:hover {
+      color: #38bdf8;
+    }
+  }
+  .current {
+    color: #fbbf24;
+    font-weight: 600;
+  }
+`;
+
+const PropertiesPanel = styled.aside<{ $collapsed?: boolean }>`
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border-left: 1px solid #e2e8f0;
+  overflow: hidden;
+
+  @media (max-width: 900px) {
+    position: absolute;
+    right: 0;
+    top: 52px;
+    height: calc(100vh - 128px);
+    width: 300px;
+    transform: translateX(${({ $collapsed }) => ($collapsed ? '100%' : '0')});
+    transition: transform 0.3s ease;
+    z-index: 50;
+    box-shadow: ${({ $collapsed }) =>
+      $collapsed ? 'none' : '-4px 0 24px rgba(0,0,0,0.12)'};
+  }
+`;
+
+const PropertiesTabs = styled.div`
+  display: flex;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+  background: #ffffff;
+`;
+
+const PropertiesTab = styled.button<{ $active?: boolean }>`
+  flex: 1;
+  padding: 14px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: none;
+  background: ${({ $active }) => ($active ? '#ffffff' : 'transparent')};
+  color: ${({ $active }) => ($active ? '#0f766e' : '#64748b')};
+  cursor: pointer;
+  border-bottom: 3px solid
+    ${({ $active }) => ($active ? '#0f766e' : 'transparent')};
+  margin-bottom: -1px;
+  transition: all 0.15s ease;
+
+  &:hover {
+    color: #0f766e;
+    background: ${({ $active }) => ($active ? '#ffffff' : '#f8fafc')};
+  }
+`;
+
+const PropertiesContent = styled.div`
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+  }
+`;
+
+const PropertySection = styled.div`
+  margin-bottom: 24px;
+`;
+
+const PropertySectionHeader = styled.button<{ $expanded?: boolean }>`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  background: ${({ $expanded }) =>
+    $expanded ? 'linear-gradient(90deg, rgba(15, 118, 110, 0.06) 0%, transparent 100%)' : '#f8fafc'};
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: ${({ $expanded }) => ($expanded ? '#0f766e' : '#475569')};
+  transition: all 0.15s ease;
+  margin-bottom: 4px;
+
+  &:hover {
+    background: rgba(15, 118, 110, 0.08);
+    color: #0f766e;
+  }
+
+  .chevron {
+    transform: rotate(${({ $expanded }) => ($expanded ? '180deg' : '0')});
+    transition: transform 0.2s ease;
+    color: ${({ $expanded }) => ($expanded ? '#0f766e' : '#94a3b8')};
+  }
+`;
+
+const PropertySectionContent = styled.div<{ $expanded?: boolean }>`
+  display: ${({ $expanded }) => ($expanded ? 'block' : 'none')};
+  padding: 12px 0 8px;
+`;
+
+const EffectToggle = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  transition: all 0.15s ease;
+
+  &:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  }
+
+  .ant-switch-checked {
+    background: #0f766e;
+  }
+`;
+
+const SavePresetButton = styled.button`
+  margin: 16px 0;
+  padding: 14px;
+  width: 100%;
+  border-radius: 10px;
+  border: 1px dashed #0f766e;
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.06) 0%, rgba(15, 118, 110, 0.02) 100%);
+  color: #0f766e;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: rgba(15, 118, 110, 0.1);
+    border-style: solid;
+    transform: translateY(-1px);
+  }
+`;
+
+// ============================================================================
+// LEGACY COMPONENTS (kept for compatibility with existing render functions)
+// ============================================================================
 
 const PanelHeader = styled.div`
   display: flex;
@@ -190,27 +646,6 @@ const FieldLabel = styled.div`
   color: ${({ theme }) => theme.colorTextLabel};
 `;
 
-const StudioBar = styled.div`
-  position: sticky;
-  top: 76px;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 16px;
-  border-radius: 14px;
-  background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-`;
-
-const StudioBarGroup = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-`;
-
 const StudioModeChip = styled.button<{ $active?: boolean }>`
   border: 1px solid
     ${({ $active }) =>
@@ -221,13 +656,6 @@ const StudioModeChip = styled.button<{ $active?: boolean }>`
   padding: 8px 14px;
   font-weight: 700;
   cursor: pointer;
-`;
-
-const CanvasSurface = styled.div`
-  padding: 28px;
-  border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  background: #e2e8f0;
 `;
 
 const ViewportFrame = styled.div<{
@@ -290,30 +718,6 @@ const DrawerSection = styled.div`
   border-radius: 14px;
   background: #ffffff;
   border: 1px solid rgba(148, 163, 184, 0.18);
-`;
-
-const StudioShell = styled.div`
-  display: grid;
-  gap: 18px;
-  align-items: start;
-
-  @media (min-width: 1440px) {
-    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
-  }
-`;
-
-const StudioCenter = styled.div`
-  min-width: 0;
-`;
-
-const DockRail = styled.aside`
-  position: sticky;
-  top: 144px;
-  align-self: start;
-  max-height: calc(100vh - 164px);
-  overflow-y: auto;
-  padding-right: 4px;
-  scroll-margin-top: 144px;
 `;
 
 const RegionHeader = styled.div`
@@ -477,7 +881,176 @@ const CHART_LEGEND_OPTIONS = [
   { value: 'hidden', label: t('Hide Legend') },
 ] as const;
 
-const DOCKED_DRAWER_BREAKPOINT = 1440;
+const LIBRARY_CATEGORIES = [
+  {
+    id: 'essentials',
+    label: 'Essentials',
+    blocks: ['heading', 'paragraph', 'rich_text', 'button', 'image'],
+  },
+  {
+    id: 'layout',
+    label: 'Layout',
+    blocks: ['section', 'columns', 'group', 'card', 'hero', 'callout'],
+  },
+  {
+    id: 'media',
+    label: 'Media',
+    blocks: ['image', 'gallery', 'video', 'embed', 'file', 'download'],
+  },
+  {
+    id: 'data',
+    label: 'Data',
+    blocks: ['chart', 'dashboard', 'table', 'statistic', 'dynamic_widget'],
+  },
+  {
+    id: 'advanced',
+    label: 'Advanced',
+    blocks: ['html', 'menu', 'breadcrumb', 'page_title', 'divider', 'spacer'],
+  },
+] as const;
+
+const AUTO_GENERATE_TEMPLATES = [
+  {
+    id: 'dashboard-overview',
+    label: 'Dashboard Overview',
+    icon: 'dashboard',
+    description: 'Hero + 4 charts in 2x2 grid',
+    blocks: [
+      {
+        block_type: 'hero',
+        slot: 'hero',
+        content: { title: 'Dashboard Title', text: 'Add your dashboard description here...' },
+        settings: { showButton: false },
+      },
+      {
+        block_type: 'section',
+        slot: 'content',
+        content: { title: 'Key Metrics' },
+        children: [
+          {
+            block_type: 'columns',
+            settings: { columns: 2 },
+            children: [
+              { block_type: 'chart', content: { title: 'Chart 1' }, settings: { chart_id: null, placeholder: true } },
+              { block_type: 'chart', content: { title: 'Chart 2' }, settings: { chart_id: null, placeholder: true } },
+            ],
+          },
+          {
+            block_type: 'columns',
+            settings: { columns: 2 },
+            children: [
+              { block_type: 'chart', content: { title: 'Chart 3' }, settings: { chart_id: null, placeholder: true } },
+              { block_type: 'chart', content: { title: 'Chart 4' }, settings: { chart_id: null, placeholder: true } },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'data-report',
+    label: 'Data Report',
+    icon: 'table',
+    description: 'Heading + chart + table',
+    blocks: [
+      {
+        block_type: 'heading',
+        slot: 'content',
+        content: { text: 'Report Title' },
+        settings: { level: 1 },
+      },
+      {
+        block_type: 'paragraph',
+        slot: 'content',
+        content: { text: 'Add your report introduction and summary here...' },
+      },
+      {
+        block_type: 'chart',
+        slot: 'content',
+        content: { title: 'Main Chart' },
+        settings: { chart_id: null, placeholder: true },
+      },
+      {
+        block_type: 'table',
+        slot: 'content',
+        content: { title: 'Data Table' },
+        settings: { placeholder: true },
+      },
+    ],
+  },
+  {
+    id: 'map-focus',
+    label: 'Map + Stats',
+    icon: 'picture',
+    description: 'Large map with statistics sidebar',
+    blocks: [
+      {
+        block_type: 'heading',
+        slot: 'content',
+        content: { text: 'Regional Overview' },
+        settings: { level: 1 },
+      },
+      {
+        block_type: 'columns',
+        slot: 'content',
+        settings: { columns: 2, ratio: '2:1' },
+        children: [
+          { block_type: 'chart', content: { title: 'Map View' }, settings: { chart_id: null, placeholder: true, surface: 'map_focus' } },
+          {
+            block_type: 'group',
+            children: [
+              { block_type: 'statistic', content: { title: 'Total', value: '...' } },
+              { block_type: 'statistic', content: { title: 'Average', value: '...' } },
+              { block_type: 'statistic', content: { title: 'Trend', value: '...' } },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'landing-page',
+    label: 'Landing Page',
+    icon: 'layout',
+    description: 'Hero + features + CTA',
+    blocks: [
+      {
+        block_type: 'hero',
+        slot: 'hero',
+        content: {
+          title: 'Welcome to Your Portal',
+          text: 'Add a compelling description here...',
+        },
+        settings: { showButton: true, buttonLabel: 'Get Started', buttonUrl: '#' },
+      },
+      {
+        block_type: 'section',
+        slot: 'content',
+        content: { title: 'Features' },
+        children: [
+          {
+            block_type: 'columns',
+            settings: { columns: 3 },
+            children: [
+              { block_type: 'card', content: { title: 'Feature 1', text: 'Description...' } },
+              { block_type: 'card', content: { title: 'Feature 2', text: 'Description...' } },
+              { block_type: 'card', content: { title: 'Feature 3', text: 'Description...' } },
+            ],
+          },
+        ],
+      },
+      {
+        block_type: 'callout',
+        slot: 'cta',
+        content: { title: 'Ready to get started?', text: 'Contact us today.' },
+        settings: { showButton: true, buttonLabel: 'Contact', buttonUrl: '#' },
+      },
+    ],
+  },
+] as const;
+
+type PropertiesTabType = 'design' | 'config' | 'interactions';
+type LibraryCategoryType = 'essentials' | 'layout' | 'media' | 'data' | 'advanced' | 'saved';
 
 function blockKey(block: PortalPageBlock) {
   return block.uid || String(block.id);
@@ -1044,7 +1617,6 @@ export default function BlockStudio({
   savingPortalLayout = false,
 }: BlockStudioProps) {
   const [selection, setSelection] = useState<Selection>({ type: 'page' });
-  const [quickInsertType, setQuickInsertType] = useState('paragraph');
   const [quickInsertSlot, setQuickInsertSlot] = useState<string>('content');
   const [previewViewport, setPreviewViewport] = useState<
     'desktop' | 'tablet' | 'mobile'
@@ -1053,7 +1625,7 @@ export default function BlockStudio({
     'compose',
   );
   const [documentOpen, setDocumentOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(true);
+  const [aiGeneratorOpen, setAiGeneratorOpen] = useState(false);
   const [reusableLibrary, setReusableLibrary] = useState<PortalReusableBlock[]>(
     () => sortReusableLibrary(reusableBlocks),
   );
@@ -1067,17 +1639,23 @@ export default function BlockStudio({
   const [libraryStatus, setLibraryStatus] = useState<StatusMessage | null>(
     null,
   );
-  const [desktopDockedPanels, setDesktopDockedPanels] = useState(
-    typeof window !== 'undefined'
-      ? window.matchMedia(`(min-width: ${DOCKED_DRAWER_BREAKPOINT}px)`).matches
-      : false,
-  );
-  const settingsDockRef = useRef<HTMLElement | null>(null);
+  const [activePropertiesTab, setActivePropertiesTab] =
+    useState<PropertiesTabType>('config');
+  const [activeLibraryCategory, setActiveLibraryCategory] =
+    useState<LibraryCategoryType>('essentials');
+  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<
+    Record<string, boolean>
+  >({
+    typography: true,
+    spacing: true,
+    size: true,
+    effects: false,
+  });
   const blocks = useMemo(() => ensurePageBlocks(draftPage), [draftPage]);
   const slotGroups = useMemo(() => groupBlocksBySlot(blocks), [blocks]);
   const flattenedBlocks = useMemo(() => flattenBlocks(blocks), [blocks]);
-  const selectionKey = selection.type === 'block' ? selection.uid : 'page';
-  const hasDraftPage = Boolean(draftPage);
   const isPublishedPage = Boolean(draftPage?.is_published);
   const selectedBlock =
     selection.type === 'block'
@@ -1170,31 +1748,6 @@ export default function BlockStudio({
     }
   }, [selectedBlock, selection.type]);
 
-  useEffect(() => {
-    if (hasDraftPage) {
-      setSettingsOpen(true);
-    }
-  }, [draftPage?.id, hasDraftPage, selection.type, selectionKey]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) {
-      return undefined;
-    }
-    const mediaQuery = window.matchMedia(
-      `(min-width: ${DOCKED_DRAWER_BREAKPOINT}px)`,
-    );
-    const syncDockedPanels = (event: MediaQueryList | MediaQueryListEvent) => {
-      setDesktopDockedPanels(event.matches);
-    };
-    syncDockedPanels(mediaQuery);
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', syncDockedPanels);
-      return () => mediaQuery.removeEventListener('change', syncDockedPanels);
-    }
-    mediaQuery.addListener(syncDockedPanels);
-    return () => mediaQuery.removeListener(syncDockedPanels);
-  }, []);
-
   function pushBlocks(nextBlocks: PortalPageBlock[]) {
     if (!draftPage || isPublishedPage) {
       return;
@@ -1203,6 +1756,36 @@ export default function BlockStudio({
       ...draftPage,
       blocks: nextBlocks,
     });
+  }
+
+  function handleApplyAIBlocks(aiBlocks: PortalPageBlock[]) {
+    if (!draftPage || isPublishedPage) {
+      return;
+    }
+    const makeUid = () => `blk_${Math.random().toString(36).slice(2, 10)}`;
+    const normalizedBlocks = aiBlocks.map((block, index) => ({
+      ...block,
+      uid: block.uid || makeUid(),
+      sort_order: blocks.length + index,
+      slot: block.slot || 'content',
+      is_container: block.is_container ?? false,
+      content: block.content || {},
+      settings: block.settings || {},
+      styles: block.styles || {},
+      metadata: block.metadata || {},
+      children: (block.children || []).map((child: any, childIndex: number) => ({
+        ...child,
+        uid: child.uid || makeUid(),
+        sort_order: childIndex,
+        is_container: child.is_container ?? false,
+        content: child.content || {},
+        settings: child.settings || {},
+        styles: child.styles || {},
+        metadata: child.metadata || {},
+        children: child.children || [],
+      })),
+    }));
+    pushBlocks([...blocks, ...normalizedBlocks]);
   }
 
   function updatePage(patch: Partial<PortalPage>) {
@@ -1290,7 +1873,7 @@ export default function BlockStudio({
   function addBlockRelativeToBlock(
     block: PortalPageBlock,
     mode: 'after' | 'child',
-    blockType = quickInsertType,
+    blockType = 'paragraph',
   ) {
     if (!draftPage || isPublishedPage) {
       return;
@@ -1858,27 +2441,6 @@ export default function BlockStudio({
     }
     splitSelectedBlockIntoColumns(columnCount);
   }
-
-  function openOrFocusPanel(
-    panelRef: { current: HTMLElement | null },
-    openPanel: () => void,
-  ) {
-    if (desktopDockedPanels && panelRef.current) {
-      panelRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      });
-      return;
-    }
-    openPanel();
-  }
-
-  const quickInsertLabel =
-    selection.type === 'block'
-      ? selectedBlock && isContainerBlock(selectedBlock.block_type)
-        ? t('Add Child')
-        : t('Add After')
-      : t('Add Content');
 
   function renderInspector() {
     if (!draftPage) {
@@ -4523,7 +5085,6 @@ export default function BlockStudio({
 
   function handleSelectBlock(block: PortalPageBlock) {
     setSelection({ type: 'block', uid: blockKey(block) });
-    setSettingsOpen(true);
   }
 
   function renderSlotRegion(
@@ -4552,7 +5113,7 @@ export default function BlockStudio({
                 disabled={isPublishedPage}
                 onClick={() => {
                   setQuickInsertSlot(slot.value);
-                  addBlockToSlot(quickInsertType, slot.value);
+                  addBlockToSlot('paragraph', slot.value);
                 }}
               >
                 {t('Add Here')}
@@ -4678,7 +5239,6 @@ export default function BlockStudio({
                 icon={<EditOutlined />}
                 onClick={() => {
                   setSelection({ type: 'page' });
-                  setSettingsOpen(true);
                 }}
               >
                 {t('Page')}
@@ -4696,7 +5256,6 @@ export default function BlockStudio({
                     }
                     onClick={() => {
                       setSelection({ type: 'block', uid: blockKey(block) });
-                      setSettingsOpen(true);
                       setDocumentOpen(false);
                     }}
                   >
@@ -4959,218 +5518,665 @@ export default function BlockStudio({
     );
   }
 
-  return (
-    <StudioLayout>
-      <StudioBar>
-        <StudioBarGroup>
-          <Button
-            icon={documentOpen ? <MenuFoldOutlined /> : <MenuUnfoldOutlined />}
-            onClick={() => setDocumentOpen(true)}
+  function applyAutoGenerateTemplate(templateId: string) {
+    const template = AUTO_GENERATE_TEMPLATES.find(t => t.id === templateId);
+    if (!template || !draftPage) return;
+
+    const generateBlockWithUid = (blockDef: any): PortalPageBlock => {
+      const uid = `${blockDef.block_type}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const block: PortalPageBlock = {
+        uid,
+        block_type: blockDef.block_type,
+        slot: blockDef.slot || 'content',
+        sort_order: 0,
+        is_container: isContainerBlock(blockDef.block_type),
+        content: blockDef.content || {},
+        settings: blockDef.settings || {},
+        styles: blockDef.styles || {},
+        metadata: {},
+        children: blockDef.children
+          ? blockDef.children.map((child: any) => generateBlockWithUid(child))
+          : [],
+      };
+      return block;
+    };
+
+    const newBlocks = template.blocks.map((blockDef: any) =>
+      generateBlockWithUid(blockDef),
+    );
+
+    const updatedPage = {
+      ...draftPage,
+      blocks: [...(draftPage.blocks || []), ...newBlocks],
+    };
+    onChangeDraftPage(updatedPage);
+  }
+
+  function renderLibraryPanel() {
+    const categoryBlocks: readonly string[] = LIBRARY_CATEGORIES.find(
+      cat => cat.id === activeLibraryCategory,
+    )?.blocks || [];
+    const filteredBlocks = insertableBlockTypes.filter(def =>
+      categoryBlocks.includes(def.type),
+    );
+
+    return (
+      <LibraryPanel $collapsed={leftPanelCollapsed}>
+        <LibraryHeader $collapsed={leftPanelCollapsed}>
+          <LibraryTitle $collapsed={leftPanelCollapsed}>{t('Library')}</LibraryTitle>
+          <LibraryCollapseBtn
+            onClick={() => setLeftPanelCollapsed(!leftPanelCollapsed)}
+            title={leftPanelCollapsed ? t('Expand') : t('Collapse')}
           >
-            {t('Document')}
-          </Button>
-          <Button
-            icon={<SettingOutlined />}
+            {leftPanelCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+          </LibraryCollapseBtn>
+        </LibraryHeader>
+        <LibraryIconTabs $collapsed={leftPanelCollapsed}>
+          <LibraryIconTab
+            $active={activeLibraryCategory === 'essentials'}
+            $collapsed={leftPanelCollapsed}
             onClick={() => {
-              setSelection({ type: 'page' });
-              openOrFocusPanel(settingsDockRef, () => setSettingsOpen(true));
+              setActiveLibraryCategory('essentials');
+              if (leftPanelCollapsed) setLeftPanelCollapsed(false);
             }}
+            title={t('Essentials')}
           >
-            {t('Page Options')}
+            <FontSizeOutlined />
+          </LibraryIconTab>
+          <LibraryIconTab
+            $active={activeLibraryCategory === 'layout'}
+            $collapsed={leftPanelCollapsed}
+            onClick={() => {
+              setActiveLibraryCategory('layout');
+              if (leftPanelCollapsed) setLeftPanelCollapsed(false);
+            }}
+            title={t('Layout')}
+          >
+            <LayoutOutlined />
+          </LibraryIconTab>
+          <LibraryIconTab
+            $active={activeLibraryCategory === 'media'}
+            $collapsed={leftPanelCollapsed}
+            onClick={() => {
+              setActiveLibraryCategory('media');
+              if (leftPanelCollapsed) setLeftPanelCollapsed(false);
+            }}
+            title={t('Media')}
+          >
+            <PictureOutlined />
+          </LibraryIconTab>
+          <LibraryIconTab
+            $active={activeLibraryCategory === 'data'}
+            $collapsed={leftPanelCollapsed}
+            onClick={() => {
+              setActiveLibraryCategory('data');
+              if (leftPanelCollapsed) setLeftPanelCollapsed(false);
+            }}
+            title={t('Data')}
+          >
+            <BarChartOutlined />
+          </LibraryIconTab>
+          <LibraryIconTab
+            $active={activeLibraryCategory === 'advanced'}
+            $collapsed={leftPanelCollapsed}
+            onClick={() => {
+              setActiveLibraryCategory('advanced');
+              if (leftPanelCollapsed) setLeftPanelCollapsed(false);
+            }}
+            title={t('Advanced')}
+          >
+            <CodeOutlined />
+          </LibraryIconTab>
+          <LibraryIconTab
+            $active={activeLibraryCategory === 'saved'}
+            $collapsed={leftPanelCollapsed}
+            onClick={() => {
+              setActiveLibraryCategory('saved');
+              if (leftPanelCollapsed) setLeftPanelCollapsed(false);
+            }}
+            title={t('Saved')}
+          >
+            <CopyOutlined />
+          </LibraryIconTab>
+        </LibraryIconTabs>
+        <LibraryContent $collapsed={leftPanelCollapsed}>
+          <ComponentCategory>
+            <ComponentCategoryLabel>{t('Auto Generate')}</ComponentCategoryLabel>
+            <ComponentGrid>
+              {AUTO_GENERATE_TEMPLATES.map(template => (
+                <ComponentCard
+                  key={template.id}
+                  onClick={() => applyAutoGenerateTemplate(template.id)}
+                  disabled={isPublishedPage || !draftPage}
+                  title={template.description}
+                >
+                  <span className="icon">{blockIcon(template.icon)}</span>
+                  <span className="label">{template.label}</span>
+                </ComponentCard>
+              ))}
+            </ComponentGrid>
+          </ComponentCategory>
+
+          {activeLibraryCategory === 'saved' ? (
+            <ComponentCategory>
+              <ComponentCategoryLabel>{t('Reusable Sections')}</ComponentCategoryLabel>
+              {reusableLibrary.length ? (
+                <ComponentGrid>
+                  {reusableLibrary.map(reusable => (
+                    <ComponentCard
+                      key={reusable.id}
+                      onClick={() => insertReusableReference(reusable)}
+                      disabled={isPublishedPage}
+                    >
+                      <span className="icon">
+                        <CopyOutlined />
+                      </span>
+                      <span className="label">{reusable.title}</span>
+                    </ComponentCard>
+                  ))}
+                </ComponentGrid>
+              ) : (
+                <Empty
+                  description={t('No saved sections yet')}
+                  style={{ padding: 24 }}
+                />
+              )}
+            </ComponentCategory>
+          ) : (
+            <ComponentCategory>
+              <ComponentCategoryLabel>
+                {LIBRARY_CATEGORIES.find(cat => cat.id === activeLibraryCategory)?.label || activeLibraryCategory}
+              </ComponentCategoryLabel>
+              <ComponentGrid>
+                {filteredBlocks.map(def => (
+                  <ComponentCard
+                    key={def.type}
+                    onClick={() => addBlock(def.type)}
+                    disabled={isPublishedPage}
+                  >
+                    <span className="icon">{blockIcon(def.type, def.icon)}</span>
+                    <span className="label">{def.label}</span>
+                  </ComponentCard>
+                ))}
+              </ComponentGrid>
+            </ComponentCategory>
+          )}
+          {activeLibraryCategory === 'layout' && (
+            <ComponentCategory>
+              <ComponentCategoryLabel>{t('Grid Templates')}</ComponentCategoryLabel>
+              <ComponentGrid>
+                {GRID_TEMPLATE_OPTIONS.map(option => (
+                  <ComponentCard
+                    key={`grid-${option.value}`}
+                    onClick={() =>
+                      insertGridTemplate(
+                        option.value,
+                        selection.type === 'block' ? selectedBlock : null,
+                      )
+                    }
+                    disabled={isPublishedPage}
+                  >
+                    <span className="icon">
+                      <AppstoreOutlined />
+                    </span>
+                    <span className="label">{option.label}</span>
+                  </ComponentCard>
+                ))}
+              </ComponentGrid>
+            </ComponentCategory>
+          )}
+        </LibraryContent>
+      </LibraryPanel>
+    );
+  }
+
+  function renderPropertiesPanel() {
+    return (
+      <PropertiesPanel $collapsed={rightPanelCollapsed}>
+        <PropertiesTabs>
+          <PropertiesTab
+            $active={activePropertiesTab === 'design'}
+            onClick={() => setActivePropertiesTab('design')}
+          >
+            {t('Design')}
+          </PropertiesTab>
+          <PropertiesTab
+            $active={activePropertiesTab === 'config'}
+            onClick={() => setActivePropertiesTab('config')}
+          >
+            {t('Config')}
+          </PropertiesTab>
+          <PropertiesTab
+            $active={activePropertiesTab === 'interactions'}
+            onClick={() => setActivePropertiesTab('interactions')}
+          >
+            {t('Interactions')}
+          </PropertiesTab>
+        </PropertiesTabs>
+        <PropertiesContent>
+          {activePropertiesTab === 'design' && selectedBlock && (
+            <>
+              <PropertySection>
+                <PropertySectionHeader
+                  $expanded={expandedSections.typography}
+                  onClick={() =>
+                    setExpandedSections(prev => ({
+                      ...prev,
+                      typography: !prev.typography,
+                    }))
+                  }
+                >
+                  <span>{t('Typography')}</span>
+                  <span className="chevron">
+                    {expandedSections.typography ? '▲' : '▼'}
+                  </span>
+                </PropertySectionHeader>
+                <PropertySectionContent $expanded={expandedSections.typography}>
+                  <FieldGrid>
+                    <FieldBlock>
+                      <FieldLabel>{t('Font Size')}</FieldLabel>
+                      <InputNumber
+                        disabled={isPublishedPage}
+                        style={{ width: '100%' }}
+                        min={8}
+                        max={120}
+                        value={numericStyleValue(selectedBlock.styles?.fontSize)}
+                        onChange={value =>
+                          updateSelectedBlockStyles({
+                            fontSize: value ? `${value}px` : undefined,
+                          })
+                        }
+                      />
+                    </FieldBlock>
+                    <FieldBlock>
+                      <FieldLabel>{t('Font Weight')}</FieldLabel>
+                      <Select
+                        disabled={isPublishedPage}
+                        style={{ width: '100%' }}
+                        value={selectedBlock.styles?.fontWeight || 'normal'}
+                        onChange={value =>
+                          updateSelectedBlockStyles({
+                            fontWeight: value === 'normal' ? undefined : value,
+                          })
+                        }
+                        options={[
+                          { value: 'normal', label: t('Normal') },
+                          { value: 'bold', label: t('Bold') },
+                          { value: '300', label: t('Light') },
+                          { value: '500', label: t('Medium') },
+                          { value: '700', label: t('Bold') },
+                          { value: '900', label: t('Black') },
+                        ]}
+                      />
+                    </FieldBlock>
+                    <FieldBlock>
+                      <FieldLabel>{t('Text Align')}</FieldLabel>
+                      <Select
+                        disabled={isPublishedPage}
+                        style={{ width: '100%' }}
+                        value={selectedBlock.styles?.textAlign || 'left'}
+                        onChange={value =>
+                          updateSelectedBlockStyles({
+                            textAlign: value === 'left' ? undefined : value,
+                          })
+                        }
+                        options={[
+                          { value: 'left', label: t('Left') },
+                          { value: 'center', label: t('Center') },
+                          { value: 'right', label: t('Right') },
+                          { value: 'justify', label: t('Justify') },
+                        ]}
+                      />
+                    </FieldBlock>
+                    <FieldBlock>
+                      <FieldLabel>{t('Text Color')}</FieldLabel>
+                      <Input
+                        disabled={isPublishedPage}
+                        value={String(selectedBlock.styles?.color || '')}
+                        placeholder="#0f172a"
+                        onChange={e =>
+                          updateSelectedBlockStyles({ color: e.target.value })
+                        }
+                      />
+                    </FieldBlock>
+                  </FieldGrid>
+                </PropertySectionContent>
+              </PropertySection>
+
+              <PropertySection>
+                <PropertySectionHeader
+                  $expanded={expandedSections.spacing}
+                  onClick={() =>
+                    setExpandedSections(prev => ({
+                      ...prev,
+                      spacing: !prev.spacing,
+                    }))
+                  }
+                >
+                  <span>{t('Layout & Spacing')}</span>
+                  <span className="chevron">
+                    {expandedSections.spacing ? '▲' : '▼'}
+                  </span>
+                </PropertySectionHeader>
+                <PropertySectionContent $expanded={expandedSections.spacing}>
+                  <FieldGrid>
+                    <FieldBlock>
+                      <FieldLabel>{t('Padding')}</FieldLabel>
+                      <InputNumber
+                        disabled={isPublishedPage}
+                        style={{ width: '100%' }}
+                        min={0}
+                        value={numericStyleValue(selectedBlock.styles?.padding)}
+                        onChange={value =>
+                          updateSelectedBlockStyles({
+                            padding: value ? `${value}px` : undefined,
+                          })
+                        }
+                      />
+                    </FieldBlock>
+                    <FieldBlock>
+                      <FieldLabel>{t('Margin')}</FieldLabel>
+                      <InputNumber
+                        disabled={isPublishedPage}
+                        style={{ width: '100%' }}
+                        min={0}
+                        value={numericStyleValue(selectedBlock.styles?.margin)}
+                        onChange={value =>
+                          updateSelectedBlockStyles({
+                            margin: value ? `${value}px` : undefined,
+                          })
+                        }
+                      />
+                    </FieldBlock>
+                  </FieldGrid>
+                </PropertySectionContent>
+              </PropertySection>
+
+              <PropertySection>
+                <PropertySectionHeader
+                  $expanded={expandedSections.size}
+                  onClick={() =>
+                    setExpandedSections(prev => ({
+                      ...prev,
+                      size: !prev.size,
+                    }))
+                  }
+                >
+                  <span>{t('Size')}</span>
+                  <span className="chevron">
+                    {expandedSections.size ? '▲' : '▼'}
+                  </span>
+                </PropertySectionHeader>
+                <PropertySectionContent $expanded={expandedSections.size}>
+                  <FieldGrid>
+                    <FieldBlock>
+                      <FieldLabel>{t('Width')}</FieldLabel>
+                      <Input
+                        disabled={isPublishedPage}
+                        value={String(selectedBlock.styles?.width || '')}
+                        placeholder="auto"
+                        onChange={e =>
+                          updateSelectedBlockStyles({ width: e.target.value })
+                        }
+                      />
+                    </FieldBlock>
+                    <FieldBlock>
+                      <FieldLabel>{t('Corner Radius')}</FieldLabel>
+                      <InputNumber
+                        disabled={isPublishedPage}
+                        style={{ width: '100%' }}
+                        min={0}
+                        value={numericStyleValue(selectedBlock.styles?.borderRadius)}
+                        onChange={value =>
+                          updateSelectedBlockStyles({
+                            borderRadius: value ? `${value}px` : undefined,
+                          })
+                        }
+                      />
+                    </FieldBlock>
+                  </FieldGrid>
+                </PropertySectionContent>
+              </PropertySection>
+
+              <PropertySection>
+                <PropertySectionHeader
+                  $expanded={expandedSections.effects}
+                  onClick={() =>
+                    setExpandedSections(prev => ({
+                      ...prev,
+                      effects: !prev.effects,
+                    }))
+                  }
+                >
+                  <span>{t('Effects')}</span>
+                  <span className="chevron">
+                    {expandedSections.effects ? '▲' : '▼'}
+                  </span>
+                </PropertySectionHeader>
+                <PropertySectionContent $expanded={expandedSections.effects}>
+                  <EffectToggle>
+                    <span>{t('Drop Shadow')}</span>
+                    <Switch
+                      disabled={isPublishedPage}
+                      checked={Boolean(selectedBlock.styles?.boxShadow)}
+                      onChange={checked =>
+                        updateSelectedBlockStyles({
+                          boxShadow: checked
+                            ? '0 4px 12px rgba(0,0,0,0.15)'
+                            : undefined,
+                        })
+                      }
+                    />
+                  </EffectToggle>
+                  <EffectToggle>
+                    <span>{t('Background Color')}</span>
+                    <Input
+                      disabled={isPublishedPage}
+                      style={{ width: 100 }}
+                      value={String(selectedBlock.styles?.backgroundColor || '')}
+                      placeholder="#fff"
+                      onChange={e =>
+                        updateSelectedBlockStyles({
+                          backgroundColor: e.target.value,
+                        })
+                      }
+                    />
+                  </EffectToggle>
+                </PropertySectionContent>
+              </PropertySection>
+            </>
+          )}
+          {activePropertiesTab === 'design' && !selectedBlock && (
+            <Empty
+              description={t('Select a block to edit its design')}
+              style={{ marginTop: 48 }}
+            />
+          )}
+          {activePropertiesTab === 'config' && renderInspector()}
+          {activePropertiesTab === 'interactions' && (
+            <Empty
+              description={t('Interactions coming soon')}
+              style={{ marginTop: 48 }}
+            />
+          )}
+        </PropertiesContent>
+        {activePropertiesTab === 'design' && selectedBlock && (
+          <SavePresetButton onClick={() => setDocumentOpen(true)}>
+            <SaveOutlined style={{ marginRight: 8 }} />
+            {t('Save as Reusable')}
+          </SavePresetButton>
+        )}
+      </PropertiesPanel>
+    );
+  }
+
+  function getSelectionBreadcrumb() {
+    if (!selectedBlock) return ['Page'];
+    const path = ['Page'];
+    if (selectedBlock.slot) path.push(selectedBlock.slot);
+    path.push(selectedBlock.block_type);
+    return path;
+  }
+
+  return (
+    <StudioRoot>
+      <StudioHeader>
+        <HeaderLeft>
+          <Select
+            bordered={false}
+            style={{ minWidth: 200 }}
+            value={draftPage?.slug || undefined}
+            placeholder={t('Select a page')}
+            onChange={slug => onSelectPage(slug)}
+            options={filteredPages.map(page => ({
+              value: page.slug,
+              label: page.title,
+            }))}
+          />
+          <Button size="small" type="dashed" onClick={onNewPage}>
+            <PlusOutlined /> {t('New Page')}
           </Button>
-          {selection.type === 'block' && selectedBlock ? (
-            <Tag color="processing">
-              {selectedBlock.metadata?.label || selectedBlock.block_type}
+          {draftPage && (
+            <Tag color={draftPage.is_published ? 'green' : 'blue'}>
+              {draftPage.is_published ? t('Published') : t('Draft')}
             </Tag>
-          ) : draftPage ? (
-            <Tag color={draftPage.is_published ? 'green' : 'default'}>
-              {draftPage.status || t('draft')}
-            </Tag>
-          ) : null}
-        </StudioBarGroup>
-        <StudioBarGroup>
+          )}
+        </HeaderLeft>
+        <HeaderCenter>
           <StudioModeChip
             type="button"
             $active={canvasMode === 'compose'}
             onClick={() => setCanvasMode('compose')}
+            title={t('Edit mode')}
           >
-            <EditOutlined /> {t('Compose')}
+            <EditOutlined />
           </StudioModeChip>
           <StudioModeChip
             type="button"
             $active={canvasMode === 'preview'}
             onClick={() => setCanvasMode('preview')}
+            title={t('Preview mode')}
           >
-            <EyeOutlined /> {t('Preview')}
+            <EyeOutlined />
           </StudioModeChip>
+          <span style={{ width: 12 }} />
           {PREVIEW_VIEWPORTS.map(viewport => (
             <Button
               key={viewport.value}
               size="small"
-              type={previewViewport === viewport.value ? 'primary' : 'default'}
+              type={previewViewport === viewport.value ? 'primary' : 'text'}
               icon={viewportIcon(viewport.value)}
               onClick={() => setPreviewViewport(viewport.value)}
-            >
-              {viewport.label}
-            </Button>
+              title={viewport.label}
+            />
           ))}
-          <Select
-            disabled={isPublishedPage}
-            size="small"
-            style={{ minWidth: 180 }}
-            value={quickInsertType}
-            onChange={value => setQuickInsertType(value)}
-            options={insertableBlockTypes.map(definition => ({
-              value: definition.type,
-              label: `${definition.label} · ${definition.category}`,
-            }))}
-          />
-          <Select
-            disabled={isPublishedPage || selection.type === 'block'}
-            size="small"
-            style={{ minWidth: 150 }}
-            value={quickInsertSlot}
-            onChange={value => setQuickInsertSlot(value)}
-            options={SLOT_OPTIONS.map(option => ({
-              value: option.value,
-              label: option.label,
-            }))}
-          />
-          <Button
-            disabled={isPublishedPage}
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => addBlock(quickInsertType)}
-          >
-            {quickInsertLabel}
-          </Button>
-          {GRID_TEMPLATE_OPTIONS.map(option => (
+        </HeaderCenter>
+        <HeaderRight>
+          {onSaveDraft && (
             <Button
-              key={`toolbar-grid-${option.value}`}
+              type="primary"
+              icon={<SaveOutlined />}
+              loading={savingDraft}
               disabled={isPublishedPage}
-              onClick={() =>
-                insertGridTemplate(
-                  option.value,
-                  selection.type === 'block' ? selectedBlock : null,
-                )
-              }
+              onClick={onSaveDraft}
             >
-              {option.label}
+              {t('Save')}
             </Button>
-          ))}
+          )}
           <Button
-            onClick={() =>
-              openOrFocusPanel(settingsDockRef, () => setSettingsOpen(true))
-            }
-            icon={<SettingOutlined />}
-          >
-            {t('Options')}
-          </Button>
-        </StudioBarGroup>
-      </StudioBar>
-      <StudioShell>
-        <StudioCenter>
-          <Panel>
-            <PanelHeader>
-              <div>
-                <PanelTitle>{t('Page content')}</PanelTitle>
-                <TinyMeta>
-                  {draftPage
-                    ? canvasMode === 'preview'
-                      ? t('Full-page preview of the current draft.')
-                      : t(
-                          'Compose blocks in-page and open Page Options for block details.',
-                        )
-                    : t('Choose a page or create a new one.')}
-                </TinyMeta>
-              </div>
-              {draftPage ? (
-                <InlinePills>
-                  <Tag>
-                    {draftPage.path || draftPage.slug || t('untitled-page')}
-                  </Tag>
-                  {selection.type === 'block' ? (
-                    <Tag color="processing">{t('Block selected')}</Tag>
-                  ) : (
-                    <Tag>{t('Page options')}</Tag>
-                  )}
-                </InlinePills>
-              ) : null}
-            </PanelHeader>
+            type="text"
+            icon={rightPanelCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            onClick={() => setRightPanelCollapsed(!rightPanelCollapsed)}
+            title={rightPanelCollapsed ? t('Show Properties') : t('Hide Properties')}
+          />
+        </HeaderRight>
+      </StudioHeader>
+
+      <StudioWorkspace $leftCollapsed={leftPanelCollapsed}>
+        {renderLibraryPanel()}
+
+        <CanvasPanel>
+          <CanvasTopBar>
+            <Space>
+              <span style={{ fontSize: 12, color: '#64748b' }}>{t('Insert to:')}</span>
+              <Select
+                size="small"
+                style={{ minWidth: 120 }}
+                value={quickInsertSlot}
+                onChange={value => setQuickInsertSlot(value)}
+                options={SLOT_OPTIONS.map(option => ({
+                  value: option.value,
+                  label: option.label,
+                }))}
+                disabled={isPublishedPage}
+              />
+            </Space>
+            <Space>
+              {selection.type === 'block' && selectedBlock && (
+                <Tag color="processing">
+                  {blockIcon(selectedBlock.block_type)} {selectedBlock.block_type}
+                </Tag>
+              )}
+            </Space>
+          </CanvasTopBar>
+
+          <CanvasContainer>
             {draftPage ? (
-              <>
-                {isPublishedPage ? (
-                  <Alert
-                    showIcon
-                    type="info"
-                    style={{ marginBottom: 16 }}
-                    message={t(
-                      'Published pages are read-only. Unpublish to edit content.',
+              <ViewportFrame $mode={previewViewport}>
+                <StudioViewport>
+                  {isPublishedPage && (
+                    <Alert
+                      showIcon
+                      type="info"
+                      style={{ marginBottom: 16 }}
+                      message={t('Published pages are read-only.')}
+                    />
+                  )}
+                  <RegionGrid>
+                    {SLOT_OPTIONS.map(slot =>
+                      renderSlotRegion(slot, canvasMode === 'compose'),
                     )}
-                  />
-                ) : null}
-                <TinyMeta style={{ marginBottom: 12 }}>
-                  {selection.type === 'block'
-                    ? selectedBlock &&
-                      isContainerBlock(selectedBlock.block_type)
-                      ? t(
-                          'The selected container can receive child blocks. Click any block in the canvas to edit it.',
-                        )
-                      : t(
-                          'Click any block in the canvas to edit it. Use Add After for a sibling, or the 1/2/3/4 column actions to place content into a 12-column grid row.',
-                        )
-                    : t(
-                        'Use Document to switch pages or choose blocks, and Page Options to format the selected content.',
-                      )}
-                </TinyMeta>
-                <CanvasSurface>
-                  <ViewportFrame $mode={previewViewport}>
-                    <StudioViewport>
-                      <RegionGrid>
-                        {SLOT_OPTIONS.map(slot =>
-                          renderSlotRegion(slot, canvasMode === 'compose'),
-                        )}
-                      </RegionGrid>
-                    </StudioViewport>
-                  </ViewportFrame>
-                </CanvasSurface>
-              </>
+                  </RegionGrid>
+                </StudioViewport>
+              </ViewportFrame>
             ) : (
-              <Empty description={t('Choose a page or create a new one.')} />
+              <Empty
+                description={t('Select or create a page to start editing')}
+                style={{ marginTop: 120 }}
+              >
+                <Button type="primary" onClick={onNewPage}>
+                  <PlusOutlined /> {t('Create Page')}
+                </Button>
+              </Empty>
             )}
-          </Panel>
-        </StudioCenter>
-        {desktopDockedPanels ? (
-          <DockRail ref={settingsDockRef} aria-label={t('Page Options')}>
-            <Panel>
-              <PanelHeader>
-                <div>
-                  <PanelTitle>{t('Page Options')}</PanelTitle>
-                  <TinyMeta>
-                    {selection.type === 'block'
-                      ? t(
-                          'Adjust the selected block content, layout, and styling.',
-                        )
-                      : t(
-                          'Manage page metadata, layout, visibility, and publishing details.',
-                        )}
-                  </TinyMeta>
-                </div>
-                {selection.type === 'block' && selectedBlock ? (
-                  <Tag color="processing">
-                    {selectedBlock.metadata?.label || selectedBlock.block_type}
-                  </Tag>
-                ) : draftPage ? (
-                  <Tag>{t('Page')}</Tag>
-                ) : null}
-              </PanelHeader>
-              {renderInspector()}
-            </Panel>
-          </DockRail>
-        ) : null}
-      </StudioShell>
+          </CanvasContainer>
+
+          {(selection.type === 'block' || draftPage) && (
+            <SelectionBreadcrumb>
+              {getSelectionBreadcrumb().map((item, index, arr) => (
+                <span key={index}>
+                  <span
+                    className={index === arr.length - 1 ? 'current' : 'item'}
+                    onClick={() => {
+                      if (index === 0) setSelection({ type: 'page' });
+                    }}
+                  >
+                    {item}
+                  </span>
+                  {index < arr.length - 1 && (
+                    <span className="separator"> &gt; </span>
+                  )}
+                </span>
+              ))}
+            </SelectionBreadcrumb>
+          )}
+        </CanvasPanel>
+
+        {renderPropertiesPanel()}
+      </StudioWorkspace>
+
       <Drawer
-        title={t('Document')}
+        title={t('Document & Reusable Sections')}
         placement="left"
         open={documentOpen}
         width="min(560px, calc(100vw - 24px))"
@@ -5178,8 +6184,8 @@ export default function BlockStudio({
         push={false}
         styles={{
           wrapper: {
-            top: 76,
-            height: 'calc(100vh - 76px)',
+            top: 52,
+            height: 'calc(100vh - 52px)',
           },
           body: {
             overflowY: 'auto',
@@ -5190,42 +6196,17 @@ export default function BlockStudio({
       >
         {renderDocumentDrawer()}
       </Drawer>
-      {!desktopDockedPanels ? (
-        <Drawer
-          title={t('Page Options')}
-          extra={
-            draftPage && onSaveDraft ? (
-              <Button
-                type="primary"
-                icon={<SaveOutlined />}
-                loading={savingDraft}
-                disabled={isPublishedPage}
-                onClick={onSaveDraft}
-              >
-                {t('Save Draft')}
-              </Button>
-            ) : null
-          }
-          placement="right"
-          open={settingsOpen}
-          width="min(720px, calc(100vw - 24px))"
-          mask={false}
-          push={false}
-          styles={{
-            wrapper: {
-              top: 76,
-              height: 'calc(100vh - 76px)',
-            },
-            body: {
-              overflowY: 'auto',
-              paddingBottom: 24,
-            },
-          }}
-          onClose={() => setSettingsOpen(false)}
-        >
-          {renderInspector()}
-        </Drawer>
-      ) : null}
-    </StudioLayout>
+
+      <AIPageGenerator
+        open={aiGeneratorOpen}
+        onClose={() => setAiGeneratorOpen(false)}
+        onApplyBlocks={handleApplyAIBlocks}
+        availableCharts={charts.map(c => ({ id: c.id, name: c.slice_name }))}
+        availableDashboards={dashboards.map(d => ({
+          id: d.id,
+          name: d.dashboard_title,
+        }))}
+      />
+    </StudioRoot>
   );
 }

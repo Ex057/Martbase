@@ -17,15 +17,29 @@
  * under the License.
  */
 /* eslint-disable theme-colors/no-literal-colors */
-import React from 'react';
+import React, { useMemo } from 'react';
 import { styled } from '@superset-ui/core';
+import {
+  ChartTitleBlock,
+  chartTitleHeight,
+} from 'src/components/ChartTitleBlock';
 import { CohortCascadeChartProps, CascadeOrientation } from './types';
 
-const Wrapper = styled.div`
+interface WrapperProps {
+  $densityTier: string;
+}
+
+const DENSITY_PADDING: Record<string, number> = {
+  compact: 8,
+  standard: 16,
+  presentation: 24,
+};
+
+const Wrapper = styled.div<WrapperProps>`
   width: 100%;
   height: 100%;
   overflow: auto;
-  padding: 16px;
+  padding: ${({ $densityTier }) => DENSITY_PADDING[$densityTier] || 16}px;
   font-family: var(--pro-font-family, Inter, 'Segoe UI', Roboto, sans-serif);
 `;
 
@@ -62,6 +76,7 @@ interface BarProps {
   $color: string;
   $radius: number;
   $orientation: CascadeOrientation;
+  $emphasized?: boolean;
 }
 
 const Bar = styled.div<BarProps>`
@@ -75,6 +90,10 @@ const Bar = styled.div<BarProps>`
   position: relative;
   transition: all 0.3s ease;
   min-height: 20px;
+  ${({ $emphasized }) =>
+    $emphasized
+      ? 'box-shadow: 0 0 0 2px var(--pro-danger, #D32F2F); opacity: 0.85;'
+      : ''}
 
   /* Width represents proportion in vertical layout */
   ${({ $orientation, $heightPercent }) =>
@@ -160,39 +179,80 @@ export default function CohortCascadeViz(props: CohortCascadeChartProps) {
     barGap,
     labelFontSize,
     valueFontSize,
+    chartTitle,
+    connectorStyle = 'arrow',
+    labelPlacement = 'outside',
+    densityTier = 'standard',
+    showDropoffEmphasis = true,
+    nullValueText = '–',
   } = props;
+
+  const titleHeight = chartTitle ? chartTitleHeight(chartTitle) : 0;
+  const contentHeight = height - titleHeight;
 
   if (!stages || stages.length === 0) {
     return (
-      <Wrapper style={{ width, height }}>
+      <Wrapper style={{ width, height }} $densityTier={densityTier}>
+        {chartTitle && <ChartTitleBlock {...chartTitle} />}
         <EmptyState>No cascade stages configured</EmptyState>
       </Wrapper>
     );
   }
 
-  const maxValue = Math.max(...stages.map(s => s.value), 1);
+  const maxValue = useMemo(
+    () => Math.max(...stages.map(s => s.value), 1),
+    [stages],
+  );
 
   return (
-    <Wrapper style={{ width, height }}>
-      <Container $orientation={orientation} $gap={barGap}>
+    <Wrapper style={{ width, height }} $densityTier={densityTier}>
+      {chartTitle && <ChartTitleBlock {...chartTitle} />}
+      <Container $orientation={orientation} $gap={barGap} style={{ height: contentHeight }}>
         {stages.map((stage, idx) => (
           <React.Fragment key={stage.label}>
-            {idx > 0 && showConnectors && (
+            {idx > 0 && showConnectors && connectorStyle !== 'none' && (
               <Connector $orientation={orientation}>
-                {orientation === 'horizontal' ? '→' : '↓'}
+                {connectorStyle === 'line'
+                  ? (orientation === 'horizontal' ? '—' : '|')
+                  : (orientation === 'horizontal' ? '→' : '↓')}
               </Connector>
             )}
             <StageBlock $orientation={orientation}>
-              <StageLabel $size={labelFontSize}>{stage.label}</StageLabel>
+              {labelPlacement === 'outside' && (
+                <StageLabel $size={labelFontSize}>{stage.label}</StageLabel>
+              )}
               <Bar
                 $heightPercent={(stage.value / maxValue) * 100}
                 $color={stage.color}
                 $radius={barBorderRadius}
                 $orientation={orientation}
-              />
+                $emphasized={showDropoffEmphasis && stage.percentLost > 20}
+              >
+                {labelPlacement === 'inside' && (
+                  <StageLabel
+                    $size={labelFontSize}
+                    style={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      color: '#fff',
+                      textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                      margin: 0,
+                    }}
+                  >
+                    {stage.label}
+                  </StageLabel>
+                )}
+              </Bar>
+              {labelPlacement === 'below' && (
+                <StageLabel $size={labelFontSize}>{stage.label}</StageLabel>
+              )}
               {showValues && (
                 <StageValue $size={valueFontSize}>
-                  {stage.formattedValue}
+                  {stage.value === null || stage.value === undefined
+                    ? nullValueText
+                    : stage.formattedValue}
                 </StageValue>
               )}
               {showPercentRetained && idx > 0 && (

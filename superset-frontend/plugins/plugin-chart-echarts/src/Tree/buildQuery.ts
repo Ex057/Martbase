@@ -17,9 +17,23 @@
  * under the License.
  */
 import { buildQueryContext, QueryFormData } from '@superset-ui/core';
+import { dhis2ColumnFilterClauses } from 'src/explore/components/controls/DHIS2ColumnFilterControl/shared';
 
 export default function buildQuery(formData: QueryFormData) {
   return buildQueryContext(formData, {
+    buildQuery: baseQueryObject => {
+      const existingFilters = Array.isArray(baseQueryObject.filters)
+        ? baseQueryObject.filters
+        : [];
+      const dhis2Filters = dhis2ColumnFilterClauses(formData);
+
+      return [
+        {
+          ...baseQueryObject,
+          filters: [...existingFilters, ...dhis2Filters],
+        },
+      ];
+    },
     queryFields: {
       id: 'columns',
       parent: 'columns',

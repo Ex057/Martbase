@@ -471,9 +471,26 @@ export const chartTitleSection: ControlPanelSectionConfig = {
           renderTrigger: true,
           default: false,
           description: t(
-            'Automatically build the subtitle from the chart’s active filters, ' +
-              'e.g. "Region: Bukedi, Busoga · Year > 2020". Uncheck to type your own subtitle.',
+            "Automatically build the subtitle from the chart's active filters, " +
+              'e.g. "Region: Bukedi, Busoga - Year > 2020". Uncheck to type your own subtitle.',
           ),
+        },
+      },
+    ],
+    [
+      {
+        name: 'chart_auto_subtitle_metrics',
+        config: {
+          type: 'CheckboxControl',
+          label: t('Include metrics in subtitle'),
+          renderTrigger: true,
+          default: true,
+          description: t(
+            'Prepend metric names to the auto subtitle, ' +
+              'e.g. "Malaria Cases - Last 12 months - Region: Bukedi".',
+          ),
+          visibility: ({ controls }: any) =>
+            Boolean(controls?.chart_auto_subtitle?.value),
         },
       },
     ],
