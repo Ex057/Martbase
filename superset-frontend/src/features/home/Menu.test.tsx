@@ -41,10 +41,9 @@ var mockBootstrapData = {
     roles: {
       Admin: [
         ['cms.pages.view', 'CMS'],
-        ['can_list', 'DatabaseView'],
-        ['can_list', 'TableModelView'],
+        ['can_write', 'Database'],
+        ['can_write', 'Dataset'],
         ['can_list', 'DHIS2AdminView'],
-        ['can_list', 'AIManagement'],
         ['can_read', 'AIManagement'],
         ['can_write', 'AIManagement'],
       ],
@@ -395,10 +394,9 @@ beforeEach(() => {
       roles: {
         Admin: [
           ['cms.pages.view', 'CMS'],
-          ['can_list', 'DatabaseView'],
-          ['can_list', 'TableModelView'],
+          ['can_write', 'Database'],
+          ['can_write', 'Dataset'],
           ['can_list', 'DHIS2AdminView'],
-          ['can_list', 'AIManagement'],
           ['can_read', 'AIManagement'],
           ['can_write', 'AIManagement'],
         ],
@@ -678,7 +676,6 @@ test('should inject AI Management when the user can access it', async () => {
       ...mockBootstrapData.user,
       roles: {
         Analytics: [
-          ['can_list', 'AIManagement'],
           ['can_read', 'AIManagement'],
           ['can_write', 'AIManagement'],
         ],
@@ -704,8 +701,8 @@ test('should hide DHIS2 workspace links without DHIS2 admin permission', async (
       ...mockBootstrapData.user,
       roles: {
         Analytics: [
-          ['can_list', 'DatabaseView'],
-          ['can_list', 'TableModelView'],
+          ['can_write', 'Database'],
+          ['can_write', 'Dataset'],
         ],
       },
     },

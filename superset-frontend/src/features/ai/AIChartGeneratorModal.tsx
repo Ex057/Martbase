@@ -511,6 +511,56 @@ function mapDatasetToOption(item: Dataset): DatasetOption {
   };
 }
 
+/**
+ * Rebuild a DatasetOption from what AsyncSelect hands back on change.
+ *
+ * AsyncSelect calls `onChange(selectValue, option)` where `selectValue` is the
+ * antd labeled value — `{ value, label }` only — and `option` is the full
+ * option object carrying our extra `id` field. Reading only the first argument
+ * yields `id: undefined`, which silently downgrades an explicit dataset choice
+ * into backend auto-detect. Prefer `option`, and fall back to parsing the id
+ * out of the `<id>__<type>` value so a restored/pasted value still resolves.
+ */
+export function resolveDatasetOption(
+  value: unknown,
+  option?: unknown,
+): DatasetOption | null {
+  const candidate = (option ?? value) as Partial<DatasetOption> | null;
+  if (!candidate) {
+    return null;
+  }
+  if (typeof candidate.id === 'number') {
+    return candidate as DatasetOption;
+  }
+  const rawValue =
+    typeof candidate.value === 'string' ? candidate.value : undefined;
+  const parsedId = Number(rawValue?.split('__')[0]);
+  if (!Number.isFinite(parsedId)) {
+    return null;
+  }
+  return { ...candidate, id: parsedId } as DatasetOption;
+}
+
+/**
+ * Pick the params to save for a chart whose viz type may have been swapped in
+ * the review step.
+ *
+ * Each viz type has its own required controls, so reusing the original params
+ * after a swap leaves the new chart's fields unpopulated — a map's params carry
+ * no `x_axis` or plural `metrics` for a bar chart. The backend precomputes a
+ * valid config per offered viz type in `params_by_viz`; fall back to the
+ * original params only when the target type has none.
+ */
+export function paramsForChosenViz(
+  chart: {
+    params: Record<string, unknown>;
+    params_by_viz?: Record<string, Record<string, unknown>>;
+  },
+  chosenViz: string,
+): Record<string, unknown> {
+  return chart.params_by_viz?.[chosenViz] ?? chart.params;
+}
+
 /* ── Component ────────────────────────────────────── */
 
 export default function AIChartGeneratorModal({ show, onHide, onChartsCreated }: Props) {
@@ -610,6 +660,7 @@ export default function AIChartGeneratorModal({ show, onHide, onChartsCreated }:
     try {
       const chartsToSave = proposals.map((chart, idx) => {
         const chosenViz = selectedVizTypes[idx] || chart.viz_type;
+        const chosenParams = paramsForChosenViz(chart, chosenViz);
         return {
           slice_name: chart.slice_name,
           viz_type: chosenViz,
@@ -617,7 +668,7 @@ export default function AIChartGeneratorModal({ show, onHide, onChartsCreated }:
           datasource_id: chart.datasource_id,
           datasource_type: chart.datasource_type || 'table',
           params: {
-            ...chart.params,
+            ...chosenParams,
             viz_type: chosenViz,
             datasource: `${chart.datasource_id}__table`,
           },
@@ -788,8 +839,8 @@ export default function AIChartGeneratorModal({ show, onHide, onChartsCreated }:
                 <AsyncSelect
                   ariaLabel={t('Dataset')}
                   name="ai-chart-dataset"
-                  onChange={value =>
-                    setSelectedDataset((value as DatasetOption | null) ?? null)
+                  onChange={(value, option) =>
+                    setSelectedDataset(resolveDatasetOption(value, option))
                   }
                   options={loadDatasets}
                   optionFilterProps={['id', 'customLabel']}

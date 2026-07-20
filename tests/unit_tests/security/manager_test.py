@@ -248,28 +248,91 @@ def test_sync_custom_production_roles_adds_expected_permissions(
         pvm.view_menu.name = view_menu_name
         return pvm
 
+    # The set of PVMs that actually exist in a synced Superset instance. Note
+    # there is deliberately no ("can_list", "AIManagement"), ("can_list",
+    # "TableModelView") or ("can_list", "DatabaseView") here: those views set a
+    # class_permission_name and use MODEL_VIEW_RW_METHOD_PERMISSION_MAP, which
+    # maps "list" -> "read". Referencing them is a silent no-op, which is the
+    # bug KNOWN_PVMS + test_custom_role_specs_reference_real_pvms guard against.
+    KNOWN_PVMS = {
+        ("can_read", "AIManagement"),
+        ("can_write", "AIManagement"),
+        ("menu_access", "AI Management"),
+        ("can_read", "Dataset"),
+        ("can_write", "Dataset"),
+        ("menu_access", "Datasets"),
+        ("menu_access", "Databases"),
+        ("menu_access", "Data"),
+        ("can_list", "DHIS2AdminView"),
+        ("can_sqllab", "Superset"),
+        ("can_sqllab_history", "Superset"),
+        ("can_explore", "Superset"),
+        ("can_share_chart", "Superset"),
+        ("can_share_dashboard", "Superset"),
+        ("can_write", "Chart"),
+        ("can_write", "Dashboard"),
+        ("can_view_query", "Dashboard"),
+        ("can_view_chart_as_table", "Dashboard"),
+        ("menu_access", "Charts"),
+        ("all_datasource_access", "all_datasource_access"),
+        ("can_dhis2_metadata", "Database"),
+        ("cms.pages.view", "CMS"),
+        ("cms.pages.create", "CMS"),
+        ("cms.pages.edit", "CMS"),
+        ("cms.pages.delete", "CMS"),
+        ("cms.pages.publish", "CMS"),
+        ("cms.media.manage", "CMS"),
+        ("cms.menus.manage", "CMS"),
+        ("cms.charts.embed", "CMS"),
+        ("cms.layout.manage", "CMS"),
+        ("cms.themes.manage", "CMS"),
+        ("cms.templates.manage", "CMS"),
+        ("cms.styles.manage", "CMS"),
+    }
+
+    # These mirror what Alpha and Gamma actually hold in a synced instance, so
+    # that revokes are genuinely exercised — copy_role resets each custom role
+    # to its base, so a permission missing here would make its revoke a no-op
+    # and the corresponding assertion vacuous.
     base_alpha_pvms = [
-        make_pvm("can_list", "DatabaseView"),
-        make_pvm("can_list", "TableModelView"),
+        make_pvm("menu_access", "Data"),
+        make_pvm("menu_access", "Databases"),
+        make_pvm("menu_access", "Datasets"),
+        make_pvm("menu_access", "AI Management"),
+        make_pvm("can_read", "Dataset"),
+        make_pvm("can_write", "Dataset"),
+        make_pvm("can_read", "AIManagement"),
+        make_pvm("can_write", "AIManagement"),
         make_pvm("can_list", "DHIS2AdminView"),
+        # DHIS2AdminView is not in ADMIN_ONLY_VIEW_MENUS, so Alpha inherits
+        # every permission under it — including instance management.
+        make_pvm("can_instances", "DHIS2AdminView"),
     ]
     base_gamma_pvms = [
         make_pvm("can_read", "Dashboard"),
-        make_pvm("can_list", "DatabaseView"),
+        make_pvm("menu_access", "Databases"),
+        make_pvm("menu_access", "Datasets"),
+        make_pvm("menu_access", "AI Management"),
+        # Gamma keeps can_read on Dataset so dashboard charts resolve their
+        # datasource; the End user spec must not revoke it.
+        make_pvm("can_read", "Dataset"),
+        make_pvm("can_read", "AIManagement"),
+        make_pvm("can_write", "AIManagement"),
         make_pvm("can_sqllab", "Superset"),
     ]
-    ai_list = make_pvm("can_list", "AIManagement")
     ai_read = make_pvm("can_read", "AIManagement")
     ai_write = make_pvm("can_write", "AIManagement")
+    ai_menu = make_pvm("menu_access", "AI Management")
     cms_view = make_pvm("cms.pages.view", "CMS")
 
     role_map = {
         "Data Management": MagicMock(permissions=list(base_alpha_pvms)),
         "Analytics": MagicMock(
-            permissions=list(base_alpha_pvms) + [ai_list, ai_read, ai_write]
+            permissions=list(base_alpha_pvms) + [ai_read, ai_write, ai_menu]
         ),
         "End user": MagicMock(
-            permissions=list(base_gamma_pvms) + [ai_list, ai_read, ai_write, cms_view]
+            permissions=list(base_gamma_pvms)
+            + [ai_read, ai_write, ai_menu, cms_view]
         ),
     }
 
@@ -279,18 +342,10 @@ def test_sync_custom_production_roles_adds_expected_permissions(
         role_map[role_to_name].permissions = list(source)
 
     def find_pvm(permission_name: str, view_menu_name: str) -> MagicMock | None:
-        lookup = {
-            ("can_list", "AIManagement"): ai_list,
-            ("can_read", "AIManagement"): ai_read,
-            ("can_write", "AIManagement"): ai_write,
-            ("can_list", "DHIS2AdminView"): make_pvm(
-                "can_list",
-                "DHIS2AdminView",
-            ),
-            ("can_sqllab", "Superset"): make_pvm("can_sqllab", "Superset"),
-            ("cms.pages.view", "CMS"): cms_view,
-        }
-        return lookup.get((permission_name, view_menu_name))
+        """Mirror FAB: return None for a pair that was never registered."""
+        if (permission_name, view_menu_name) not in KNOWN_PVMS:
+            return None
+        return make_pvm(permission_name, view_menu_name)
 
     copy_role_mock = mocker.patch.object(sm, "copy_role", side_effect=copy_role)
     mocker.patch.object(sm, "find_role", side_effect=lambda name: role_map.get(name))
@@ -312,23 +367,45 @@ def test_sync_custom_production_roles_adds_expected_permissions(
         (pvm.permission.name, pvm.view_menu.name)
         for pvm in role_map["Data Management"].permissions
     } >= {
-        ("can_list", "AIManagement"),
+        # AI Management: API/view access plus the nav item.
         ("can_read", "AIManagement"),
         ("can_write", "AIManagement"),
+        ("menu_access", "AI Management"),
+        # Datasets: model access plus the nav item.
+        ("can_read", "Dataset"),
+        ("can_write", "Dataset"),
+        ("menu_access", "Datasets"),
         ("can_list", "DHIS2AdminView"),
     }
-    assert ("can_list", "AIManagement") in {
+    # Data Management sees the DHIS2 workspace but must not manage instances.
+    assert ("can_instances", "DHIS2AdminView") not in {
+        (pvm.permission.name, pvm.view_menu.name)
+        for pvm in role_map["Data Management"].permissions
+    }
+
+    # Analytics gets neither AI Management nor the Datasets nav item, but keeps
+    # can_read on Dataset so its charts and dashboards still work.
+    analytics_pvms = {
         (pvm.permission.name, pvm.view_menu.name)
         for pvm in role_map["Analytics"].permissions
     }
-    assert ("can_list", "AIManagement") not in {
+    assert ("can_read", "AIManagement") not in analytics_pvms
+    assert ("menu_access", "AI Management") not in analytics_pvms
+    assert ("can_write", "Dataset") not in analytics_pvms
+    assert ("menu_access", "Datasets") not in analytics_pvms
+    assert ("can_read", "Dataset") in analytics_pvms
+
+    end_user_pvms = {
         (pvm.permission.name, pvm.view_menu.name)
         for pvm in role_map["End user"].permissions
     }
-    assert ("can_list", "DatabaseView") not in {
-        (pvm.permission.name, pvm.view_menu.name)
-        for pvm in role_map["End user"].permissions
-    }
+    assert ("can_read", "AIManagement") not in end_user_pvms
+    assert ("menu_access", "AI Management") not in end_user_pvms
+    assert ("menu_access", "Databases") not in end_user_pvms
+    assert ("menu_access", "Datasets") not in end_user_pvms
+    # ...but dashboard charts still need to resolve their datasource, so the
+    # Datasets nav item is hidden via menu_access without touching can_read.
+    assert ("can_read", "Dataset") in end_user_pvms
     assert ("can_sqllab", "Superset") not in {
         (pvm.permission.name, pvm.view_menu.name)
         for pvm in role_map["End user"].permissions
@@ -337,6 +414,44 @@ def test_sync_custom_production_roles_adds_expected_permissions(
         (pvm.permission.name, pvm.view_menu.name)
         for pvm in role_map["End user"].permissions
     }
+
+
+def test_custom_role_specs_do_not_reference_can_list_on_rw_mapped_views() -> None:
+    """
+    Guard against grants that are silently skipped at sync time.
+
+    sync_custom_production_roles looks each (permission, view_menu) pair up with
+    find_permission_view_menu and skips it when the lookup returns None — no
+    warning, no error. So referencing a permission that is never registered
+    grants nothing while looking correct in review.
+
+    Views that set method_permission_name = MODEL_VIEW_RW_METHOD_PERMISSION_MAP
+    map "list" -> "read", so they only ever register can_read/can_write.
+    ("can_list", "AIManagement") and ("can_list", "TableModelView") were exactly
+    this bug: the Data Management role appeared to grant AI Management and
+    Datasets while the nav gates checked permissions that could never exist.
+    """
+    rw_mapped_view_menus = {
+        "AIManagement",
+        "TableModelView",
+        "DatabaseView",
+        "Dataset",
+        "Chart",
+        "Dashboard",
+    }
+
+    offenders = [
+        (spec.name, permission_name, view_menu_name)
+        for spec in PRODUCTION_CUSTOM_ROLE_SPECS
+        for permission_name, view_menu_name in spec.grant + spec.revoke
+        if permission_name == "can_list" and view_menu_name in rw_mapped_view_menus
+    ]
+
+    assert not offenders, (
+        "Role specs reference permissions that are never registered, so they are "
+        f"silently skipped at sync time: {offenders}. Use can_read/can_write for "
+        "RW-mapped model views, or menu_access to gate a nav item."
+    )
 
 
 def test_raise_for_access_guest_user_tampered_form_data_groupby(

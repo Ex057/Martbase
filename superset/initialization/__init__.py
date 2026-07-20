@@ -382,6 +382,11 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
             icon="fa-server",
             category="Settings",
             category_label=_("Settings"),
+            # Admin-only: instance management exposes DHIS2 server credentials,
+            # so it uses can_instances rather than the workspace-wide can_list.
+            menu_cond=lambda: appbuilder.sm.can_access(
+                "can_instances", "DHIS2AdminView"
+            ),
         )
         appbuilder.add_link(
             "DHIS2 Health",
@@ -447,7 +452,13 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
             icon="fa-table",
             category="",
             category_icon="",
-            cond=lambda: appbuilder.sm.can_access("can_list", "TableModelView"),
+            # TableModelView sets class_permission_name = "Dataset" and uses
+            # MODEL_VIEW_RW_METHOD_PERMISSION_MAP ("list" -> "read"), so there is
+            # no ("can_list", "TableModelView") — see the security_converge_datasets
+            # migration (45731db65d9c), which renamed it. can_write rather than
+            # can_read: Gamma holds can_read on Dataset so dashboards can resolve
+            # their datasource, and must not see the Datasets nav item.
+            cond=lambda: appbuilder.sm.can_access("can_write", "Dataset"),
         )
 
         appbuilder.add_view(
@@ -545,7 +556,9 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
                 cond=lambda: feature_flag_manager.is_feature_enabled("AI_INSIGHTS")
                 and (
                     appbuilder.sm.is_admin()
-                    or appbuilder.sm.can_access("can_list", "AIManagement")
+                    # AIManagementView uses MODEL_VIEW_RW_METHOD_PERMISSION_MAP,
+                    # which maps "list" -> "read"; can_list is never created.
+                    or appbuilder.sm.can_access("can_read", "AIManagement")
                 ),
             )
 

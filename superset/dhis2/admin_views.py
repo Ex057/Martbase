@@ -31,6 +31,7 @@ from urllib.parse import quote
 
 from flask import Blueprint, abort, current_app, g, redirect, request
 from flask_appbuilder import BaseView, expose, has_access
+from flask_appbuilder.security.decorators import permission_name
 
 from superset import security_manager
 from superset.superset_typing import FlaskResponse
@@ -53,8 +54,14 @@ class DHIS2AdminView(BaseView):
 
     @expose("/list/")
     @has_access
+    @permission_name("instances")
     def list(self) -> object:
-        """Redirect to the React instance management page."""
+        """Redirect to the React instance management page.
+
+        Guarded by ``can_instances`` rather than the workspace-wide
+        ``can_list``: managing instances exposes DHIS2 server credentials and
+        connection config, so it is Admin-only.
+        """
         return redirect(self._frontend_path("/superset/dhis2/instances/"))
 
     @expose("/health/")
@@ -94,12 +101,19 @@ dhis2_frontend_blueprint = Blueprint(
 )
 
 
-def _render_authenticated_shell() -> FlaskResponse:
+def _render_authenticated_shell(
+    permission: str = "can_list",
+) -> FlaskResponse:
+    """Render the React shell, gated on a DHIS2AdminView permission.
+
+    Defaults to the workspace-wide ``can_list``; the instances page passes
+    ``can_instances`` because it exposes DHIS2 server credentials.
+    """
     user = getattr(g, "user", None)
     if user is None or getattr(user, "is_anonymous", True):
         next_target = quote(request.full_path.rstrip("?"))
         return redirect(f"/login/?next={next_target}")
-    if not security_manager.can_access("can_list", "DHIS2AdminView"):
+    if not security_manager.can_access(permission, "DHIS2AdminView"):
         abort(403)
     from superset.extensions import appbuilder
 
@@ -110,7 +124,7 @@ def _render_authenticated_shell() -> FlaskResponse:
 
 @dhis2_frontend_blueprint.route("/instances/")
 def dhis2_instances() -> FlaskResponse:
-    return _render_authenticated_shell()
+    return _render_authenticated_shell("can_instances")
 
 
 @dhis2_frontend_blueprint.route("/health/")

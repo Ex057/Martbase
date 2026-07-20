@@ -46,7 +46,7 @@ def _render_authenticated_shell() -> FlaskResponse:
         return redirect(f"/login/?next={next_target}")
     if not (
         security_manager.is_admin()
-        or security_manager.can_access("can_list", "AIManagement")
+        or security_manager.can_access("can_read", "AIManagement")
     ):
         abort(403)
     from superset.extensions import appbuilder

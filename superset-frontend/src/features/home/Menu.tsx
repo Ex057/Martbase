@@ -497,26 +497,42 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
     !data.navbar_right.user_is_anonymous,
   );
   const canViewCms = userHasPermission(currentUser, 'CMS', 'cms.pages.view');
+  // These gate on the *write* permission, not on can_list or menu_access.
+  //
+  // can_list is wrong: TableModelView/DatabaseView set class_permission_name
+  // and use MODEL_VIEW_RW_METHOD_PERMISSION_MAP ("list" -> "read"), so
+  // ("can_list", "TableModelView") and ("can_list", "DatabaseView") are never
+  // registered and evaluate false for every non-admin.
+  //
+  // menu_access is also wrong: Gamma grants it, so gating on it would expose
+  // these nav items to End users.
+  //
+  // can_write is the permission that actually tracks intent — Gamma (and so
+  // End user) has only can_read on Dataset, which it needs so dashboard charts
+  // can resolve their datasource, while Alpha-based roles have can_write.
   const canViewDatabases = userHasPermission(
     currentUser,
-    'DatabaseView',
-    'can_list',
+    'Database',
+    'can_write',
   );
-  const canViewDatasets = userHasPermission(
-    currentUser,
-    'TableModelView',
-    'can_list',
-  );
+  const canViewDatasets = userHasPermission(currentUser, 'Dataset', 'can_write');
   const canViewDhis2Admin = userHasPermission(
     currentUser,
     'DHIS2AdminView',
     'can_list',
   );
   const canUseSqlLab = userHasPermission(currentUser, 'Superset', 'can_sqllab');
+  // AIManagementView uses MODEL_VIEW_RW_METHOD_PERMISSION_MAP, so can_list is
+  // never registered; can_read is the permission the End user spec revokes.
   const canViewAiManagement = userHasPermission(
     currentUser,
     'AIManagement',
-    'can_list',
+    'can_read',
+  );
+  const canManageDhis2Instances = userHasPermission(
+    currentUser,
+    'DHIS2AdminView',
+    'can_instances',
   );
   const canViewDataMenu =
     canViewDatabases || canViewDatasets || canViewDhis2Admin || canUseSqlLab;
@@ -548,11 +564,18 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
           label: 'Sync History',
           url: '/superset/dhis2/sync-history/',
         },
-        {
-          name: 'DHIS2 Instances',
-          label: 'DHIS2 Instances',
-          url: '/superset/dhis2/instances/',
-        },
+        // Instance management exposes DHIS2 server credentials, so it has its
+        // own can_instances permission rather than sharing can_list with the
+        // rest of the workspace. Admin-only; Data Management revokes it.
+        ...(canManageDhis2Instances
+          ? [
+              {
+                name: 'DHIS2 Instances',
+                label: 'DHIS2 Instances',
+                url: '/superset/dhis2/instances/',
+              },
+            ]
+          : []),
         {
           name: 'Staging Engine',
           label: 'Staging Engine',

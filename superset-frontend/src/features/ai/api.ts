@@ -281,6 +281,11 @@ export type AIProposedChart = {
   datasource_name?: string;
   alt_viz_types: AltVizType[];
   params: Record<string, unknown>;
+  /**
+   * Valid params per offered viz type, so switching chart type in the review
+   * step yields a populated chart rather than reusing incompatible params.
+   */
+  params_by_viz?: Record<string, Record<string, unknown>>;
 };
 
 export type AIChartGenerateResult = {

@@ -5750,6 +5750,220 @@ def _audit(
         logger.debug("Failed to persist AI usage log", exc_info=True)
 
 
+_PROMPT_STOPWORDS = frozenset(
+    {
+        "chart", "charts", "show", "create", "with", "and", "the", "for",
+        "data", "make", "give", "please", "want", "need", "each", "per",
+        "using", "from", "into", "that", "this", "some", "all", "top",
+    }
+)
+
+# Prompt keyword → viz_type emitted by ``_build_chart_configs_python``.
+# Targets are restricted to the seven types this generator can actually build;
+# ``_LEGACY_VIZ_MAP`` in ``_finalize_chart_configs`` is the source of truth for
+# which keys are registered plugins.
+_VIZ_KEYWORDS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("map", "choropleth", "geographic", "geographical", "spatial"), "dhis2_map"),
+    (("heatmap", "heat map", "matrix", "cross-tab", "crosstab"), "heatmap_v2"),
+    (("pie", "donut", "doughnut", "proportion", "share", "breakdown"), "pie"),
+    (
+        ("trend", "over time", "time series", "timeseries", "line",
+         "trajectory", "monthly", "yearly", "quarterly", "growth"),
+        "echarts_timeseries_line",
+    ),
+    (("bar", "compare", "comparison", "ranking", "ranked", "rank"), "echarts_timeseries_bar"),
+    (("table", "tabular", "listing", "detailed", "raw"), "table"),
+    (("kpi", "big number", "headline", "total", "overall", "scorecard"), "big_number_total"),
+)
+
+
+def _prompt_terms(prompt: str) -> set[str]:
+    """Tokenize a prompt into meaningful lowercase terms."""
+    return {
+        term
+        for term in re.findall(r"[a-zA-Z0-9_]{3,}", (prompt or "").lower())
+        if term not in _PROMPT_STOPWORDS
+    }
+
+
+# Numeric columns that are structural rather than measures. Aggregating these
+# produces meaningless charts (``SUM(ou_level)`` sums DHIS2 hierarchy depth), so
+# they are ranked last when choosing a metric — but still usable as a last
+# resort if a dataset exposes nothing else numeric.
+# Deliberately narrow: a bare "_level" suffix would demote real health measures
+# such as ``stock_level`` or ``water_level``, so only the DHIS2 hierarchy column
+# is named explicitly.
+_TECHNICAL_COLUMN_NAMES = frozenset({"ou_level", "id", "uid"})
+_TECHNICAL_COLUMN_SUFFIXES = ("_id", "_uid", "_code", "_key")
+
+
+def _is_technical_column(column_name: str) -> bool:
+    """True when a numeric column is an identifier/hierarchy field, not a measure."""
+    name = column_name.lower()
+    return name in _TECHNICAL_COLUMN_NAMES or name.endswith(
+        _TECHNICAL_COLUMN_SUFFIXES
+    )
+
+
+def _column_matches_terms(column_name: str, terms: set[str]) -> int:
+    """Score how strongly a column name matches the prompt's terms.
+
+    Compares on token sets rather than substrings, so ``district_city`` is not
+    considered a match for a stray ``dist``. Prompt terms keep their
+    underscores (a user may paste ``anc_4th_or_more_visits`` verbatim), so both
+    the whole term and its parts are considered, with an exact reference to the
+    column ranked far above an incidental single-token overlap.
+    """
+    if not terms:
+        return 0
+    name = column_name.lower()
+    tokens = set(re.split(r"[^a-z0-9]+", name)) - {""}
+    score = 0
+    for term in terms:
+        if term == name:
+            score += 10  # user named the column outright
+        elif term in tokens:
+            score += 1
+        else:
+            parts = set(re.split(r"[^a-z0-9]+", term)) - {""}
+            if len(parts) > 1 and parts <= tokens:
+                score += len(parts)
+    return score
+
+
+def _parse_chart_intent(prompt: str) -> dict[str, Any]:
+    """Extract what the user actually asked for from a free-text prompt.
+
+    Returns the ordered viz types the prompt implies plus the raw terms used to
+    steer dimension and metric selection. Without this the generator emits an
+    identical chart sequence for every prompt.
+    """
+    lowered = (prompt or "").lower()
+    terms = _prompt_terms(prompt)
+
+    viz_hints: list[str] = []
+    for keywords, viz_type in _VIZ_KEYWORDS:
+        if any(kw in lowered for kw in keywords) and viz_type not in viz_hints:
+            viz_hints.append(viz_type)
+
+    return {
+        "viz_hints": viz_hints,
+        "terms": terms,
+        "wants_map": "dhis2_map" in viz_hints,
+    }
+
+
+def _params_for_viz(  # pylint: disable=too-many-return-statements
+    viz_type: str,
+    *,
+    ds_id: int,
+    label_col: str | None,
+    period_col: str | None,
+    metric_exprs: list[dict[str, Any]],
+    ou_col: str | None = None,
+    ou_level: int | None = None,
+) -> dict[str, Any] | None:
+    """Build valid form_data for ``viz_type``, or None if unsupported here.
+
+    Each viz type has its own required controls, and getting the *shape* wrong
+    leaves the field blank in Explore rather than erroring — so the exact
+    control names and value shapes below are taken from the plugins'
+    controlPanel definitions:
+
+    * ECharts timeseries ``x_axis`` is ``multi: false`` with ``validateNonEmpty``
+      (``shared-controls/mixins.tsx``), so it takes a bare column-name string.
+      Omitting it is what left generated bar charts with an empty x-axis.
+    * ``heatmap_v2`` overrides ``groupby`` to ``multi: false``
+      (``plugin-chart-echarts/src/Heatmap/controlPanel.tsx``) — a list leaves it blank.
+    * ``pie`` and ``big_number_total`` use singular ``metric``; the timeseries
+      family and ``table`` use plural ``metrics``.
+
+    Returning None lets the caller skip a chart the dataset cannot support
+    (e.g. a heatmap with no period column) instead of emitting a broken config.
+    """
+    if not metric_exprs:
+        return None
+
+    base: dict[str, Any] = {
+        "viz_type": viz_type,
+        "datasource": f"{ds_id}__table",
+        "adhoc_filters": [],
+    }
+
+    if viz_type == "big_number_total":
+        return {**base, "metric": metric_exprs[0]}
+
+    if viz_type == "pie":
+        if not label_col:
+            return None
+        return {
+            **base,
+            "metric": metric_exprs[0],
+            "groupby": [label_col],
+            "row_limit": 15,
+        }
+
+    if viz_type in ("echarts_timeseries_bar", "echarts_timeseries_line", "echarts_area"):
+        # Bar compares entities, so its x-axis is the dimension; line/area are
+        # temporal and prefer the period column. Either falls back to the other
+        # so a dataset missing one still produces a usable chart.
+        if viz_type == "echarts_timeseries_bar":
+            x_axis = label_col or period_col
+        else:
+            x_axis = period_col or label_col
+        if not x_axis:
+            return None
+        params = {
+            **base,
+            "x_axis": x_axis,
+            "metrics": metric_exprs[:3],
+            "groupby": [],
+            "row_limit": 100 if x_axis == period_col else 20,
+        }
+        if x_axis != period_col:
+            params["order_desc"] = True
+        return params
+
+    if viz_type == "table":
+        return {
+            **base,
+            "query_mode": "aggregate",
+            "metrics": metric_exprs[:4],
+            "groupby": [c for c in (label_col, period_col) if c],
+            "row_limit": 50,
+            "order_desc": True,
+        }
+
+    if viz_type == "heatmap_v2":
+        if not (label_col and period_col):
+            return None
+        return {
+            **base,
+            "metric": metric_exprs[0],
+            "x_axis": period_col,
+            # multi: false — a list renders as an empty Y-axis control.
+            "groupby": label_col,
+            "row_limit": 100,
+        }
+
+    if viz_type == "dhis2_map":
+        if not ou_col:
+            return None
+        metric = metric_exprs[0]
+        return {
+            **base,
+            "org_unit_column": ou_col,
+            "metric": metric,
+            "boundary_levels": [ou_level] if ou_level else [3],
+            "aggregation_method": "sum",
+            "enable_drill": True,
+            "show_labels": True,
+            "linear_color_scheme": "superset_seq_1",
+        }
+
+    return None
+
+
 def _build_chart_configs_python(
     datasets_context: list[dict[str, Any]],
     num_charts: int,
@@ -5767,18 +5981,31 @@ def _build_chart_configs_python(
         "time", "timestamp",
     }
 
-    # Check if user explicitly requested a map
-    prompt_lower = prompt.lower()
-    wants_map = any(kw in prompt_lower for kw in ["map", "choropleth", "geographic"])
+    intent = _parse_chart_intent(prompt)
+    viz_hints: list[str] = intent["viz_hints"]
+    prompt_term_set: set[str] = intent["terms"]
+    wants_map = intent["wants_map"]
 
     charts: list[dict[str, Any]] = []
 
+    def _intent_rank(chart: dict[str, Any]) -> int:
+        """Sort key promoting chart types the prompt explicitly asked for."""
+        try:
+            return viz_hints.index(chart.get("viz_type", ""))
+        except ValueError:
+            return len(viz_hints)
+
     logger.info(
-        "_build_chart_configs_python: %d datasets, prompt=%s, wants_map=%s",
-        len(datasets_context), prompt[:50] if prompt else None, wants_map
+        "_build_chart_configs_python: %d datasets, prompt=%s, viz_hints=%s, terms=%s",
+        len(datasets_context), prompt[:50] if prompt else None,
+        viz_hints, sorted(prompt_term_set)[:10],
     )
 
-    for ds in datasets_context:
+    for ds_index, ds in enumerate(datasets_context):
+        # Charts for this dataset occupy charts[ds_start:], so they can be
+        # reordered by prompt intent without disturbing earlier datasets.
+        ds_start = len(charts)
+        is_first_dataset = ds_index == 0
         ds_id = ds["dataset_id"]
         table_name = ds.get("table_name") or ""
         columns = ds.get("columns") or []
@@ -5835,15 +6062,35 @@ def _build_chart_configs_python(
             expr = m.get("expression") or ""
             name = m.get("name") or ""
             if expr and name:
-                metric_exprs.append({"expressionType": "SQL", "sqlExpression": expr, "label": name})
+                # hasCustomLabel is required or AdhocMetric's constructor
+                # discards `label` and shows the raw SQL instead.
+                metric_exprs.append({
+                    "expressionType": "SQL",
+                    "sqlExpression": expr,
+                    "label": name,
+                    "hasCustomLabel": True,
+                })
+
+        # Rank numeric columns by how well they match the prompt so
+        # "malaria confirmed cases" builds a metric on the malaria column
+        # rather than whichever numeric column happens to come first.
+        ranked_numeric = sorted(
+            numeric_cols,
+            key=lambda nc: (
+                _column_matches_terms(nc, prompt_term_set),
+                not _is_technical_column(nc),
+            ),
+            reverse=True,
+        )
 
         # Default metrics from numeric columns
-        if not metric_exprs and numeric_cols:
-            for nc in numeric_cols[:4]:
+        if not metric_exprs and ranked_numeric:
+            for nc in ranked_numeric[:4]:
                 metric_exprs.append({
                     "expressionType": "SQL",
                     "sqlExpression": f"SUM({nc})",
                     "label": f"Sum of {nc.replace('_', ' ').title()}",
+                    "hasCustomLabel": True,
                 })
 
         if not metric_exprs:
@@ -5851,174 +6098,145 @@ def _build_chart_configs_python(
                 "expressionType": "SQL",
                 "sqlExpression": "COUNT(*)",
                 "label": "Count",
+                "hasCustomLabel": True,
             })
 
-        label_col = label_cols[0] if label_cols else None
+        # Prefer a dimension the prompt actually named ("by district") over the
+        # first string column in schema order.
+        ranked_labels = sorted(
+            label_cols,
+            key=lambda lc: _column_matches_terms(lc, prompt_term_set),
+            reverse=True,
+        )
+        label_col = ranked_labels[0] if ranked_labels else None
         period_col = period_cols[0] if period_cols else None
         clean_table = table_name.replace("_", " ").title()
 
         # Sort OU columns by level (prefer district level 3 for maps)
         ou_cols_sorted = sorted(ou_cols, key=lambda x: abs(x[1] - 3))  # Prefer level 3
 
-        # 0. DHIS2 Map if user requested map OR we have OU columns
-        if ou_cols_sorted and numeric_cols and (wants_map or len(charts) == 0):
+        # Candidate charts for this dataset, in default (schema-driven) order.
+        # ``_params_for_viz`` owns every viz type's required controls, and
+        # returns None when this dataset cannot support that chart, so an
+        # unsupported candidate is simply skipped rather than emitted broken.
+        ou_col_name: str | None = None
+        ou_level: int | None = None
+        map_metric: dict[str, Any] | None = None
+        if ou_cols_sorted and numeric_cols and (wants_map or is_first_dataset):
             ou_col_name, ou_level = ou_cols_sorted[0]
-            # Use the first numeric column for the map metric (not ou_level itself)
             map_metric_col = None
-            for nc in numeric_cols:
-                # Skip ou_level column - use actual data columns
-                if nc.lower() != "ou_level":
+            for nc in ranked_numeric:
+                # Skip identifier/hierarchy columns - use actual data columns
+                if not _is_technical_column(nc):
                     map_metric_col = nc
                     break
-            if not map_metric_col and numeric_cols:
-                map_metric_col = numeric_cols[0]
-
+            if not map_metric_col and ranked_numeric:
+                map_metric_col = ranked_numeric[0]
             if map_metric_col:
-                map_chart = {
-                    "slice_name": f"{clean_table} — Map by {ou_col_name.replace('_', ' ').title()}",
-                    "viz_type": "dhis2_map",
-                    "description": f"Geographic distribution across {ou_col_name.replace('_', ' ')}",
-                    "dataset_id": ds_id,
-                    "params": {
-                        "org_unit_column": ou_col_name,
-                        "metric": {
-                            "expressionType": "SIMPLE",
-                            "column": {"column_name": map_metric_col},
-                            "aggregate": "SUM",
-                            "label": map_metric_col.replace("_", " ").title(),
-                        },
-                        "boundary_levels": [ou_level] if ou_level else [3],
-                        "aggregation_method": "sum",
-                        "enable_drill": True,
-                        "show_labels": True,
-                        "linear_color_scheme": "superset_seq_1",
-                        "viz_type": "dhis2_map",
-                        "datasource": f"{ds_id}__table",
-                    },
-                    "alt_viz_types": [
-                        {"viz_type": "dhis2_map", "label": "DHIS2 Map", "reason": "Best for geographic visualization with drill-down"},
-                        {"viz_type": "echarts_timeseries_bar", "label": "Bar Chart", "reason": "Compare values across locations"},
-                        {"viz_type": "ranked_variance", "label": "Ranked Variance", "reason": "Rank locations by performance"},
-                    ],
+                map_metric = {
+                    "expressionType": "SIMPLE",
+                    "column": {"column_name": map_metric_col},
+                    "aggregate": "SUM",
+                    "label": map_metric_col.replace("_", " ").title(),
+                    "hasCustomLabel": True,
                 }
-                # If user explicitly wants map, put it first
-                if wants_map:
-                    charts.insert(0, map_chart)
-                else:
-                    charts.append(map_chart)
 
-        # 1. Big Number KPI for top metric
-        if metric_exprs:
-            charts.append({
-                "slice_name": f"{clean_table} — Key Metric",
-                "viz_type": "big_number_total",
-                "description": f"Headline KPI for {clean_table}",
-                "dataset_id": ds_id,
-                "params": {
-                    "metric": metric_exprs[0],
-                    "viz_type": "big_number_total",
-                    "datasource": f"{ds_id}__table",
-                },
-            })
+        def _params(viz_type: str) -> dict[str, Any] | None:
+            """Build params for ``viz_type`` against the current dataset."""
+            metrics = metric_exprs
+            if viz_type == "dhis2_map":
+                if not map_metric:
+                    return None
+                metrics = [map_metric]
+            return _params_for_viz(
+                viz_type,
+                ds_id=ds_id,
+                label_col=label_col,
+                period_col=period_col,
+                metric_exprs=metrics,
+                ou_col=ou_col_name,
+                ou_level=ou_level,
+            )
 
-        # 2. Bar chart by label
-        if label_col and metric_exprs:
+        label_title = label_col.replace("_", " ").title() if label_col else ""
+        candidates: list[tuple[str, str, str, list[str]]] = [
+            # (viz_type, slice_name, description, alt viz types offered)
+            (
+                "dhis2_map",
+                f"{clean_table} — Map by {(ou_col_name or '').replace('_', ' ').title()}",
+                f"Geographic distribution across {(ou_col_name or '').replace('_', ' ')}",
+                ["dhis2_map", "echarts_timeseries_bar", "table"],
+            ),
+            (
+                "big_number_total",
+                f"{clean_table} — Key Metric",
+                f"Headline KPI for {clean_table}",
+                ["big_number_total", "table"],
+            ),
+            (
+                "echarts_timeseries_bar",
+                f"{clean_table} — by {label_title}",
+                f"Comparison across {label_col.replace('_', ' ') if label_col else ''}",
+                ["echarts_timeseries_bar", "pie", "table"],
+            ),
+            (
+                "echarts_timeseries_line",
+                f"{clean_table} — Trend Over Time",
+                "Temporal trend of key indicators",
+                ["echarts_timeseries_line", "echarts_area", "echarts_timeseries_bar"],
+            ),
+            (
+                "pie",
+                f"{clean_table} — Distribution",
+                f"Proportional share across {label_col.replace('_', ' ') if label_col else ''}",
+                ["pie", "echarts_timeseries_bar", "table"],
+            ),
+            (
+                "table",
+                f"{clean_table} — Data Table",
+                f"Detailed data view for {clean_table}",
+                ["table", "echarts_timeseries_bar"],
+            ),
+            (
+                "heatmap_v2",
+                f"{clean_table} — Heatmap",
+                f"Cross-tabulation of {label_col.replace('_', ' ') if label_col else ''} vs time",
+                ["heatmap_v2", "table"],
+            ),
+        ]
+
+        for viz_type, slice_name, description, alts in candidates:
+            params = _params(viz_type)
+            if params is None:
+                continue
+            # Precompute params for every offered alternative so swapping the
+            # viz type in the review step produces a valid config instead of
+            # carrying over incompatible params.
+            params_by_viz = {viz_type: params}
+            for alt in alts:
+                alt_params = _params(alt) if alt != viz_type else params
+                if alt_params is not None:
+                    params_by_viz[alt] = alt_params
             charts.append({
-                "slice_name": f"{clean_table} — by {label_col.replace('_', ' ').title()}",
-                "viz_type": "echarts_timeseries_bar",
-                "description": f"Comparison across {label_col.replace('_', ' ')}",
+                "slice_name": slice_name,
+                "viz_type": viz_type,
+                "description": description,
                 "dataset_id": ds_id,
-                "params": {
-                    "metrics": metric_exprs[:2],
-                    "groupby": [label_col],
-                    "viz_type": "echarts_timeseries_bar",
-                    "datasource": f"{ds_id}__table",
-                    "order_desc": True,
-                    "row_limit": 20,
-                },
+                "params": params,
+                "params_by_viz": params_by_viz,
                 "alt_viz_types": [
-                    {"viz_type": "echarts_timeseries_bar", "label": "Bar Chart", "reason": "Best for entity comparison"},
-                    {"viz_type": "pie", "label": "Pie Chart", "reason": "Shows proportional share"},
-                    {"viz_type": "table", "label": "Data Table", "reason": "Precise values"},
+                    {
+                        "viz_type": alt,
+                        "label": _alt_label(alt),
+                        "reason": _ALT_VIZ_REASONS.get(alt, ""),
+                    }
+                    for alt in alts
+                    if alt in params_by_viz
                 ],
             })
 
-        # 3. Trend line if period column exists
-        if period_col and metric_exprs:
-            charts.append({
-                "slice_name": f"{clean_table} — Trend Over Time",
-                "viz_type": "echarts_timeseries_line",
-                "description": f"Temporal trend of key indicators",
-                "dataset_id": ds_id,
-                "params": {
-                    "metrics": metric_exprs[:3],
-                    "x_axis": period_col,
-                    "viz_type": "echarts_timeseries_line",
-                    "datasource": f"{ds_id}__table",
-                    "row_limit": 100,
-                },
-                "alt_viz_types": [
-                    {"viz_type": "echarts_timeseries_line", "label": "Line Chart", "reason": "Best for trends"},
-                    {"viz_type": "echarts_area", "label": "Area Chart", "reason": "Shows volume over time"},
-                    {"viz_type": "echarts_timeseries_bar", "label": "Bar Chart", "reason": "Discrete period comparison"},
-                ],
-            })
-
-        # 4. Pie chart for proportional share
-        if label_col and metric_exprs:
-            charts.append({
-                "slice_name": f"{clean_table} — Distribution",
-                "viz_type": "pie",
-                "description": f"Proportional share across {label_col.replace('_', ' ')}",
-                "dataset_id": ds_id,
-                "params": {
-                    "metric": metric_exprs[0],
-                    "groupby": [label_col],
-                    "viz_type": "pie",
-                    "datasource": f"{ds_id}__table",
-                    "row_limit": 15,
-                },
-                "alt_viz_types": [
-                    {"viz_type": "pie", "label": "Pie Chart", "reason": "Shows proportions"},
-                    {"viz_type": "treemap_v2", "label": "Treemap", "reason": "Hierarchical proportions"},
-                ],
-            })
-
-        # 5. Table for detailed data
-        charts.append({
-            "slice_name": f"{clean_table} — Data Table",
-            "viz_type": "table",
-            "description": f"Detailed data view for {clean_table}",
-            "dataset_id": ds_id,
-            "params": {
-                "metrics": metric_exprs[:4],
-                "groupby": ([label_col] if label_col else []) + period_cols[:1],
-                "viz_type": "table",
-                "datasource": f"{ds_id}__table",
-                "row_limit": 50,
-                "order_desc": True,
-            },
-        })
-
-        # 6. Heatmap if both label and period
-        if label_col and period_col and metric_exprs:
-            charts.append({
-                "slice_name": f"{clean_table} — Heatmap",
-                "viz_type": "heatmap_v2",
-                "description": f"Cross-tabulation of {label_col.replace('_', ' ')} vs time",
-                "dataset_id": ds_id,
-                "params": {
-                    "metric": metric_exprs[0],
-                    "x_axis": period_col,
-                    "groupby": [label_col],
-                    "viz_type": "heatmap_v2",
-                    "datasource": f"{ds_id}__table",
-                },
-                "alt_viz_types": [
-                    {"viz_type": "heatmap_v2", "label": "Heatmap", "reason": "Shows patterns across dimensions"},
-                    {"viz_type": "pivot_table_v2", "label": "Pivot Table", "reason": "Detailed cross-tabulation"},
-                ],
-            })
+        if viz_hints:
+            charts[ds_start:] = sorted(charts[ds_start:], key=_intent_rank)
 
         if len(charts) >= num_charts:
             break
@@ -6056,6 +6274,19 @@ _ALT_VIZ_LABELS: dict[str, str] = {
 
 def _alt_label(viz_type: str) -> str:
     return _ALT_VIZ_LABELS.get(viz_type, viz_type.replace("_", " ").title())
+
+
+# Why a given alternative is worth switching to, shown in the review step.
+_ALT_VIZ_REASONS: dict[str, str] = {
+    "big_number_total": "Single headline value",
+    "echarts_timeseries_bar": "Compare values across categories",
+    "echarts_timeseries_line": "Best for trends over time",
+    "echarts_area": "Shows volume over time",
+    "pie": "Shows proportional share",
+    "table": "Precise values in detail",
+    "heatmap_v2": "Patterns across two dimensions",
+    "dhis2_map": "Geographic distribution with drill-down",
+}
 
 
 def _default_alt_viz_types(
@@ -6187,22 +6418,7 @@ def _default_alt_viz_types(
 
 def _dataset_prompt_score(dataset_context: dict[str, Any], prompt: str) -> int:
     """Score datasets so auto-detect prefers relevant, non-empty MART datasets."""
-    prompt_terms = {
-        term
-        for term in re.findall(r"[a-zA-Z0-9_]{3,}", prompt.lower())
-        if term
-        not in {
-            "chart",
-            "charts",
-            "show",
-            "create",
-            "with",
-            "and",
-            "the",
-            "for",
-            "data",
-        }
-    }
+    prompt_terms = _prompt_terms(prompt)
     searchable = " ".join(
         [
             str(dataset_context.get("table_name") or ""),
@@ -7006,6 +7222,17 @@ class AIInsightService:
         if dataset_id is not None:
             dataset_id = int(dataset_id)
 
+        # Deterministic fallback dataset: the user's explicit choice, else the
+        # top-ranked auto-detected dataset. ``valid_dataset_ids`` is a set, so
+        # ``next(iter(...))`` would pick an arbitrary id in hash order.
+        preferred_ds_id: int | None = dataset_id
+        if preferred_ds_id is None:
+            for context in datasets_context or []:
+                candidate = context.get("dataset_id")
+                if candidate is not None and int(candidate) in valid_dataset_ids:
+                    preferred_ds_id = int(candidate)
+                    break
+
         # Incorrect/legacy viz_type → actual registered keys
         _LEGACY_VIZ_MAP: dict[str, str] = {
             # Legacy NVD3 types
@@ -7075,14 +7302,14 @@ class AIInsightService:
                 chart_ds_id = int(chart_ds_id)
             if not chart_ds_id and dataset_id:
                 chart_ds_id = dataset_id
-            if not chart_ds_id and len(valid_dataset_ids) == 1:
-                chart_ds_id = next(iter(valid_dataset_ids))
+            if not chart_ds_id and preferred_ds_id:
+                chart_ds_id = preferred_ds_id
 
             # Skip charts referencing invalid datasets
             if not chart_ds_id or chart_ds_id not in valid_dataset_ids:
                 # Try to recover: if only one dataset, use it
-                if len(valid_dataset_ids) == 1:
-                    chart_ds_id = next(iter(valid_dataset_ids))
+                if len(valid_dataset_ids) == 1 and preferred_ds_id:
+                    chart_ds_id = preferred_ds_id
                 else:
                     logger.warning(
                         "Skipping chart '%s' with invalid dataset_id=%s",
@@ -7132,6 +7359,32 @@ class AIInsightService:
                     if len(alt_viz_types) >= 5:
                         break
 
+            # Carry through the per-viz params used when the review step swaps
+            # chart type, normalising datasource on each the same way as the
+            # primary params above.
+            params_by_viz = chart.get("params_by_viz")
+            if isinstance(params_by_viz, dict):
+                params_by_viz = {
+                    alt_viz: {
+                        **alt_params,
+                        "datasource": f"{chart_ds_id}__table",
+                        "viz_type": alt_viz,
+                    }
+                    for alt_viz, alt_params in params_by_viz.items()
+                    if isinstance(alt_params, dict)
+                }
+            else:
+                params_by_viz = {}
+            params_by_viz.setdefault(viz, params)
+
+            # Only offer swaps we can produce a valid config for. The padding
+            # above tops the list up to 4-5 entries from _default_alt_viz_types,
+            # which includes viz types the generator builds no params for —
+            # switching to one of those would save a chart with blank controls.
+            offerable = [a for a in alt_viz_types if a["viz_type"] in params_by_viz]
+            if offerable:
+                alt_viz_types = offerable
+
             validated.append({
                 "slice_name": name,
                 "viz_type": viz,
@@ -7140,6 +7393,7 @@ class AIInsightService:
                 "datasource_type": "table",
                 "alt_viz_types": alt_viz_types,
                 "params": params,
+                "params_by_viz": params_by_viz,
             })
 
         if not validated:

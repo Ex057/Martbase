@@ -121,22 +121,50 @@ PRODUCTION_CUSTOM_ROLE_SPECS: tuple[CustomRoleSpec, ...] = (
         name="Data Management",
         base_role="Alpha",
         grant=(
-            ("can_list", "AIManagement"),
+            # AIManagementView uses MODEL_VIEW_RW_METHOD_PERMISSION_MAP, so its
+            # only PVMs are can_read/can_write — there is no can_list.
             ("can_read", "AIManagement"),
             ("can_write", "AIManagement"),
+            ("menu_access", "AI Management"),
+            # Datasets. can_write is what the nav gates check (Gamma holds
+            # can_read on Dataset so dashboards can resolve their datasource,
+            # so can_read cannot distinguish this role from End user). The
+            # menu_access entries additionally keep the items in FAB's menu
+            # payload. Granted explicitly rather than inherited from the Alpha
+            # base so the role keeps them if Alpha is narrowed upstream.
+            ("can_read", "Dataset"),
+            ("can_write", "Dataset"),
+            ("menu_access", "Datasets"),
+            ("menu_access", "Data"),
             ("can_list", "DHIS2AdminView"),
+        ),
+        revoke=(
+            # The DHIS2 workspace is visible (can_list above), but managing
+            # server instances is Admin-only — it exposes DHIS2 credentials and
+            # connection config. Alpha inherits every DHIS2AdminView permission,
+            # so this must be revoked explicitly. Hides the "DHIS2 Instances"
+            # item in the Data dropdown and 403s the instances API.
+            ("can_instances", "DHIS2AdminView"),
         ),
     ),
     CustomRoleSpec(
         name="Analytics",
         base_role="Alpha",
-        grant=(
-            ("can_list", "AIManagement"),
+        revoke=(
+            # Revoke both DHIS2 permissions: can_list hides the workspace, but
+            # can_instances is a separate PVM inherited from Alpha and would
+            # otherwise still allow instance API access.
+            ("can_list", "DHIS2AdminView"),
+            ("can_instances", "DHIS2AdminView"),
+            # No AI Management: revoke the Alpha-inherited permissions so both
+            # the nav item (gated on can_read) and the page/API are blocked.
             ("can_read", "AIManagement"),
             ("can_write", "AIManagement"),
-        ),
-        revoke=(
-            ("can_list", "DHIS2AdminView"),
+            ("menu_access", "AI Management"),
+            # No Datasets nav item. can_write only — can_read stays so charts
+            # and dashboards can still resolve their datasource.
+            ("can_write", "Dataset"),
+            ("menu_access", "Datasets"),
             # Hide "Dynamic Pages" (CMS) and block CMS page/API access.
             ("cms.pages.view", "CMS"),
             ("cms.pages.create", "CMS"),
@@ -191,12 +219,18 @@ PRODUCTION_CUSTOM_ROLE_SPECS: tuple[CustomRoleSpec, ...] = (
             ("can_view_chart_as_table", "Dashboard"),
             ("can_share_chart", "Superset"),
             ("can_share_dashboard", "Superset"),
-            ("can_list", "AIManagement"),
             ("can_read", "AIManagement"),
             ("can_write", "AIManagement"),
             ("can_list", "DHIS2AdminView"),
-            ("can_list", "DatabaseView"),
-            ("can_list", "TableModelView"),
+            ("can_instances", "DHIS2AdminView"),
+            # Hide the Data > Databases/Datasets nav items from FAB's menu
+            # payload. Note these are menu_access revokes, never can_read
+            # revokes: End users keep can_read on Dataset (via Gamma) so
+            # dashboard charts can still resolve their datasource. The nav
+            # itself gates on can_write, which Gamma never grants.
+            ("menu_access", "Databases"),
+            ("menu_access", "Datasets"),
+            ("menu_access", "AI Management"),
             ("can_sqllab", "Superset"),
             ("can_sqllab_history", "Superset"),
             ("cms.pages.view", "CMS"),

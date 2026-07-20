@@ -61,16 +61,22 @@ class DHIS2InstanceApi(BaseApi):
     # Without this the API defaulted to `can_read/can_write DHIS2InstanceApi`,
     # which base Gamma/Alpha roles hold — letting them bypass the page's 403 and
     # pull/modify instance data directly via the API.
+    # Instance management is a narrower privilege than the rest of the DHIS2
+    # workspace: it exposes server credentials and connection config, so it maps
+    # to its own `can_instances` permission rather than sharing `can_list` with
+    # DHIS2 Health / Staged Datasets / Sync History. Only Admin holds it — the
+    # Data Management spec revokes it explicitly, since DHIS2AdminView is not in
+    # ADMIN_ONLY_VIEW_MENUS and its permissions are otherwise inherited by Alpha.
     class_permission_name = "DHIS2AdminView"
     method_permission_name = {
-        "list_instances": "list",
-        "get_instance": "list",
-        "create_instance": "list",
-        "update_instance": "list",
-        "delete_instance": "list",
-        "test_connection": "list",
-        "test_config": "list",
-        "migrate_legacy": "list",
+        "list_instances": "instances",
+        "get_instance": "instances",
+        "create_instance": "instances",
+        "update_instance": "instances",
+        "delete_instance": "instances",
+        "test_connection": "instances",
+        "test_config": "instances",
+        "migrate_legacy": "instances",
     }
 
     # ------------------------------------------------------------------
