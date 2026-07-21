@@ -1339,7 +1339,7 @@ function DHIS2Map({
     if (!databaseId) return;
     let cancelled = false;
 
-    syncDHIS2LegendSchemesForDatabase(databaseId)
+    syncDHIS2LegendSchemesForDatabase(databaseId, { chartId, dashboardId })
       .then(() => {
         if (cancelled) return;
         const cachedSets = readCachedLegendSets(databaseId);
@@ -1377,7 +1377,7 @@ function DHIS2Map({
     return () => {
       cancelled = true;
     };
-  }, [databaseId, metric, datasourceColumns]);
+  }, [databaseId, metric, datasourceColumns, chartId, dashboardId]);
 
   const effectiveStagedLegendDefinition = useMemo(() => {
     // Use staged DHIS2 legend ranges by default, but leave explicit manual

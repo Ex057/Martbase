@@ -198,8 +198,11 @@ export async function syncDHIS2LegendSchemesForDatabase(
         status,
       });
 
+      // Fall back to the public endpoint whenever we have one (i.e. a chartId is
+      // known) and the protected request failed with an auth/availability status.
+      // This mirrors the geoJSON loader (shouldTryPublicChartFallback), so public
+      // dashboards get legend colors without needing an explicit isPublicView flag.
       if (
-        !isPublicView ||
         !publicEndpoint ||
         ![400, 401, 403, 404].includes(status)
       ) {
