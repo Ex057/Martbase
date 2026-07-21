@@ -16,10 +16,19 @@
 #   * run `git clean` (preserves run/, logs/, node_modules/, .bak hotfixes)
 #   * touch the metadata schema (prod is already at alembic head -> no-op)
 #
+# Code source: https://github.com/Ex057/Martbase.git  branch martbasev1
+# (fetched by URL — the server's own 'origin' = HISP-Uganda is left untouched).
+#
+# Bootstrap (first run — get this script onto the server from the fork):
+#   cd /opt/dhis2-superset
+#   git fetch https://github.com/Ex057/Martbase.git martbasev1
+#   git show FETCH_HEAD:deploy-malaria-update.sh > /opt/deploy-malaria-update.sh
+#   chmod +x /opt/deploy-malaria-update.sh
+#
 # Run as ROOT inside the "superset" container. Two phases:
-#   sudo ./deploy-malaria-update.sh prepare   # backup + code update + config restore + emit hotfix diffs
+#   sudo /opt/deploy-malaria-update.sh prepare   # backup + code update (from fork) + config restore + hotfix diffs
 #   # ...review the hotfix diffs printed under the backup dir, sanity-check config...
-#   sudo ./deploy-malaria-update.sh apply     # role rename + build + init + restart + verify
+#   sudo /opt/deploy-malaria-update.sh apply     # role rename + build + init + restart + verify
 #
 # Rollback is described at the end of `prepare` output.
 # --------------------------------------------------------------------------
@@ -30,8 +39,11 @@ APP=/opt/dhis2-superset
 VENV=/opt/superset-venv
 ENV_FILE=/etc/superset/superset.env
 SVC_USER=superset
-REMOTE=origin
-REF=martbasev1
+# Pull from the fork we CAN push to (the server's own 'origin' is HISP-Uganda,
+# which we can't push to). Fetched by URL so the server's remotes are untouched.
+# Override with REPO_URL=... / REF=... env vars if needed.
+REPO_URL="${REPO_URL:-https://github.com/Ex057/Martbase.git}"
+REF="${REF:-martbasev1}"
 EXPECTED_CONFIG_PATH=/opt/dhis2-superset/superset_config.py
 BACKUP_ROOT=/opt
 MARKER=/opt/.malaria_update_state    # records the backup dir chosen by `prepare`
@@ -83,15 +95,16 @@ phase_prepare() {
   cp -a "$APP" "$backup"
   info "snapshot: $backup"
 
-  log "Step 3 — update code to $REMOTE/$REF (fast-forward; NO git clean)"
-  git -C "$APP" fetch "$REMOTE" "$REF" --tags 2>/dev/null \
-    || git -C "$APP" fetch --unshallow "$REMOTE" "$REF"    # shallow-clone fallback
+  log "Step 3 — update code from $REPO_URL ($REF) (NO git clean)"
   local before after
   before="$(git -C "$APP" rev-parse --short HEAD)"
-  # Force tracked files to the branch tip. Untracked (run/ logs/ node_modules/
-  # *.bak) are left intact because we never call `git clean`.
-  git -C "$APP" checkout -f "$REF"
-  git -C "$APP" reset --hard "$REMOTE/$REF"
+  # Fetch by URL from the fork (leaves the server's own 'origin' remote alone),
+  # then hard-reset the current branch to it. Untracked files (run/ logs/
+  # node_modules/ *.bak, and the server's superset_config.py which is restored
+  # next) are left intact because we never call `git clean`.
+  git -C "$APP" fetch "$REPO_URL" "$REF" --tags \
+    || git -C "$APP" fetch --unshallow "$REPO_URL" "$REF"   # shallow-clone fallback
+  git -C "$APP" reset --hard FETCH_HEAD
   after="$(git -C "$APP" rev-parse --short HEAD)"
   info "HEAD: $before -> $after"
 
@@ -206,7 +219,7 @@ case "${1:-}" in
   *) cat <<EOF
 Usage: sudo $0 {prepare|apply}
 
-  prepare  Backup (DB + app dir), fast-forward code to $REMOTE/$REF, restore the
+  prepare  Backup (DB + app dir), update code from $REPO_URL ($REF), restore the
            server's superset_config.py, and emit hotfix diffs for review.
   apply    Reconcile role names, rebuild frontend, superset db upgrade + init,
            restart services, health check.
