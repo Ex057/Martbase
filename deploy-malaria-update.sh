@@ -53,7 +53,16 @@ load_env() {
 }
 
 sctl()  { systemctl "$@" $SERVICES; }
-as_svc() { sudo -u "$SVC_USER" -E "$@"; }
+# Run a command as the service user. We keep -E (to pass the superset.env vars),
+# but MUST override HOME: with -E alone HOME stays /root, which the 'superset'
+# user cannot write, so npm's cache (/root/.npm) and bash profile reads fail with
+# EACCES. Point HOME at a service-user-owned dir instead.
+BUILD_HOME="${BUILD_HOME:-/opt/.deploy-build-home}"
+as_svc() {
+  mkdir -p "$BUILD_HOME" 2>/dev/null || true
+  chown "$SVC_USER:$SVC_USER" "$BUILD_HOME" 2>/dev/null || true
+  sudo -u "$SVC_USER" -E env HOME="$BUILD_HOME" "$@"
+}
 
 # ==========================================================================
 # Service control (systemd)
@@ -89,7 +98,7 @@ cmd_build_frontend() {
   require_root
   log "build frontend (as $SVC_USER)"
   chown -R "$SVC_USER:$SVC_USER" "$APP/superset-frontend" 2>/dev/null || true
-  as_svc bash -lc "cd '$APP/superset-frontend' && npm ci && npm run build"
+  as_svc bash -c "cd '$APP/superset-frontend' && npm ci && npm run build"
   test -d "$APP/superset/static/assets" || die "build produced no assets/."
   chown -R "$SVC_USER:$SVC_USER" "$APP/superset/static/assets"
   info "build done. Run 'restart' (or 'restart-web') to serve the new assets."
@@ -225,7 +234,7 @@ cmd_apply() {
   cmd_role_rename
   log "ownership + frontend build"
   chown -R "$SVC_USER:$SVC_USER" "$APP"
-  as_svc bash -lc "cd '$APP/superset-frontend' && npm ci && npm run build"
+  as_svc bash -c "cd '$APP/superset-frontend' && npm ci && npm run build"
   test -d "$APP/superset/static/assets" || die "build produced no assets/ — aborting before restart."
   cmd_init
   cmd_restart
