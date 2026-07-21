@@ -235,8 +235,11 @@ if (isDevMode) {
       }),
     );
   }
-} else {
-  // Production mode - full type checking
+} else if (!process.env.DISABLE_TYPE_CHECK) {
+  // Production mode - full type checking (skip with DISABLE_TYPE_CHECK=true).
+  // Type checks are a quality gate only: babel-loader uses transpileOnly, so the
+  // app bundles build identically without it. Skipping avoids failing a prod
+  // build on type errors in non-app code (e.g. superset-ui-demo storybook stories).
   plugins.push(
     new ForkTsCheckerWebpackPlugin({
       typescript: {

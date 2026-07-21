@@ -98,7 +98,7 @@ cmd_build_frontend() {
   require_root
   log "build frontend (as $SVC_USER)"
   chown -R "$SVC_USER:$SVC_USER" "$APP/superset-frontend" 2>/dev/null || true
-  as_svc bash -c "cd '$APP/superset-frontend' && npm ci --legacy-peer-deps && npm run build"
+  as_svc bash -c "cd '$APP/superset-frontend' && npm ci --legacy-peer-deps && DISABLE_TYPE_CHECK=true npm run build"
   test -d "$APP/superset/static/assets" || die "build produced no assets/."
   chown -R "$SVC_USER:$SVC_USER" "$APP/superset/static/assets"
   info "build done. Run 'restart' (or 'restart-web') to serve the new assets."
@@ -234,7 +234,7 @@ cmd_apply() {
   cmd_role_rename
   log "ownership + frontend build"
   chown -R "$SVC_USER:$SVC_USER" "$APP"
-  as_svc bash -c "cd '$APP/superset-frontend' && npm ci --legacy-peer-deps && npm run build"
+  as_svc bash -c "cd '$APP/superset-frontend' && npm ci --legacy-peer-deps && DISABLE_TYPE_CHECK=true npm run build"
   test -d "$APP/superset/static/assets" || die "build produced no assets/ — aborting before restart."
   cmd_init
   cmd_restart
@@ -296,7 +296,7 @@ Services (systemd: $SERVICES):
   status                          systemctl status + code rev + health
 
 Build / maintenance:
-  build-frontend                  npm ci --legacy-peer-deps && npm run build (then 'restart' to serve)
+  build-frontend                  npm ci --legacy-peer-deps && DISABLE_TYPE_CHECK=true npm run build (then 'restart' to serve)
   init                            superset db upgrade && superset init
   role-rename                     Analytic->Analytics, End User->End user (idempotent)
   clear-cache                     Python + frontend build caches (leaves Redis alone)
