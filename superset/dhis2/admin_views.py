@@ -31,7 +31,6 @@ from urllib.parse import quote
 
 from flask import Blueprint, abort, current_app, g, redirect, request
 from flask_appbuilder import BaseView, expose, has_access
-from flask_appbuilder.security.decorators import permission_name
 
 from superset import security_manager
 from superset.superset_typing import FlaskResponse
@@ -54,13 +53,14 @@ class DHIS2AdminView(BaseView):
 
     @expose("/list/")
     @has_access
-    @permission_name("instances")
     def list(self) -> object:
         """Redirect to the React instance management page.
 
-        Guarded by ``can_instances`` rather than the workspace-wide
-        ``can_list``: managing instances exposes DHIS2 server credentials and
-        connection config, so it is Admin-only.
+        Keeps the default ``can_list`` permission: it is the workspace-wide
+        DHIS2 permission that every other guard and the nav gate rely on, and
+        this method is the only one that creates it. The instances page itself
+        is guarded by ``can_instances`` at the blueprint below, so a role
+        without it lands on a 403 rather than the page.
         """
         return redirect(self._frontend_path("/superset/dhis2/instances/"))
 
