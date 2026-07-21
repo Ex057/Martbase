@@ -67,6 +67,31 @@ if (typeof document !== 'undefined') {
       .leaflet-popup-pane { z-index: 700; }
       .leaflet-map-pane canvas { z-index: 100; }
       .leaflet-map-pane svg { z-index: 200; }
+
+      /* Interaction + tooltip rules from leaflet.css that this critical subset
+         omitted. Without them the SVG boundary paths don't receive mouse events
+         (so hover never fires even though a tooltip is bound), and an opened
+         tooltip has no box styling. */
+      .leaflet-pane > svg path.leaflet-interactive,
+      .leaflet-pane > canvas {
+        pointer-events: auto;
+        pointer-events: visiblePainted;
+      }
+      .leaflet-interactive {
+        cursor: pointer;
+      }
+      .leaflet-tooltip {
+        position: absolute;
+        padding: 6px 8px;
+        background-color: #fff;
+        border: 1px solid #fff;
+        border-radius: 3px;
+        color: #222;
+        white-space: nowrap;
+        pointer-events: none;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+      }
+      .leaflet-tooltip-pane { pointer-events: none; }
     `;
     document.head.appendChild(style);
   }
