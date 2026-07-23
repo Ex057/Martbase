@@ -199,7 +199,16 @@ const ChartHolder = ({
   useEffect(() => {
     if (!isFullSize) return undefined;
     const onResize = () =>
-      setViewport({ width: window.innerWidth, height: window.innerHeight });
+      // Only update on an actual dimension change — returning the previous
+      // object avoids redundant re-renders / <Chart> resize churn when a resize
+      // event fires with unchanged viewport size.
+      setViewport(prev => {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        return prev.width === width && prev.height === height
+          ? prev
+          : { width, height };
+      });
     onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);

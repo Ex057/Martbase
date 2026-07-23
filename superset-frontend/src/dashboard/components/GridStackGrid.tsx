@@ -553,6 +553,17 @@ const WidgetContent = memo(
     const [measuredWidth, setMeasuredWidth] = useState(0);
     const mountedRef = useRef(true);
 
+    // While any chart is fullscreen, the grid is hidden behind the fixed overlay,
+    // so this widget must NOT re-measure or dispatch synthetic window resizes:
+    // doing so makes GridStack relayout and re-apply the tile transform, which
+    // fights the overlay and produces a flicker loop. The ref lets the
+    // once-created ResizeObserver callback read the latest value.
+    const isAnyFullSize = useSelector(
+      (state: any) => (state.dashboardState?.fullSizeChartId ?? null) != null,
+    );
+    const fullSizeRef = useRef(isAnyFullSize);
+    fullSizeRef.current = isAnyFullSize;
+
     useEffect(
       () => () => {
         mountedRef.current = false;
@@ -566,6 +577,8 @@ const WidgetContent = memo(
       const el = containerRef.current;
       if (!el || typeof ResizeObserver === 'undefined') return;
       const ro = new ResizeObserver(entries => {
+        // Freeze measurements while a chart is fullscreen (see fullSizeRef note).
+        if (fullSizeRef.current) return;
         for (const entry of entries) {
           if (mountedRef.current) {
             setMeasuredWidth(entry.contentRect.width);
@@ -609,12 +622,14 @@ const WidgetContent = memo(
     }, [ready]);
 
     useEffect(() => {
-      if (!ready || measuredWidth <= 0) return;
+      // Don't dispatch synthetic resizes while fullscreen — it drives the
+      // GridStack relayout ↔ overlay flicker loop.
+      if (!ready || measuredWidth <= 0 || isAnyFullSize) return;
       const raf = requestAnimationFrame(() => {
         window.dispatchEvent(new Event('resize'));
       });
       return () => cancelAnimationFrame(raf);
-    }, [ready, measuredWidth]);
+    }, [ready, measuredWidth, isAnyFullSize]);
 
     useEffect(() => {
       if (!ready) return;
@@ -622,7 +637,7 @@ const WidgetContent = memo(
       let timer: ReturnType<typeof setTimeout> | undefined;
 
       const measure = () => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || fullSizeRef.current) return;
         const el = containerRef.current;
         if (el && el.offsetWidth > 0) {
           setMeasuredWidth(current => (current > 0 ? current : el.offsetWidth));
