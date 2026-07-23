@@ -15,9 +15,30 @@ import {
   ColorSchemeGroup,
   getCategoricalSchemeRegistry,
 } from '@superset-ui/core';
+import { PRO_THEME_PRESET_SCHEME_ID } from 'src/theme/applyChartPalette';
+import { refreshLabelsColorMap, resetColors } from 'src/utils/colorScheme';
 
 /** Prefix used for all auto-registered DHIS2 legend scheme ids. */
-const DHIS2_SCHEME_PREFIX = 'dhis2_legendset_';
+export const DHIS2_SCHEME_PREFIX = 'dhis2_legendset_';
+
+/**
+ * Color scheme ids that are registered dynamically/asynchronously (DHIS2 legend
+ * sets, and the Pro theme preset built at runtime) rather than at app setup.
+ *
+ * `hydrateExplore` resets a chart's saved `color_scheme` to the registry
+ * default when the scheme isn't in the registry yet. For these deferred ids
+ * that check races their registration, so a saved value must be preserved
+ * rather than clobbered — it becomes valid moments later.
+ */
+export function isDeferredColorScheme(
+  schemeId: string | null | undefined,
+): boolean {
+  if (!schemeId) return false;
+  return (
+    schemeId.startsWith(DHIS2_SCHEME_PREFIX) ||
+    schemeId === PRO_THEME_PRESET_SCHEME_ID
+  );
+}
 
 /** localStorage key prefix for cached legend sets per database. */
 const LS_CACHE_PREFIX = 'dhis2_legend_sets_db';
@@ -80,11 +101,16 @@ export function legendSetToSchemeId(legendSet: StagedLegendSet): string {
 /**
  * Register an array of DHIS2 legend sets as CategoricalSchemes.
  * Safe to call multiple times — overwrites stale registrations.
+ *
+ * Returns true if at least one scheme was newly registered or changed, so
+ * callers can trigger a repaint of charts that were painted before the scheme
+ * was available (see `nudgeChartColorRepaint`).
  */
 export function registerLegendSetsAsColorSchemes(
   legendSets: StagedLegendSet[],
-): void {
+): boolean {
   const registry = getCategoricalSchemeRegistry();
+  let changed = false;
 
   legendSets.forEach(legendSet => {
     const colors = legendSetToColors(legendSet);
@@ -100,6 +126,7 @@ export function registerLegendSetsAsColorSchemes(
     const fingerprint = colors.join(',');
     if (_registeredFingerprints[id] === fingerprint) return;
     _registeredFingerprints[id] = fingerprint;
+    changed = true;
 
     const label = `DHIS2: ${
       legendSet.legendDefinition?.setName ||
@@ -119,6 +146,29 @@ export function registerLegendSetsAsColorSchemes(
       }),
     );
   });
+
+  return changed;
+}
+
+/**
+ * Repaint already-mounted charts after a DHIS2 scheme registers late.
+ *
+ * A chart that painted while its `dhis2_legendset_*` scheme was still missing
+ * built its color scale with an empty palette (CategoricalColorNamespace
+ * returns `scheme?.colors ?? []`) and will not self-heal. This mirrors the
+ * theme-preset path in `applyChartPalette.ts`: clear cached label→color pairs
+ * and nudge mounted echarts/SVG charts to repaint. Dashboards re-apply their
+ * own `label_colors` afterwards via their labels-color effect.
+ */
+export function nudgeChartColorRepaint(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    resetColors();
+    refreshLabelsColorMap();
+    window.dispatchEvent(new Event('resize'));
+  } catch {
+    // Non-fatal — a failed repaint nudge should never break rendering.
+  }
 }
 
 /**
@@ -130,7 +180,9 @@ export function readCachedLegendSets(
 ): StagedLegendSet[] {
   if (!databaseId) return [];
   try {
-    const raw = window.localStorage.getItem(`${LS_CACHE_PREFIX}${Number(databaseId)}`);
+    const raw = window.localStorage.getItem(
+      `${LS_CACHE_PREFIX}${Number(databaseId)}`,
+    );
     if (!raw) return [];
     const parsed = JSON.parse(raw) as {
       data?: StagedLegendSet[];
@@ -161,8 +213,10 @@ export async function syncDHIS2LegendSchemesForDatabase(
 
   // Try from localStorage cache first
   const cached = readCachedLegendSets(dbId);
-  if (cached.length > 0) {
-    registerLegendSetsAsColorSchemes(cached);
+  if (cached.length > 0 && registerLegendSetsAsColorSchemes(cached)) {
+    // Newly registered from cache — repaint any charts already painted with an
+    // empty palette.
+    nudgeChartColorRepaint();
   }
 
   // Skip network fetch if recently synced
@@ -190,22 +244,22 @@ export async function syncDHIS2LegendSchemesForDatabase(
     } catch (error) {
       const status = Number((error as any)?.status);
       // eslint-disable-next-line no-console
-      console.warn('[DHIS2Map] Protected legendSets request failed, evaluating public fallback', {
-        databaseId: dbId,
-        chartId,
-        dashboardId,
-        isPublicView,
-        status,
-      });
+      console.warn(
+        '[DHIS2Map] Protected legendSets request failed, evaluating public fallback',
+        {
+          databaseId: dbId,
+          chartId,
+          dashboardId,
+          isPublicView,
+          status,
+        },
+      );
 
       // Fall back to the public endpoint whenever we have one (i.e. a chartId is
       // known) and the protected request failed with an auth/availability status.
       // This mirrors the geoJSON loader (shouldTryPublicChartFallback), so public
       // dashboards get legend colors without needing an explicit isPublicView flag.
-      if (
-        !publicEndpoint ||
-        ![400, 401, 403, 404].includes(status)
-      ) {
+      if (!publicEndpoint || ![400, 401, 403, 404].includes(status)) {
         // eslint-disable-next-line no-console
         console.warn('[DHIS2Map] Public legendSets fallback not attempted', {
           databaseId: dbId,
@@ -259,7 +313,7 @@ export async function syncDHIS2LegendSchemesForDatabase(
     if (!Array.isArray(legendSets)) return;
 
     // Only persist to localStorage if not pending.
-    // Overwriting with status='pending' and data=[] causes the UI to show 
+    // Overwriting with status='pending' and data=[] causes the UI to show
     // "No legend sets found" even if valid data was previously cached.
     if (responseStatus !== 'pending') {
       window.localStorage.setItem(
@@ -270,11 +324,73 @@ export async function syncDHIS2LegendSchemesForDatabase(
           status: responseStatus,
         }),
       );
-      registerLegendSetsAsColorSchemes(legendSets);
+      if (registerLegendSetsAsColorSchemes(legendSets)) {
+        // Registered from the network after first paint — repaint mounted
+        // charts so they pick up the now-available scheme colors.
+        nudgeChartColorRepaint();
+      }
     }
   } catch {
     _lastRegisteredAt[dbId] = 0; // Allow retry on error
     // Non-fatal — fall back to cached or no DHIS2 legend sets
+  }
+}
+
+/**
+ * Extract the distinct DHIS2 source database ids from a map of datasources
+ * (redux `state.datasources`). Only staged-local DHIS2 datasets carry legend
+ * sets, so others are ignored.
+ */
+export function collectDHIS2SourceDatabaseIds(
+  datasources: Record<string, any> | null | undefined,
+): number[] {
+  const ids = new Set<number>();
+  Object.values(datasources || {}).forEach(ds => {
+    try {
+      const rawExtra = (ds as any)?.extra;
+      const extra =
+        typeof rawExtra === 'string' ? JSON.parse(rawExtra) : (rawExtra ?? {});
+      const dbId = Number(extra?.dhis2_source_database_id);
+      if (
+        extra?.dhis2_staged_local === true &&
+        Number.isFinite(dbId) &&
+        dbId > 0
+      ) {
+        ids.add(dbId);
+      }
+    } catch {
+      // Ignore datasources with unparseable extra.
+    }
+  });
+  return [...ids];
+}
+
+/**
+ * Register DHIS2 legend color schemes for every DHIS2 source database backing
+ * the given datasources. Registers from the localStorage cache synchronously
+ * (fast path so warm-cache dashboards paint correctly), then kicks the network
+ * sync which repaints on late registration. Safe to call repeatedly.
+ */
+export function registerDHIS2SchemesForDatasources(
+  datasources: Record<string, any> | null | undefined,
+): void {
+  const dbIds = collectDHIS2SourceDatabaseIds(datasources);
+  if (dbIds.length === 0) return;
+  let changedFromCache = false;
+  dbIds.forEach(dbId => {
+    try {
+      if (registerLegendSetsAsColorSchemes(readCachedLegendSets(dbId))) {
+        changedFromCache = true;
+      }
+    } catch {
+      // Non-fatal — the network sync below still refreshes.
+    }
+    // Fire-and-forget network refresh; it repaints on its own if it registers
+    // something new.
+    syncDHIS2LegendSchemesForDatabase(dbId).catch(() => {});
+  });
+  if (changedFromCache) {
+    nudgeChartColorRepaint();
   }
 }
 

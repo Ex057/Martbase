@@ -42,6 +42,11 @@ import { getItem, LocalStorageKeys } from 'src/utils/localStorageHelpers';
 import { getFormDataWithDashboardContext } from 'src/explore/controlUtils/getFormDataWithDashboardContext';
 import { sanitizeFormDataUrlParams } from 'src/explore/controlUtils';
 import { dhis2DataPreloader } from 'src/utils/dhis2DataPreloader';
+import {
+  readCachedLegendSets,
+  registerLegendSetsAsColorSchemes,
+  syncDHIS2LegendSchemesForDatabase,
+} from 'src/utils/dhis2LegendColorSchemes';
 import type Chart from 'src/types/Chart';
 import { getExploreApiParams } from './getExploreApiParams';
 
@@ -149,7 +154,7 @@ export default function ExplorePage() {
 
     if (!isExploreInitialized.current || !!saveAction) {
       fetchExploreData(exploreUrlParams)
-        .then(({ result }) => {
+        .then(async ({ result }) => {
           const formData = sanitizeFormDataUrlParams(
             dashboardContextFormData
               ? getFormDataWithDashboardContext(
@@ -199,13 +204,27 @@ export default function ExplorePage() {
               Number.isFinite(sourceDatabaseId) &&
               sourceDatabaseId > 0
             ) {
-              import('src/utils/dhis2LegendColorSchemes').then(
-                ({ syncDHIS2LegendSchemesForDatabase }) => {
-                  syncDHIS2LegendSchemesForDatabase(sourceDatabaseId).catch(
-                    () => {},
-                  );
-                },
-              );
+              // Register any cached legend schemes SYNCHRONOUSLY as a fast path.
+              try {
+                registerLegendSetsAsColorSchemes(
+                  readCachedLegendSets(sourceDatabaseId),
+                );
+              } catch (_e) {
+                // Non-fatal — the awaited sync below still refreshes.
+              }
+              // AWAIT the sync (cache read + network fetch + register) BEFORE
+              // hydrate/first render, so a chart saved with a `dhis2_legendset_*`
+              // scheme resolves real colors even on a cold cache. Race a timeout
+              // so a slow/hanging legend endpoint can't block the chart.
+              const LEGEND_SYNC_TIMEOUT_MS = 2500;
+              await Promise.race([
+                syncDHIS2LegendSchemesForDatabase(sourceDatabaseId).catch(
+                  () => {},
+                ),
+                new Promise(resolve => {
+                  setTimeout(resolve, LEGEND_SYNC_TIMEOUT_MS);
+                }),
+              ]);
             }
           } catch (_e) {
             // Non-fatal — legend sets fall back to column-attached legends

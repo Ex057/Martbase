@@ -213,3 +213,17 @@ test('merges dashboard context form data with explore form data', () => {
   );
   expect(fullFormData).toEqual(getExpectedResultFormData());
 });
+
+test('on overwrite-save, persists the chart’s own color_scheme, not the dashboard’s', () => {
+  // Regression: saving a chart from within a dashboard used to write the
+  // dashboard's color_scheme into the chart's own, permanently replacing a
+  // deliberately-chosen scheme (e.g. a DHIS2 legend scheme).
+  const fullFormData = getFormDataWithDashboardContext(
+    getExploreFormData(), // own color_scheme: supersetColors
+    getDashboardFormData(), // dashboard color_scheme: d3Category20b
+    'overwrite',
+  );
+  expect(fullFormData.color_scheme).toEqual('supersetColors');
+  expect(fullFormData.own_color_scheme).toEqual('supersetColors');
+  expect(fullFormData.dashboard_color_scheme).toEqual('d3Category20b');
+});

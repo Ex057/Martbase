@@ -63,10 +63,27 @@ interface GridStackGridProps {
 /* ------------------------------------------------------------------ */
 /*  Styled container                                                   */
 /* ------------------------------------------------------------------ */
-const GridStackContainer = styled.div<{ $editMode: boolean }>`
-  ${({ theme, $editMode }) => css`
+const GridStackContainer = styled.div<{
+  $editMode: boolean;
+  $fullSizeActive: boolean;
+}>`
+  ${({ theme, $editMode, $fullSizeActive }) => css`
     position: relative;
     min-height: 120px;
+
+    /* While a chart is in fullscreen, its overlay is a DOM descendant of
+       .grid-stack-item-content. That element's hover transform creates a
+       containing block (and overflow:hidden clips) that traps the position:fixed
+       overlay to the tile. Neutralize both while fullscreen so the overlay
+       resolves against the viewport and fills the screen. */
+    ${$fullSizeActive &&
+    css`
+      .grid-stack > .grid-stack-item > .grid-stack-item-content,
+      .grid-stack > .grid-stack-item > .grid-stack-item-content:hover {
+        transform: none !important;
+        overflow: visible !important;
+      }
+    `}
 
     .grid-stack {
       min-height: 60px !important;
@@ -351,7 +368,10 @@ const GridStackContainer = styled.div<{ $editMode: boolean }>`
       transition: opacity 0.15s ease;
     }
     .grid-stack-item:hover .gs-widget-inner .slice-header .right-side,
-    .grid-stack-item:hover .gs-widget-inner [data-test='slice-header'] .chart-controls {
+    .grid-stack-item:hover
+      .gs-widget-inner
+      [data-test='slice-header']
+      .chart-controls {
       opacity: 1;
     }
     .gs-widget-inner .chart-container,
@@ -681,7 +701,9 @@ const WidgetContent = memo(
           )}
           <div className="gs-widget-orphaned-message">
             <div className="gs-widget-orphaned-icon">✕</div>
-            <div className="gs-widget-orphaned-title">{t('Orphaned Container')}</div>
+            <div className="gs-widget-orphaned-title">
+              {t('Orphaned Container')}
+            </div>
             <div className="gs-widget-orphaned-hint">
               {editMode
                 ? t('Click the delete button to remove')
@@ -908,6 +930,12 @@ const GridStackGrid = ({
     (state: any) => state.dashboardLayout?.present || state.dashboardLayout,
   );
 
+  // A chart is in fullscreen when its id is set here; used to neutralize the
+  // GridStack tile transform/overflow that would otherwise trap the overlay.
+  const fullSizeChartId = useSelector(
+    (state: any) => state.dashboardState?.fullSizeChartId ?? null,
+  );
+
   const columnWidth = useMemo(
     () => (width + GRID_GUTTER_SIZE) / GRID_COLUMN_COUNT - GRID_GUTTER_SIZE,
     [width],
@@ -1076,7 +1104,9 @@ const GridStackGrid = ({
           // Skip widgets that have no corresponding layout entry - they are
           // orphaned GridStack DOM elements that should not corrupt the state.
           if (!orig) {
-            console.warn(`GridStack sync: widget ${id} not found in layout - scheduling cleanup`);
+            console.warn(
+              `GridStack sync: widget ${id} not found in layout - scheduling cleanup`,
+            );
             orphanedElements.push(el);
             return null;
           }
@@ -1359,7 +1389,11 @@ const GridStackGrid = ({
   const isEmpty = widgets.length === 0;
 
   return (
-    <GridStackContainer $editMode={editMode} ref={dropRef}>
+    <GridStackContainer
+      $editMode={editMode}
+      $fullSizeActive={fullSizeChartId != null}
+      ref={dropRef}
+    >
       <div ref={gridRef} className="grid-stack" />
 
       {/* Empty-state drop zone when dashboard has no content yet */}
@@ -1370,7 +1404,12 @@ const GridStackGrid = ({
           }`}
         >
           <div className="gs-empty-placeholder-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <rect x="3" y="3" width="7" height="7" rx="1" />
               <rect x="14" y="3" width="7" height="7" rx="1" />
               <rect x="3" y="14" width="7" height="7" rx="1" />
@@ -1385,7 +1424,9 @@ const GridStackGrid = ({
           <div className="gs-empty-placeholder-hint">
             {isOver && canDrop
               ? t('Drop to add this component to your dashboard')
-              : t('Drag charts and components from the sidebar to create your visualization')}
+              : t(
+                  'Drag charts and components from the sidebar to create your visualization',
+                )}
           </div>
         </div>
       )}

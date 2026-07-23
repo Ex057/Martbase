@@ -44,6 +44,18 @@ import {
 export const CHART_MARGIN = 64;
 const DEFAULT_CHART_HEIGHT_MULTIPLE = 10;
 
+// Height of the navbar the fullscreen overlay sits below. Kept in sync with the
+// --dashboard-fullscreen-top-offset CSS var set in src/views/App.tsx so the
+// fullsize chart height matches the overlay's available space.
+const getFullscreenTopOffset = (): number => {
+  if (typeof window === 'undefined') return 0;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(
+    '--dashboard-fullscreen-top-offset',
+  );
+  const parsed = parseFloat(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 const getFiniteNumber = (value: unknown, fallback: number) => {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : fallback;
@@ -137,10 +149,13 @@ const ChartHolder = ({
       position: fixed !important;
       z-index: 3000;
       left: 0;
+      right: 0;
       top: var(--dashboard-fullscreen-top-offset, 0);
+      bottom: 0;
+      width: 100vw;
+      height: calc(100vh - var(--dashboard-fullscreen-top-offset, 0px));
       padding: ${theme.sizeUnit * 2}px;
-      max-height: calc(100vh - var(--dashboard-fullscreen-top-offset, 0px));
-      overflow: auto;
+      overflow: hidden;
     }
   `;
   const { chartId } = component.meta;
@@ -173,6 +188,22 @@ const ChartHolder = ({
   const [outlinedColumnName, setOutlinedColumnName] = useState<string>();
   const [currentDirectPathLastUpdated, setCurrentDirectPathLastUpdated] =
     useState(0);
+
+  // Track the viewport so a fullscreen chart recomputes its size on resize.
+  // The size memo below reads window dimensions, which don't otherwise trigger
+  // a re-render.
+  const [viewport, setViewport] = useState(() => ({
+    width: typeof window === 'undefined' ? 0 : window.innerWidth,
+    height: typeof window === 'undefined' ? 0 : window.innerHeight,
+  }));
+  useEffect(() => {
+    if (!isFullSize) return undefined;
+    const onResize = () =>
+      setViewport({ width: window.innerWidth, height: window.innerHeight });
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [isFullSize]);
 
   const infoFromPath = useMemo(
     () => getChartAndLabelComponentIdFromPath(directPathToChild ?? []) as any,
@@ -247,8 +278,13 @@ const ChartHolder = ({
     let height = 0;
 
     if (isFullSize) {
-      width = window.innerWidth - CHART_MARGIN;
-      height = window.innerHeight - CHART_MARGIN;
+      // The overlay is padded by theme.sizeUnit * 2 on each side and offset
+      // from the top by the navbar height, so subtract exactly those — not a
+      // flat 64 — to fill the available space edge to edge.
+      const pad = theme.sizeUnit * 2 * 2;
+      const topOffset = getFullscreenTopOffset();
+      width = viewport.width - pad;
+      height = viewport.height - topOffset - pad;
     } else {
       const heightMultiple = getFiniteNumber(
         component.meta.height,
@@ -266,7 +302,7 @@ const ChartHolder = ({
       chartWidth: Number.isFinite(width) ? width : GRID_MIN_COLUMN_COUNT,
       chartHeight: Number.isFinite(height) ? height : GRID_BASE_UNIT,
     };
-  }, [columnWidth, component, isFullSize, widthMultiple]);
+  }, [columnWidth, component, isFullSize, widthMultiple, viewport, theme]);
 
   const handleDeleteComponent = useCallback(() => {
     deleteComponent(id, parentId);

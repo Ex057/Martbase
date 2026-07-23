@@ -44,6 +44,7 @@ import { getDatasourceUid } from 'src/utils/getDatasourceUid';
 import { getUrlParam } from 'src/utils/urlUtils';
 import { URL_PARAMS } from 'src/constants';
 import { findPermission } from 'src/utils/findPermission';
+import { isDeferredColorScheme } from 'src/utils/dhis2LegendColorSchemes';
 
 enum ColorSchemeType {
   CATEGORICAL = 'CATEGORICAL',
@@ -135,7 +136,15 @@ export const hydrateExplore =
       const currentScheme = initialFormData[key];
       const colorSchemeExists = !!schemes.get(currentScheme, true);
 
-      if (currentScheme && !colorSchemeExists) {
+      // DHIS2 legend schemes and the Pro theme preset register
+      // asynchronously, so at hydrate time a legitimately-saved scheme may not
+      // be in the registry yet. Preserve those values instead of resetting to
+      // the default — they become valid moments later when registration lands.
+      if (
+        currentScheme &&
+        !colorSchemeExists &&
+        !isDeferredColorScheme(currentScheme)
+      ) {
         initialControls[key].value = registryDefaultScheme || defaultScheme;
       }
     };

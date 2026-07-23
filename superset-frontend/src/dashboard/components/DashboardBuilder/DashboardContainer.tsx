@@ -62,6 +62,7 @@ import {
 } from 'src/dashboard/actions/dashboardState';
 import { CHART_TYPE } from 'src/dashboard/util/componentTypes';
 import { getColorNamespace, resetColors } from 'src/utils/colorScheme';
+import { registerDHIS2SchemesForDatasources } from 'src/utils/dhis2LegendColorSchemes';
 import { NATIVE_FILTER_DIVIDER_PREFIX } from '../nativeFilters/FiltersConfigModal/utils';
 import { findTabsWithChartsInScope } from '../nativeFilters/utils';
 import { getRootLevelTabsComponent } from './utils';
@@ -114,7 +115,18 @@ const DashboardContainer: FC<DashboardContainerProps> = ({ topLevelTabs }) => {
   const directPathToChild = useSelector<RootState, string[]>(
     state => state.dashboardState.directPathToChild,
   );
+  const datasources = useSelector<RootState, Record<string, any>>(
+    state => (state as any).datasources,
+  );
   const chartIds = useChartIds();
+
+  // Register DHIS2 legend color schemes for this dashboard's datasources before
+  // its charts paint, so a chart saved with a `dhis2_legendset_*` scheme
+  // resolves real colors instead of an empty palette. Nothing else under
+  // src/dashboard registers these, and non-map charts have no self-registration.
+  useEffect(() => {
+    registerDHIS2SchemesForDatasources(datasources);
+  }, [datasources]);
 
   const renderedChartIds = useRenderedChartIds();
 

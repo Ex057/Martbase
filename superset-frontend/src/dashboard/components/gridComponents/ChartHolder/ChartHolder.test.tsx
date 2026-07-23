@@ -40,10 +40,15 @@ import {
   COLUMN_TYPE,
   ROW_TYPE,
 } from '../../../util/componentTypes';
+import { supersetTheme } from '@superset-ui/core';
 import ChartHolder, { CHART_MARGIN } from './ChartHolder';
 import { GRID_BASE_UNIT, GRID_GUTTER_SIZE } from '../../../util/constants';
 
 const DEFAULT_HEADER_HEIGHT = 22;
+// In fullscreen the holder is padded by theme.sizeUnit * 2 on each side; the
+// chart fills the viewport minus that padding (and the navbar top offset, which
+// is 0 in jsdom since the CSS var is unset).
+const FULLSIZE_PAD = supersetTheme.sizeUnit * 2 * 2;
 
 // eslint-disable-next-line no-restricted-globals -- TODO: Migrate from describe blocks
 describe('ChartHolder', () => {
@@ -341,7 +346,7 @@ describe('ChartHolder', () => {
     const container = screen.getByTestId('chart-container');
 
     const computedWidth = parseInt(container.getAttribute('width') || '0', 10);
-    const expectedWidth = window.innerWidth - CHART_MARGIN;
+    const expectedWidth = window.innerWidth - FULLSIZE_PAD;
 
     expect(computedWidth).toEqual(expectedWidth);
   });
@@ -396,7 +401,7 @@ describe('ChartHolder', () => {
 
     const computedWidth = parseInt(container.getAttribute('height') || '0', 10);
     const expectedWidth =
-      window.innerHeight - CHART_MARGIN - DEFAULT_HEADER_HEIGHT;
+      window.innerHeight - FULLSIZE_PAD - DEFAULT_HEADER_HEIGHT;
 
     expect(computedWidth).toEqual(expectedWidth);
   });

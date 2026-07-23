@@ -283,7 +283,11 @@ export const getFormDataWithDashboardContext = (
       ...adhocFilters,
       ...exploreFormData, // Explore form data comes last to override
       own_color_scheme: ownColorScheme,
-      color_scheme: appliedColorScheme,
+      // When saving from within a dashboard, persist the chart's OWN scheme —
+      // not the dashboard-applied one — so a chart's saved color_scheme (e.g. a
+      // DHIS2 legend scheme) is not permanently replaced by the dashboard's.
+      // dashboard_color_scheme still drives render-time theming.
+      color_scheme: ownColorScheme,
       dashboard_color_scheme: dashboardColorScheme,
       ...deckGLProperties,
     };
