@@ -16,7 +16,15 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { useState, useMemo, useCallback, useEffect, memo } from 'react';
+import {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  memo,
+} from 'react';
 
 import { ResizeCallback, ResizeStartCallback } from 're-resizable';
 import cx from 'classnames';
@@ -43,18 +51,6 @@ import {
 // (padding: theme.sizeUnit * 4 = 32px on each side = 64px total)
 export const CHART_MARGIN = 64;
 const DEFAULT_CHART_HEIGHT_MULTIPLE = 10;
-
-// Height of the navbar the fullscreen overlay sits below. Kept in sync with the
-// --dashboard-fullscreen-top-offset CSS var set in src/views/App.tsx so the
-// fullsize chart height matches the overlay's available space.
-const getFullscreenTopOffset = (): number => {
-  if (typeof window === 'undefined') return 0;
-  const raw = getComputedStyle(document.documentElement).getPropertyValue(
-    '--dashboard-fullscreen-top-offset',
-  );
-  const parsed = parseFloat(raw);
-  return Number.isFinite(parsed) ? parsed : 0;
-};
 
 const getFiniteNumber = (value: unknown, fallback: number) => {
   const numberValue = Number(value);
@@ -148,12 +144,16 @@ const ChartHolder = ({
     && {
       position: fixed !important;
       z-index: 3000;
-      left: 0;
-      right: 0;
+      /* Size purely from inset — the browser computes height = viewport − top
+         and width = viewport − left/right. Do NOT use an explicit
+         height/width calc with --dashboard-fullscreen-top-offset: that var
+         resolves inconsistently inside calc() (it applied to 'top' but the
+         'height' calc came out as full 100vh), leaving the overlay too tall so
+         its bottom — the chart's x-axis/legend — fell below the viewport. */
       top: var(--dashboard-fullscreen-top-offset, 0);
+      right: 0;
       bottom: 0;
-      width: 100vw;
-      height: calc(100vh - var(--dashboard-fullscreen-top-offset, 0px));
+      left: 0;
       padding: ${theme.sizeUnit * 2}px;
       overflow: hidden;
     }
@@ -189,29 +189,59 @@ const ChartHolder = ({
   const [currentDirectPathLastUpdated, setCurrentDirectPathLastUpdated] =
     useState(0);
 
-  // Track the viewport so a fullscreen chart recomputes its size on resize.
-  // The size memo below reads window dimensions, which don't otherwise trigger
-  // a re-render.
-  const [viewport, setViewport] = useState(() => ({
-    width: typeof window === 'undefined' ? 0 : window.innerWidth,
-    height: typeof window === 'undefined' ? 0 : window.innerHeight,
-  }));
-  useEffect(() => {
-    if (!isFullSize) return undefined;
-    const onResize = () =>
-      // Only update on an actual dimension change — returning the previous
-      // object avoids redundant re-renders / <Chart> resize churn when a resize
-      // event fires with unchanged viewport size.
-      setViewport(prev => {
-        const width = window.innerWidth;
-        const height = window.innerHeight;
-        return prev.width === width && prev.height === height
+  // Measure the fullscreen overlay's REAL available content size rather than
+  // computing it from the navbar offset. The offset came from the
+  // `--dashboard-fullscreen-top-offset` CSS var, but that var is only set on
+  // ancestor elements (App.tsx Layout.Content / PublicLandingPage) and custom
+  // properties don't inherit upward, so reading it at :root returned 0 — making
+  // the fullsize chart too tall and clipping its x-axis/legend. Measuring the
+  // overlay resolves the offset exactly (including the portal's calc()).
+  const overlayElRef = useRef<HTMLDivElement | null>(null);
+  const [fullSizeAvail, setFullSizeAvail] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  useLayoutEffect(() => {
+    const el = overlayElRef.current;
+    if (!isFullSize) {
+      // Clear any inline sizing we forced while fullscreen.
+      if (el) {
+        el.style.height = '';
+        el.style.width = '';
+      }
+      setFullSizeAvail(null);
+      return undefined;
+    }
+    const measure = () => {
+      const node = overlayElRef.current;
+      if (!node) return;
+      // getBoundingClientRect is always viewport-relative, so this is robust
+      // even when a `container-type`/`contain`/transform ancestor makes
+      // position:fixed resolve against a non-viewport box (which left the
+      // overlay full-height and pushed its bottom — the chart's x-axis/legend —
+      // below the screen). Force the overlay to span from its top edge to the
+      // viewport edges so its bottom lands exactly at the viewport bottom.
+      const rect = node.getBoundingClientRect();
+      const cs = getComputedStyle(node);
+      const padX =
+        (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+      const padY =
+        (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+      const availH = Math.max(0, window.innerHeight - rect.top);
+      const availW = Math.max(0, window.innerWidth - rect.left);
+      node.style.height = `${availH}px`;
+      node.style.width = `${availW}px`;
+      const width = availW - padX;
+      const height = availH - padY;
+      setFullSizeAvail(prev =>
+        prev && prev.width === width && prev.height === height
           ? prev
-          : { width, height };
-      });
-    onResize();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+          : { width, height },
+      );
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
   }, [isFullSize]);
 
   const infoFromPath = useMemo(
@@ -287,13 +317,18 @@ const ChartHolder = ({
     let height = 0;
 
     if (isFullSize) {
-      // The overlay is padded by theme.sizeUnit * 2 on each side and offset
-      // from the top by the navbar height, so subtract exactly those — not a
-      // flat 64 — to fill the available space edge to edge.
-      const pad = theme.sizeUnit * 2 * 2;
-      const topOffset = getFullscreenTopOffset();
-      width = viewport.width - pad;
-      height = viewport.height - topOffset - pad;
+      if (fullSizeAvail) {
+        // Real measured content box of the fullscreen overlay (resolves the
+        // navbar/portal-header offset exactly).
+        width = fullSizeAvail.width;
+        height = fullSizeAvail.height;
+      } else {
+        // First frame, before the layout-effect measurement lands. Estimate
+        // from the viewport minus the overlay padding; corrected immediately.
+        const pad = theme.sizeUnit * 2 * 2;
+        width = (typeof window === 'undefined' ? 0 : window.innerWidth) - pad;
+        height = (typeof window === 'undefined' ? 0 : window.innerHeight) - pad;
+      }
     } else {
       const heightMultiple = getFiniteNumber(
         component.meta.height,
@@ -311,7 +346,7 @@ const ChartHolder = ({
       chartWidth: Number.isFinite(width) ? width : GRID_MIN_COLUMN_COUNT,
       chartHeight: Number.isFinite(height) ? height : GRID_BASE_UNIT,
     };
-  }, [columnWidth, component, isFullSize, widthMultiple, viewport, theme]);
+  }, [columnWidth, component, isFullSize, widthMultiple, fullSizeAvail, theme]);
 
   const handleDeleteComponent = useCallback(() => {
     deleteComponent(id, parentId);
@@ -362,7 +397,16 @@ const ChartHolder = ({
         editMode={editMode}
       >
         <div
-          ref={dragSourceRef}
+          ref={node => {
+            // Compose: our own ref for fullscreen measurement + the drag source
+            // ref (may be a function ref or an object ref).
+            overlayElRef.current = node;
+            if (typeof dragSourceRef === 'function') {
+              dragSourceRef(node);
+            } else if (dragSourceRef) {
+              (dragSourceRef as any).current = node;
+            }
+          }}
           data-test="dashboard-component-chart-holder"
           style={focusHighlightStyles}
           css={isFullSize ? fullSizeStyle : undefined}
