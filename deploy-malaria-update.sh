@@ -91,6 +91,21 @@ cmd_health() {
   fi
 }
 
+# Fire a burst of requests at the public URL and tally the HTTP codes — quick way
+# to see if the edge (nginx/Cloudflare) is flapping (525/502/504) vs steady 200s.
+cmd_stats() {
+  local url="${1:-https://malaria.health.go.ug/health}" n="${2:-40}"
+  log "stats: $n requests -> $url"
+  local codes=""
+  for _ in $(seq 1 "$n"); do
+    codes+="$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$url") "
+  done
+  echo "$codes"
+  # Tally: one line per distinct code, sorted by frequency.
+  echo "$codes" | tr ' ' '\n' | grep -v '^$' | sort | uniq -c | sort -rn \
+    | awk '{printf "  %5s x %s\n", $1, $2}'
+}
+
 # ==========================================================================
 # Build / init / cache / logs
 # ==========================================================================
@@ -98,6 +113,10 @@ cmd_build_frontend() {
   require_root
   log "build frontend (as $SVC_USER)"
   chown -R "$SVC_USER:$SVC_USER" "$APP/superset-frontend" 2>/dev/null || true
+  # Drop the webpack persistent filesystem cache (.temp_cache) BEFORE building.
+  # If left stale, webpack reuses old compiled modules and source changes silently
+  # do not appear in the bundle (the "rebuilt but no change" trap).
+  rm -rf "$APP/superset-frontend/.temp_cache" "$APP/superset-frontend/.webpack" "$APP/superset-frontend/node_modules/.cache" 2>/dev/null || true
   as_svc bash -c "cd '$APP/superset-frontend' && npm ci --legacy-peer-deps && DISABLE_TYPE_CHECK=true npm run build"
   test -d "$APP/superset/static/assets" || die "build produced no assets/."
   chown -R "$SVC_USER:$SVC_USER" "$APP/superset/static/assets"
@@ -117,8 +136,8 @@ cmd_clear_cache() {
   log "clear caches (python + frontend build; does NOT flush Redis)"
   find "$APP/superset" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
   find "$APP/superset" -type f -name '*.pyc' -delete 2>/dev/null || true
-  rm -rf "$APP/superset-frontend/.webpack" "$APP/superset-frontend/node_modules/.cache" 2>/dev/null || true
-  info "python + frontend build caches cleared."
+  rm -rf "$APP/superset-frontend/.temp_cache" "$APP/superset-frontend/.webpack" "$APP/superset-frontend/node_modules/.cache" 2>/dev/null || true
+  info "python + frontend build caches cleared (incl. webpack .temp_cache)."
   info "(Redis/result cache left intact — flushing it would disrupt the celery broker.)"
 }
 
@@ -304,7 +323,9 @@ Build / maintenance:
 
 Diagnostics:
   logs [web|worker|beat|follow] [N]   Tail service logs (journalctl); default web/80
-  health                          curl /health
+  health                          curl /health (local, 127.0.0.1:8088)
+  stats [URL] [N]                 Burst N requests at the public URL, tally HTTP codes
+                                  (default https://malaria.health.go.ug/health, N=40)
 
 Source: $REPO_URL ($REF). Never touches superset_config.py, env, nginx, or domain.
 EOF
@@ -327,6 +348,7 @@ case "${1:-help}" in
   clear-logs)      cmd_clear_logs ;;
   logs)            shift; cmd_logs "$@" ;;
   health)          cmd_health ;;
+  stats)           shift; cmd_stats "$@" ;;
   help|--help|-h)  usage ;;
   *) printf 'Unknown command: %s\n\n' "${1:-}"; usage; exit 2 ;;
 esac
