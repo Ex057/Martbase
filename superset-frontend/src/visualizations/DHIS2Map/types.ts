@@ -76,11 +76,7 @@ export type LegendDisplayType =
   | 'compact';
 
 export type CompassStyle = 'north_badge' | 'arrow_north' | 'minimal_n';
-export type BoundaryFocusMaskStyle =
-  | 'off'
-  | 'light'
-  | 'dark'
-  | 'transparent';
+export type BoundaryFocusMaskStyle = 'off' | 'light' | 'dark' | 'transparent';
 export type BasemapStyle =
   | 'none'
   | 'osmLight'
@@ -208,6 +204,16 @@ export interface DHIS2MapProps {
   compassStyle?: CompassStyle;
   ouHierarchyColumns?: string[];
   periodColumns?: string[];
+  // When true, render the period data-zoom slider below the map; the slider
+  // window selects which periods are aggregated into the polygon values.
+  showPeriodSlider?: boolean;
+  // Milliseconds between steps when the period slider's play button animates.
+  periodSliderPlaySpeed?: number;
+  // 'choropleth' fills areas by value; 'bubble' draws value-sized circles.
+  mapRenderMode?: 'choropleth' | 'bubble';
+  // Circle radius range (px) for bubble mode.
+  bubbleLowRadius?: number;
+  bubbleHighRadius?: number;
 }
 
 export interface ThematicLayerConfig {

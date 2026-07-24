@@ -341,6 +341,54 @@ const config: ControlPanelConfig = {
         ],
         [
           {
+            name: 'map_render_mode',
+            config: {
+              type: 'SelectControl',
+              label: t('Map type'),
+              description: t(
+                'Choropleth fills each area by value. Bubble draws a circle at ' +
+                  'each area, sized by value.',
+              ),
+              default: 'choropleth',
+              clearable: false,
+              renderTrigger: true,
+              choices: [
+                ['choropleth', t('Choropleth')],
+                ['bubble', t('Bubble map')],
+              ],
+            },
+          },
+        ],
+        [
+          {
+            name: 'bubble_low_radius',
+            config: {
+              type: 'TextControl',
+              label: t('Low radius'),
+              description: t('Circle radius (px) for the lowest value.'),
+              isInt: true,
+              default: 5,
+              renderTrigger: true,
+              visibility: ({ controls }: any) =>
+                controls?.map_render_mode?.value === 'bubble',
+            },
+          },
+          {
+            name: 'bubble_high_radius',
+            config: {
+              type: 'TextControl',
+              label: t('High radius'),
+              description: t('Circle radius (px) for the highest value.'),
+              isInt: true,
+              default: 30,
+              renderTrigger: true,
+              visibility: ({ controls }: any) =>
+                controls?.map_render_mode?.value === 'bubble',
+            },
+          },
+        ],
+        [
+          {
             // Hierarchy-aware null filtering: exclude rows where the selected
             // OrgUnit hierarchy column is empty/null. Enabled by default.
             // When ON: only rows where the selected OU column has a value are
@@ -368,6 +416,48 @@ const config: ControlPanelConfig = {
               description: t(
                 'Select time period column for filtering (optional)',
               ),
+            },
+          },
+        ],
+        [
+          {
+            name: 'show_period_slider',
+            config: {
+              type: 'CheckboxControl',
+              label: t('Period slider (data zoom)'),
+              default: false,
+              // Pure client-side display toggle: the query already loads every
+              // period, so showing/hiding the slider needs no re-query.
+              renderTrigger: true,
+              description: t(
+                'Show a data-zoom slider below the map to scrub across periods. ' +
+                  'Drag the two handles to aggregate over a span of periods and ' +
+                  'watch the colours change, or press play to animate through time.',
+              ),
+            },
+          },
+        ],
+        [
+          {
+            name: 'period_slider_play_speed',
+            config: {
+              type: 'SelectControl',
+              label: t('Play speed'),
+              description: t(
+                'How fast the period window advances when you press play.',
+              ),
+              default: 900,
+              clearable: false,
+              renderTrigger: true,
+              choices: [
+                [1600, t('Slow')],
+                [900, t('Normal')],
+                [450, t('Fast')],
+                [200, t('Very fast')],
+              ],
+              // Only relevant once the slider is shown.
+              visibility: ({ controls }: any) =>
+                Boolean(controls?.show_period_slider?.value),
             },
           },
         ],
@@ -599,6 +689,48 @@ const config: ControlPanelConfig = {
                 }
                 return false;
               },
+            },
+          },
+        ],
+        [
+          {
+            name: 'stroke_color',
+            config: {
+              type: 'ColorPickerControl',
+              label: t('Border Color'),
+              description: t(
+                'Border colour for boundaries. Applies unless Auto Theme ' +
+                  'Borders is on or a per-level colour above is set.',
+              ),
+              default: { r: 255, g: 255, b: 255, a: 1 },
+              renderTrigger: true,
+            },
+          },
+          {
+            name: 'stroke_width',
+            config: {
+              type: 'SliderControl',
+              label: t('Border Width'),
+              description: t('Width of boundary borders in pixels'),
+              default: 1,
+              min: 0,
+              max: 5,
+              step: 0.5,
+              renderTrigger: true,
+            },
+          },
+        ],
+        [
+          {
+            name: 'auto_theme_borders',
+            config: {
+              type: 'CheckboxControl',
+              label: t('Auto Theme Borders'),
+              description: t(
+                'Automatically derive border colors from the color scheme (darker shade of fill color)',
+              ),
+              default: false,
+              renderTrigger: true,
             },
           },
         ],
@@ -862,50 +994,6 @@ const config: ControlPanelConfig = {
         ],
         [
           {
-            name: 'chart_background_color',
-            config: {
-              type: 'ColorPickerControl',
-              label: t('Background color'),
-              description: t('Background behind the map viewport'),
-              default: { r: 255, g: 255, b: 255, a: 1 },
-              renderTrigger: true,
-            },
-          },
-        ],
-        [
-          {
-            name: 'chart_background_color_hex',
-            config: {
-              type: 'TextControl',
-              label: t('Background color (HEX)'),
-              description: t(
-                'Enter a 6- or 8-digit hex color code, e.g. #F2EBEB or #F2EBEB00. ' +
-                  'This raw value overrides the color picker.',
-              ),
-              default: '',
-              renderTrigger: true,
-            },
-          },
-        ],
-        [
-          {
-            name: 'chart_background_opacity',
-            config: {
-              type: 'SliderControl',
-              label: t('Background Opacity'),
-              description: t(
-                'Transparency of background (0 = transparent, 1 = solid)',
-              ),
-              default: 1,
-              min: 0,
-              max: 1,
-              step: 0.1,
-              renderTrigger: true,
-            },
-          },
-        ],
-        [
-          {
             name: 'basemap_style',
             config: {
               type: 'SelectControl',
@@ -957,47 +1045,6 @@ const config: ControlPanelConfig = {
                 ['dark', t('Dark')],
                 ['transparent', t('Transparent')],
               ],
-              renderTrigger: true,
-            },
-          },
-        ],
-        [
-          {
-            name: 'stroke_color',
-            config: {
-              type: 'ColorPickerControl',
-              label: t('Border Color'),
-              description: t('Default border color for boundaries'),
-              default: { r: 255, g: 255, b: 255, a: 1 },
-              renderTrigger: true,
-            },
-          },
-        ],
-        [
-          {
-            name: 'auto_theme_borders',
-            config: {
-              type: 'CheckboxControl',
-              label: t('Auto Theme Borders'),
-              description: t(
-                'Automatically derive border colors from the color scheme (darker shade of fill color)',
-              ),
-              default: false,
-              renderTrigger: true,
-            },
-          },
-        ],
-        [
-          {
-            name: 'stroke_width',
-            config: {
-              type: 'SliderControl',
-              label: t('Border Width'),
-              description: t('Width of boundary borders in pixels'),
-              default: 1,
-              min: 0,
-              max: 5,
-              step: 0.5,
               renderTrigger: true,
             },
           },

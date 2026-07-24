@@ -289,15 +289,46 @@ export default function buildQuery(formData: QueryFormData) {
       addColumn(sanitizedOrgUnitColumn);
     }
 
-    // Always include the period column if available so the map can show it in
-    // tooltips and the user can apply period filters.
-    // Use the datasource-derived period column name first; fall back to
-    // granularity_sqla (user-selected time column).
-    const effectivePeriodColumn =
-      periodColumnName ||
-      (granularity_sqla ? sanitizeDHIS2ColumnName(granularity_sqla) : null);
-    if (effectivePeriodColumn) {
-      addColumn(effectivePeriodColumn);
+    // Always include the period column in the group-by for DHIS2 maps, so the
+    // result carries one row PER org-unit × period. The map aggregates all
+    // loaded periods per org unit for its default display (unchanged), and the
+    // period data-zoom slider — a pure client-side toggle — scrubs across
+    // whatever periods loaded. Resolve robustly, since the datasource-derived
+    // lookup (periodColumnName) doesn't always fire in the browser: a named
+    // column first, then granularity_sqla, then any `dhis2_is_period` column,
+    // and finally the literal `period` (DHIS2 serving tables always expose it).
+    const resolvedPeriodColumn = (() => {
+      if (periodColumnName) return periodColumnName;
+      if (granularity_sqla) return sanitizeDHIS2ColumnName(granularity_sqla);
+      const cols = Array.isArray(datasourceAny?.columns)
+        ? datasourceAny.columns
+        : [];
+      // A column literally named `period` (never `period_variant`).
+      const byName = cols.find(
+        (c: any) =>
+          sanitizeDHIS2ColumnName(String(c?.column_name || '')) === 'period',
+      );
+      if (byName?.column_name) {
+        return sanitizeDHIS2ColumnName(String(byName.column_name));
+      }
+      // Else any column flagged dhis2_is_period (re-checked here).
+      const byFlag = cols.find((c: any) => {
+        const extra = parseColumnExtra(c?.extra);
+        return extra?.dhis2_is_period === true || extra?.dhis2IsPeriod === true;
+      });
+      if (byFlag?.column_name) {
+        return sanitizeDHIS2ColumnName(String(byFlag.column_name));
+      }
+      // Last resort: the DHIS2 serving-table convention — but only for DHIS2
+      // datasets, which always expose a `period` column. Never invent a
+      // `period` column for a dataset that may not have one (SQL would fail).
+      if (isStagedLocalDataset || isDHIS2Dataset) {
+        return 'period';
+      }
+      return null;
+    })();
+    if (resolvedPeriodColumn) {
+      addColumn(resolvedPeriodColumn);
     }
 
     // Add tooltip columns
@@ -400,6 +431,8 @@ export default function buildQuery(formData: QueryFormData) {
     // relative period token (REL::LAST_12_MONTHS) expanded on every query so the
     // chart tracks newly synced periods. Shared with every other DHIS2 chart.
     const columnExtraFilters = dhis2ColumnFilterClauses(formData);
+    // Note: any pinned period filter is intentionally respected — the period
+    // slider scrubs across whatever periods the chart loaded.
 
     // Combine existing adhoc filters with the column filters.
     // Never let time_range through for staged local datasets: the period
@@ -424,8 +457,11 @@ export default function buildQuery(formData: QueryFormData) {
         columns,
         metrics: safeMetrics,
         filters: combinedFilters,
-        // Use a reasonable row limit (0 means unlimited which can cause issues)
-        row_limit: baseQueryObject.row_limit || 10000,
+        // When period is grouped in, the result is org-units × periods rows, so
+        // lift the cap accordingly (0 means unlimited, which can cause issues,
+        // so use an explicit high cap). Otherwise keep the standard limit.
+        row_limit:
+          baseQueryObject.row_limit || (resolvedPeriodColumn ? 100000 : 10000),
         // Period column is a DHIS2 string (e.g. "2024Q1"), NOT a SQL datetime.
         // Passing any time_range value causes the backend to generate invalid
         // date-range SQL which always results in a 500.  Use the dedicated

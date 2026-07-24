@@ -1438,5 +1438,21 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     dashboardId,
     ouHierarchyColumns,
     periodColumns,
+    showPeriodSlider: Boolean(
+      formDataAny?.show_period_slider ?? formDataAny?.showPeriodSlider,
+    ),
+    periodSliderPlaySpeed:
+      Number(
+        formDataAny?.period_slider_play_speed ??
+          formDataAny?.periodSliderPlaySpeed,
+      ) || undefined,
+    mapRenderMode:
+      formDataAny?.map_render_mode ?? formDataAny?.mapRenderMode ?? 'choropleth',
+    bubbleLowRadius:
+      Number(formDataAny?.bubble_low_radius ?? formDataAny?.bubbleLowRadius) ||
+      5,
+    bubbleHighRadius:
+      Number(formDataAny?.bubble_high_radius ?? formDataAny?.bubbleHighRadius) ||
+      30,
   };
 }

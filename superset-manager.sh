@@ -1231,6 +1231,15 @@ build_frontend() {
   header "Building Superset Frontend"
 
   ensure_frontend_deps
+
+  # Drop webpack's persistent filesystem cache (.temp_cache) and the previously
+  # built assets BEFORE building. A stale .temp_cache silently reuses old
+  # compiled modules, so source changes never make it into the bundle (the
+  # "rebuilt but no change" trap).
+  rm -rf "$FRONTEND_DIR/.temp_cache" "$FRONTEND_DIR/.webpack" \
+         "$FRONTEND_DIR/node_modules/.cache" 2>/dev/null || true
+  rm -rf "$PROJECT_DIR/superset/static/assets" 2>/dev/null || true
+
   npm run build
 
   ok "Frontend build completed"
@@ -1262,7 +1271,7 @@ clear_frontend_cache() {
   validate_frontend
   cd "$FRONTEND_DIR"
 
-  rm -rf dist build .webpack .next .eslintcache 2>/dev/null || true
+  rm -rf dist build .temp_cache .webpack .next .eslintcache 2>/dev/null || true
   rm -rf node_modules/.cache node_modules/.webpack 2>/dev/null || true
   npm cache clean --force >/dev/null 2>&1 || true
 

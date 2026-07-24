@@ -212,9 +212,7 @@ describe('DHIS2Map buildQuery', () => {
         label: 'SUM(c_105_ep01b_2019_malaria_total)',
       },
     ]);
-    expect(query.groupby).toEqual([
-      'district_city',
-    ]);
+    expect(query.groupby).toEqual(['district_city']);
     expect(query.extras).toMatchObject({
       dhis2_selected_org_unit_column: 'district_city',
     });
@@ -342,5 +340,58 @@ describe('DHIS2Map buildQuery', () => {
         dhis2_column_filters: [{ column: 'period', values: ['REL::NONSENSE'] }],
       }),
     ).toBeUndefined();
+  });
+});
+
+describe('DHIS2Map buildQuery — period data-zoom slider', () => {
+  const build = (formData: Record<string, unknown>) =>
+    buildQuery({
+      datasource: '4__table',
+      viz_type: 'dhis2_map',
+      metric: 'SUM(cch_precipitation_chirps)',
+      org_unit_column: 'district_city',
+      granularity_sqla: 'period',
+      dhis2_staged_local_dataset: 'true',
+      dhis2_hierarchy_columns: ['national', 'region', 'district_city'],
+      ...formData,
+    } as any).queries[0];
+
+  test('always includes the period column so the slider has data (independent of the toggle)', () => {
+    // buildQuery emits dimensions on `columns`. Period is unconditional now so
+    // the client-side slider toggle needs no re-query.
+    expect((build({ show_period_slider: true }) as any).columns).toContain(
+      'period',
+    );
+    expect((build({ show_period_slider: false }) as any).columns).toContain(
+      'period',
+    );
+  });
+
+  test('falls back to the literal `period` column for DHIS2 maps when nothing else resolves', () => {
+    // No granularity_sqla and no datasource columns available at build time,
+    // but a staged-local DHIS2 map still gets the conventional `period` column.
+    const query = buildQuery({
+      datasource: '4__table',
+      viz_type: 'dhis2_map',
+      metric: 'SUM(cch_precipitation_chirps)',
+      org_unit_column: 'district_city',
+      dhis2_staged_local_dataset: 'true',
+      dhis2_hierarchy_columns: ['national', 'region', 'district_city'],
+    } as any).queries[0] as any;
+    expect(query.columns).toContain('period');
+  });
+
+  test('lifts the row limit so periods are not truncated', () => {
+    expect((build({}) as any).row_limit).toBe(100000);
+  });
+
+  test('respects a pinned period filter (slider scrubs the loaded periods)', () => {
+    const query = build({
+      dhis2_column_filters: [{ column: 'period', values: ['202601'] }],
+    }) as any;
+    const periodFilter = (query.filters || []).find(
+      (f: any) => f.col === 'period',
+    );
+    expect(periodFilter).toMatchObject({ op: 'IN', val: ['202601'] });
   });
 });

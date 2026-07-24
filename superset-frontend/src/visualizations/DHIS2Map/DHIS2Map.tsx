@@ -26,7 +26,14 @@ import {
   ReactElement,
   FC,
 } from 'react';
-import { styled, SupersetClient, t } from '@superset-ui/core';
+import {
+  styled,
+  SupersetClient,
+  t,
+  formatDHIS2Period,
+} from '@superset-ui/core';
+import PeriodDataZoom from './components/PeriodDataZoom';
+import BubbleLayer from './components/BubbleLayer';
 import { Spin } from 'antd';
 import { FilterOutlined } from '@ant-design/icons';
 import { MapContainer, GeoJSON, useMap } from 'react-leaflet';
@@ -151,6 +158,7 @@ import {
   buildOrgUnitMatchKeys,
   getLegendRangeFromDefinition,
   normalizeOrgUnitMatchKey,
+  getRadiusScale,
 } from './utils';
 import {
   getStagedDatasetIdFromSql,
@@ -256,6 +264,28 @@ const MapCanvas = styled.div<{ $backgroundColor?: string }>`
       -1px -1px 1px #ffffff,
       1px -1px 1px #ffffff,
       -1px 1px 1px #ffffff;
+  }
+
+  /* Permanent value label centred on each bubble in bubble-map mode. */
+  .dhis2-bubble-value-label,
+  .dhis2-bubble-value-label.leaflet-tooltip {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    margin: 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: #1f2937;
+    pointer-events: none;
+    text-shadow:
+      1px 1px 1px #ffffff,
+      -1px -1px 1px #ffffff,
+      1px -1px 1px #ffffff,
+      -1px 1px 1px #ffffff;
+  }
+  .dhis2-bubble-value-label.leaflet-tooltip::before {
+    display: none;
   }
 
   .dhis2-map-tooltip-container {
@@ -1065,6 +1095,12 @@ function buildAggregatedValueMaps(options: {
       return;
     }
 
+    // Treat NULL/blank metric values as "no data" rather than 0, so a period
+    // with no value for an area shows as no-data instead of a misleading zero.
+    if (metricValue === undefined || metricValue === null || metricValue === '') {
+      return;
+    }
+
     const id = String(orgUnitValue).trim();
     const numValue = Number(metricValue);
     if (!id || Number.isNaN(numValue)) {
@@ -1256,6 +1292,9 @@ function resolveFallbackFocusHierarchyColumn(options: {
   return undefined;
 }
 
+const clampPeriodIndex = (index: number, periods: string[]) =>
+  Math.max(0, Math.min(periods.length - 1, index));
+
 function DHIS2Map({
   data,
   width,
@@ -1328,6 +1367,11 @@ function DHIS2Map({
   boundaryLoadMethod = 'geoFeatures',
   ouHierarchyColumns = [],
   periodColumns = [],
+  showPeriodSlider = false,
+  periodSliderPlaySpeed,
+  mapRenderMode = 'choropleth',
+  bubbleLowRadius = 5,
+  bubbleHighRadius = 30,
 }: DHIS2MapProps): ReactElement {
   const MAX_PENDING_BOUNDARY_RETRIES = 8;
   const metricDisplayName = metricLabel || metric;
@@ -2665,13 +2709,101 @@ function DHIS2Map({
     parentSelectionColumn,
   ]);
 
+  // ── Period data-zoom slider ─────────────────────────────────────────────
+  // Resolve which column in the result rows holds the DHIS2 period, order the
+  // distinct periods, and filter the rows to the slider's selected window. The
+  // windowed rows feed the existing aggregation → colouring path, so dragging
+  // the slider recolours the map without a re-query.
+  const resolvedPeriodColumn = useMemo(() => {
+    if (!showPeriodSlider || !data.length) return undefined;
+    const keys = Object.keys(data[0]);
+    const direct = periodColumns.find(col => keys.includes(col));
+    if (direct) return direct;
+    const bySanitized = periodColumns
+      .map(col => sanitizeDHIS2ColumnName(String(col || '')))
+      .find(Boolean);
+    if (bySanitized) {
+      const hit = keys.find(
+        key => sanitizeDHIS2ColumnName(String(key)) === bySanitized,
+      );
+      if (hit) return hit;
+    }
+    return keys.find(key => {
+      const normalized = sanitizeDHIS2ColumnName(String(key));
+      return normalized === 'period' || normalized.includes('period');
+    });
+  }, [showPeriodSlider, data, periodColumns]);
+
+  const orderedPeriods = useMemo(() => {
+    if (!resolvedPeriodColumn) return [] as string[];
+    const set = new Set<string>();
+    baseFilteredData.forEach(row => {
+      const raw = getRowColumnValue(row, resolvedPeriodColumn, 'dimension');
+      const value = raw == null ? '' : String(raw).trim();
+      if (value) set.add(value);
+    });
+    // Lexical sort orders same-format DHIS2 codes correctly (YYYY, YYYYMM,
+    // YYYYQ#, YYYYW##).
+    return Array.from(set).sort();
+  }, [resolvedPeriodColumn, baseFilteredData, getRowColumnValue]);
+
+  const [periodWindow, setPeriodWindow] = useState<[number, number]>([0, 0]);
+  // The timeline selects a single period; default to the first one whenever the
+  // period set changes.
+  useEffect(() => {
+    if (orderedPeriods.length) {
+      setPeriodWindow([0, 0]);
+    }
+  }, [orderedPeriods]);
+
+  const periodWindowedData = useMemo(() => {
+    if (
+      !showPeriodSlider ||
+      !resolvedPeriodColumn ||
+      orderedPeriods.length < 2
+    ) {
+      return filteredData;
+    }
+    const [start, end] = periodWindow;
+    if (start <= 0 && end >= orderedPeriods.length - 1) {
+      return filteredData; // full window — no filtering needed
+    }
+    const allowed = new Set(orderedPeriods.slice(start, end + 1));
+    const result = filteredData.filter(row => {
+      const raw = getRowColumnValue(row, resolvedPeriodColumn, 'dimension');
+      return allowed.has(raw == null ? '' : String(raw).trim());
+    });
+    // TEMP DIAGNOSTIC — remove after confirming the period window applies.
+    // eslint-disable-next-line no-console
+    console.log('[DHIS2Map periodWindow]', {
+      periodColumn: resolvedPeriodColumn,
+      selectedPeriods: [...allowed],
+      rowsBefore: filteredData.length,
+      rowsAfter: result.length,
+      sampleRawPeriods: filteredData
+        .slice(0, 3)
+        .map(r => getRowColumnValue(r, resolvedPeriodColumn, 'dimension')),
+    });
+    return result;
+  }, [
+    showPeriodSlider,
+    resolvedPeriodColumn,
+    orderedPeriods,
+    periodWindow,
+    filteredData,
+    getRowColumnValue,
+  ]);
+
   const tooltipRowByOrgUnitKey = useMemo(() => {
     const index = new Map<string, Record<string, any>>();
-    if (!filteredData.length) {
+    // Index the period-windowed rows (not all periods) so the tooltip reflects
+    // the selected period — otherwise it would show a random period's row and
+    // its extra columns, mixing values across periods.
+    if (!periodWindowedData.length) {
       return index;
     }
 
-    filteredData.forEach(row => {
+    periodWindowedData.forEach(row => {
       const rowOrgUnitValue = getRowColumnValue(
         row,
         effectiveOrgUnitDataColumn,
@@ -2685,7 +2817,7 @@ function DHIS2Map({
     });
 
     return index;
-  }, [effectiveOrgUnitDataColumn, filteredData, getRowColumnValue]);
+  }, [effectiveOrgUnitDataColumn, periodWindowedData, getRowColumnValue]);
 
   const getTooltipRowForFeature = useCallback(
     (feature: BoundaryFeature): Record<string, any> | undefined => {
@@ -2787,7 +2919,7 @@ function DHIS2Map({
     const targetLevel = colExtra?.dhis2_ou_level;
 
     const aggregatedMaps = buildAggregatedValueMaps({
-      rows: filteredData,
+      rows: periodWindowedData,
       requestedOrgUnitColumn: effectiveOrgUnitDataColumn,
       metric,
       aggregationMethod,
@@ -2806,7 +2938,7 @@ function DHIS2Map({
     aggregationMethod,
     datasourceColumns,
     effectiveOrgUnitDataColumn,
-    filteredData,
+    periodWindowedData,
     metric,
     parentSelectionColumn,
     resolvedEffectiveOrgUnitColumn,
@@ -2915,6 +3047,20 @@ function DHIS2Map({
       manualBreaks,
       manualColors,
     ],
+  );
+
+  const isBubbleMode = mapRenderMode === 'bubble';
+  // Area-proportional radius scale (d3 scaleSqrt) for bubble mode, sharing the
+  // same value range as the colour scale.
+  const radiusScale = useMemo(
+    () =>
+      getRadiusScale(
+        valueRange.min,
+        valueRange.max,
+        bubbleLowRadius,
+        bubbleHighRadius,
+      ),
+    [valueRange, bubbleLowRadius, bubbleHighRadius],
   );
 
   const computedLegendEntries = useMemo(
@@ -3519,6 +3665,35 @@ function DHIS2Map({
         };
       }
 
+      // Bubble mode: the value is shown by the overlaid circles, so the
+      // polygons carry no fill — but keep the boundaries clearly visible using
+      // the configured border color / width (and per-level border colours), so
+      // they read against any base map.
+      if (isBubbleMode) {
+        let bubbleBorderColor = `rgba(${strokeColor.r},${strokeColor.g},${strokeColor.b},${strokeColor.a})`;
+        if (levelBorderColors && levelBorderColors.length > 0) {
+          const rawLevel = feature.properties.level;
+          const level =
+            typeof rawLevel === 'string'
+              ? parseInt(rawLevel, 10)
+              : rawLevel || 1;
+          const levelColor = levelBorderColors.find(l => l.level === level);
+          if (levelColor) {
+            bubbleBorderColor = `rgba(${levelColor.color.r},${levelColor.color.g},${levelColor.color.b},${levelColor.color.a})`;
+          }
+        }
+        const bubbleBorderWidth =
+          typeof strokeWidth === 'number' && Number.isFinite(strokeWidth)
+            ? Math.max(strokeWidth, 0.75)
+            : 1;
+        return {
+          fillOpacity: 0,
+          color: bubbleBorderColor,
+          weight: bubbleBorderWidth,
+          opacity: 1,
+        };
+      }
+
       const value = getFeatureValue(feature);
 
       const noDataColorRgb = `rgba(${legendNoDataColor.r},${legendNoDataColor.g},${legendNoDataColor.b},${legendNoDataColor.a})`;
@@ -3537,15 +3712,26 @@ function DHIS2Map({
           ? strokeWidth
           : 1;
 
+      // Whether the user has picked a Border Color other than the default
+      // white. If so we respect it below instead of the auto-derived border.
+      const borderColorIsCustom = !(
+        strokeColor.r === 255 &&
+        strokeColor.g === 255 &&
+        strokeColor.b === 255
+      );
+
       if (isSelectedArea) {
         // Areas with data: use color scale
         fillColor = colorScale(value);
         // Keep matched polygons visible even when a saved chart carries
         // an accidental zero/near-zero fill opacity.
         fillOpacityValue = Math.max(configuredOpacity, 0.2);
-        // Default selected-area borders should stay visually tied to the
-        // thematic key color unless a more specific border mode overrides it.
-        borderColor = darkenColor(fillColor, 0.3);
+        // Respect an explicitly chosen Border Color; otherwise keep the border
+        // visually tied to the thematic key colour (a more specific border mode
+        // below can still override).
+        borderColor = borderColorIsCustom
+          ? `rgba(${strokeColor.r},${strokeColor.g},${strokeColor.b},${strokeColor.a})`
+          : darkenColor(fillColor, 0.3);
       } else if (shouldStyleUnselectedAreas) {
         fillColor = unselectedFillRgb;
         fillOpacityValue = Math.max(unselectedAreaFillOpacity, 0.3);
@@ -3607,6 +3793,7 @@ function DHIS2Map({
       unselectedAreaFillOpacity,
       unselectedAreaBorderColor,
       unselectedAreaBorderWidth,
+      isBubbleMode,
     ],
   );
 
@@ -3650,7 +3837,10 @@ function DHIS2Map({
         </div>
       `;
 
-      console.log('[DHIS2Map] bindTooltip for:', feature.properties?.name, { value, metricDisplayName });
+      console.log('[DHIS2Map] bindTooltip for:', feature.properties?.name, {
+        value,
+        metricDisplayName,
+      });
       layer.bindTooltip(tooltipContent, {
         sticky: true,
         permanent: false,
@@ -3662,7 +3852,10 @@ function DHIS2Map({
 
       // Add hover handlers for better interactivity
       handlers.mouseover = () => {
-        console.log('[DHIS2Map] mouseover:', feature.properties?.name, { value, tooltipRow });
+        console.log('[DHIS2Map] mouseover:', feature.properties?.name, {
+          value,
+          tooltipRow,
+        });
         const originalStyle = getFeatureStyle(feature);
         vectorLayer.setStyle({
           ...originalStyle,
@@ -3695,7 +3888,9 @@ function DHIS2Map({
         element.style.outline = 'none';
       }
 
-      if (showLabels && feature.geometry.type !== 'Point') {
+      // In bubble mode the value lives on the bubble tooltip, so suppress the
+      // per-district value labels to keep it uncluttered.
+      if (showLabels && !isBubbleMode && feature.geometry.type !== 'Point') {
         const center = L.geoJSON(feature).getBounds().getCenter();
         let labelText = '';
 
@@ -3757,6 +3952,7 @@ function DHIS2Map({
       mapInstance,
       strokeWidth,
       opacity,
+      isBubbleMode,
     ],
   );
 
@@ -3910,7 +4106,19 @@ function DHIS2Map({
               }
               style={getFeatureStyle as any}
               onEachFeature={onEachFeature as any}
-              styleKey={`levels-${boundaryLevelsKey}-drill-${drillState.currentLevel}-${drillState.parentId}-colors-${levelBorderColorSignature}-boundaries-${displayBoundaryIdsSignature}`}
+              styleKey={`levels-${boundaryLevelsKey}-drill-${drillState.currentLevel}-${drillState.parentId}-colors-${levelBorderColorSignature}-boundaries-${displayBoundaryIdsSignature}-mode-${mapRenderMode}`}
+            />
+          )}
+
+          {isBubbleMode && displayBoundaries.length > 0 && (
+            <BubbleLayer
+              features={displayBoundaries}
+              getValue={getFeatureValue}
+              colorScale={colorScale}
+              radiusScale={radiusScale}
+              metricLabel={metricDisplayName}
+              formatValue={formatValue}
+              fillOpacity={opacity}
             />
           )}
         </MapContainer>
@@ -4096,6 +4304,24 @@ function DHIS2Map({
           </FloatingControls>
         )}
       </MapCanvas>
+
+      {showPeriodSlider && orderedPeriods.length > 1 && (
+        <div
+          className="dhis2-map-period-datazoom-dock"
+          style={{ flex: '0 0 auto' }}
+        >
+          <PeriodDataZoom
+            periods={orderedPeriods}
+            value={[
+              clampPeriodIndex(periodWindow[0], orderedPeriods),
+              clampPeriodIndex(periodWindow[1], orderedPeriods),
+            ]}
+            onChange={setPeriodWindow}
+            formatLabel={code => formatDHIS2Period(code) || code}
+            playIntervalMs={periodSliderPlaySpeed}
+          />
+        </div>
+      )}
 
       {dhis2Data && dhis2Data.length > 0 && !loading && (
         <button
