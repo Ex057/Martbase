@@ -34,6 +34,7 @@ import {
 } from '@superset-ui/core';
 import PeriodDataZoom from './components/PeriodDataZoom';
 import BubbleLayer from './components/BubbleLayer';
+import LabelLayer from './components/LabelLayer';
 import { Spin } from 'antd';
 import { FilterOutlined } from '@ant-design/icons';
 import { MapContainer, GeoJSON, useMap } from 'react-leaflet';
@@ -851,8 +852,6 @@ type DHIS2GeoJsonLayer = L.Layer & {
   unbindTooltip?: () => void;
 };
 
-const labelMarkersByLayer = new WeakMap<L.Layer, L.Marker>();
-
 const DynamicGeoJSON: FC<DynamicGeoJSONProps> = ({
   data,
   style,
@@ -869,8 +868,6 @@ const DynamicGeoJSON: FC<DynamicGeoJSONProps> = ({
     if (layer.getTooltip?.()) {
       layer.unbindTooltip?.();
     }
-    labelMarkersByLayer.get(layer)?.remove();
-    labelMarkersByLayer.delete(layer);
   }, []);
 
   // Update styles when styleKey changes
@@ -1530,7 +1527,9 @@ function DHIS2Map({
   const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(
     null,
   );
-  const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
+  // The map instance is tracked only to trigger updates on ready; on-map labels
+  // and bubbles are React-managed children, so the value itself isn't read.
+  const [, setMapInstance] = useState<L.Map | null>(null);
   const [dhis2Data, setDhis2Data] = useState<Record<string, any>[] | null>(
     null,
   );
@@ -2769,22 +2768,10 @@ function DHIS2Map({
       return filteredData; // full window — no filtering needed
     }
     const allowed = new Set(orderedPeriods.slice(start, end + 1));
-    const result = filteredData.filter(row => {
+    return filteredData.filter(row => {
       const raw = getRowColumnValue(row, resolvedPeriodColumn, 'dimension');
       return allowed.has(raw == null ? '' : String(raw).trim());
     });
-    // TEMP DIAGNOSTIC — remove after confirming the period window applies.
-    // eslint-disable-next-line no-console
-    console.log('[DHIS2Map periodWindow]', {
-      periodColumn: resolvedPeriodColumn,
-      selectedPeriods: [...allowed],
-      rowsBefore: filteredData.length,
-      rowsAfter: result.length,
-      sampleRawPeriods: filteredData
-        .slice(0, 3)
-        .map(r => getRowColumnValue(r, resolvedPeriodColumn, 'dimension')),
-    });
-    return result;
   }, [
     showPeriodSlider,
     resolvedPeriodColumn,
@@ -3888,71 +3875,20 @@ function DHIS2Map({
         element.style.outline = 'none';
       }
 
-      // In bubble mode the value lives on the bubble tooltip, so suppress the
-      // per-district value labels to keep it uncluttered.
-      if (showLabels && !isBubbleMode && feature.geometry.type !== 'Point') {
-        const center = L.geoJSON(feature).getBounds().getCenter();
-        let labelText = '';
-
-        switch (labelType) {
-          case 'name':
-            labelText = feature.properties.name;
-            break;
-          case 'value':
-            labelText = value !== undefined ? formatValue(value) : '';
-            break;
-          case 'name_value':
-            labelText = `${feature.properties.name}\n${
-              value !== undefined ? formatValue(value) : ''
-            }`;
-            break;
-          case 'percent': {
-            const total = Array.from(dataMap.values()).reduce(
-              (a, b) => a + b,
-              0,
-            );
-            labelText =
-              value !== undefined
-                ? `${((value / total) * 100).toFixed(1)}%`
-                : '';
-            break;
-          }
-          default:
-            break;
-        }
-
-        if (labelText && mapInstance) {
-          const labelMarker = L.marker(center, {
-            icon: L.divIcon({
-              className: 'map-label',
-              html: `<div style="font-size: ${labelFontSize}px; text-align: center; white-space: nowrap; color: ${
-                labelTextColor || '#1f2937'
-              };">${labelText}</div>`,
-            }),
-          }).addTo(mapInstance);
-          labelMarkersByLayer.set(layer, labelMarker);
-        }
-      }
+      // On-map value labels are rendered separately by <LabelLayer/>, which is
+      // React-managed so labels never stack or go stale when the period changes.
     },
     [
       getFeatureValue,
       getTooltipRowForFeature,
       getFeatureStyle,
-      dataMap,
       metric,
       metricDisplayName,
       getRowColumnValue,
       resolvedEffectiveOrgUnitColumn,
       tooltipColumns,
-      showLabels,
-      labelType,
-      labelFontSize,
-      labelTextColor,
       enableDrill,
-      mapInstance,
       strokeWidth,
-      opacity,
-      isBubbleMode,
     ],
   );
 
@@ -4119,6 +4055,26 @@ function DHIS2Map({
               metricLabel={metricDisplayName}
               formatValue={formatValue}
               fillOpacity={opacity}
+            />
+          )}
+
+          {/*
+            On-map value labels. React-managed so changing the period unmounts
+            stale labels and mounts fresh ones — no stacking, and no numbers on
+            no-data areas. Suppressed in bubble mode (values live on the bubbles).
+          */}
+          {showLabels && !isBubbleMode && displayBoundaries.length > 0 && (
+            <LabelLayer
+              features={displayBoundaries}
+              getValue={getFeatureValue}
+              labelType={labelType as any}
+              formatValue={formatValue}
+              fontSize={labelFontSize}
+              textColor={labelTextColor}
+              total={Array.from(dataMap.values()).reduce(
+                (sum, current) => sum + current,
+                0,
+              )}
             />
           )}
         </MapContainer>
