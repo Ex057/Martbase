@@ -1732,8 +1732,26 @@ _SYSTEM_PROMPT_DASHBOARD = (
 )
 
 _SYSTEM_PROMPT_SQL = (
-    'You are Superset MART SQL assistant. Return JSON: {"sql","explanation","assumptions","follow_ups"}. '
-    "One read-only SELECT. MART tables only. Include LIMIT. Use the given dialect."
+    "You are the Superset MART SQL assistant for DHIS2 health-analytics data.\n"
+    "Given a question and a compact schema, propose SEVERAL alternative SQL queries "
+    "the user can pick from (e.g. different groupings, aggregations, or orderings).\n\n"
+    "Return ONLY JSON of the form:\n"
+    '{"suggestions":[{"sql":"...","explanation":"one sentence","assumptions":["..."]}],'
+    '"follow_ups":["..."]}\n\n'
+    "Hard rules:\n"
+    "- Each suggestion is exactly ONE read-only SELECT. Never write/DDL/DML.\n"
+    "- Use ONLY the MART tables and columns provided in the schema. Never invent columns.\n"
+    "- Write valid SQL for the given `dialect`.\n"
+    "- Always include a LIMIT.\n"
+    "DHIS2 rules:\n"
+    "- The period column is given as `period_column` (also marked dhis2.period on the "
+    "column). Filter/group by THAT string column for periods; do not cast it to a date.\n"
+    "- Columns marked dhis2.indicator are already-computed rates — do NOT SUM them "
+    "(use AVG or select as-is). Columns with dhis2.agg (e.g. SUM) are raw data elements — "
+    "aggregate them with that function.\n"
+    "- If the user names a `metric`, aggregate/select that column. If they name a "
+    "`period`, filter the period column to it.\n"
+    "- Prefer 3 distinct, genuinely useful suggestions; fewer is fine if the question is narrow."
 )
 
 _SYSTEM_PROMPT_CHART_GENERATE = (
@@ -1824,7 +1842,7 @@ _SYSTEM_PROMPT_CHART_GENERATE = (
     "   - groupby: array of column name strings for categorical grouping\n"
     "   - columns: array of column name strings (for table/pivot viz)\n"
     "   - time_range: 'No filter' or 'Last year' or 'Last quarter' etc.\n"
-    "   - row_limit: integer (50-1000)\n"
+    "   - row_limit: integer (default 10000; use 50-50000)\n"
     "   - granularity_sqla: a date/time column name if time-series, else null\n"
     "   - x_axis: column name for x-axis on time-series charts\n"
     "   - order_desc: true/false\n"
@@ -5665,12 +5683,17 @@ def _build_sql_messages(
     mart_schema_context: list[dict[str, Any]],
     current_sql: str | None,
     conversation: list[dict[str, str]] | None,
+    metric: str | None = None,
+    period: str | None = None,
+    dataset: str | None = None,
+    retry_error: str | None = None,
 ) -> list[dict[str, str]]:
     messages: list[dict[str, str]] = [{"role": "system", "content": _SYSTEM_PROMPT_SQL}]
     messages.extend(_trim_conversation(conversation or []))
 
-    # Compact MART schema: only table name + column names (skip types/descriptions
-    # unless they exist and are short) to drastically cut input tokens.
+    # Compact MART schema: table name + columns as "name:type", tagging the DHIS2
+    # period column and indicator/data-element markers so the model aggregates and
+    # filters correctly (cheap tokens, big accuracy win).
     compact_tables = []
     for tbl in mart_schema_context:
         cols = []
@@ -5679,28 +5702,107 @@ def _build_sql_messages(
             col_type = col.get("type")
             if col_type:
                 col_entry += f":{col_type}"
+            markers = col.get("dhis2") or {}
+            tags = []
+            if markers.get("period"):
+                tags.append("period")
+            if markers.get("indicator"):
+                tags.append("indicator")
+            elif markers.get("agg"):
+                tags.append(f"agg={markers['agg']}")
+            if tags:
+                col_entry += f" ({','.join(tags)})"
             cols.append(col_entry)
         entry: dict[str, Any] = {"t": tbl["table"], "cols": cols}
         if tbl.get("schema"):
             entry["s"] = tbl["schema"]
+        if tbl.get("period_column"):
+            entry["period_column"] = tbl["period_column"]
         if tbl.get("description"):
             entry["desc"] = tbl["description"][:120]
         compact_tables.append(entry)
 
-    messages.append(
-        {
-            "role": "user",
-            "content": _compact_json(
-                {
-                    "q": question,
-                    "dialect": database.db_engine_spec.engine,
-                    "sql": current_sql or "",
-                    "tables": compact_tables,
-                }
-            ),
-        }
-    )
+    user_payload: dict[str, Any] = {
+        "q": question,
+        "dialect": database.db_engine_spec.engine,
+        "sql": current_sql or "",
+        "tables": compact_tables,
+    }
+    # Guided inputs from the UI (optional): the specific dataset/metric/period the
+    # user picked, so the model doesn't have to guess them from free text.
+    if dataset:
+        user_payload["dataset"] = dataset
+    if metric:
+        user_payload["metric"] = metric
+    if period:
+        user_payload["period"] = period
+    # Self-correction: on a retry, tell the model exactly why the last attempt failed.
+    if retry_error:
+        user_payload["fix"] = (
+            f"Your previous SQL was rejected: {retry_error}. "
+            "Return corrected suggestions using only the columns/tables above."
+        )
+
+    messages.append({"role": "user", "content": _compact_json(user_payload)})
     return messages
+
+
+def _collect_valid_sql_suggestions(
+    exec_database: Database,
+    structured: dict[str, Any],
+    schema: str | None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Validate every candidate SQL the model returned.
+
+    Accepts either the multi-suggestion shape ``{"suggestions":[{sql,...}]}`` or the
+    legacy single ``{"sql":...}`` shape. Each candidate is run through
+    ``ensure_mart_only_sql`` (SELECT-only, MART-tables-only, LIMIT injected); invalid
+    ones are dropped and their errors collected (for a self-correction retry).
+    Returns ``(valid_suggestions, validation_errors)``. Duplicates are de-duped.
+    """
+    raw = structured.get("suggestions")
+    if not isinstance(raw, list) or not raw:
+        single = str(structured.get("sql") or "").strip()
+        raw = (
+            [
+                {
+                    "sql": single,
+                    "explanation": structured.get("explanation") or "",
+                    "assumptions": structured.get("assumptions") or [],
+                }
+            ]
+            if single
+            else []
+        )
+
+    valid: list[dict[str, Any]] = []
+    errors: list[str] = []
+    seen: set[str] = set()
+    for candidate in raw:
+        if not isinstance(candidate, dict):
+            continue
+        sql = str(candidate.get("sql") or "").strip()
+        if not sql:
+            continue
+        try:
+            validation = ensure_mart_only_sql(exec_database, sql, schema=schema)
+        except AISQLValidationError as ex:
+            errors.append(str(ex))
+            continue
+        normalized = validation["sql"].strip()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        assumptions = candidate.get("assumptions")
+        valid.append(
+            {
+                "sql": validation["sql"],
+                "tables": validation["tables"],
+                "explanation": str(candidate.get("explanation") or "").strip(),
+                "assumptions": assumptions if isinstance(assumptions, list) else [],
+            }
+        )
+    return valid, errors
 
 
 def _audit(
@@ -5918,7 +6020,7 @@ def _params_for_viz(  # pylint: disable=too-many-return-statements
             "x_axis": x_axis,
             "metrics": metric_exprs[:3],
             "groupby": [],
-            "row_limit": 100 if x_axis == period_col else 20,
+            "row_limit": 10000 if x_axis == period_col else 20,
         }
         if x_axis != period_col:
             params["order_desc"] = True
@@ -5930,7 +6032,7 @@ def _params_for_viz(  # pylint: disable=too-many-return-statements
             "query_mode": "aggregate",
             "metrics": metric_exprs[:4],
             "groupby": [c for c in (label_col, period_col) if c],
-            "row_limit": 50,
+            "row_limit": 10000,
             "order_desc": True,
         }
 
@@ -5943,7 +6045,7 @@ def _params_for_viz(  # pylint: disable=too-many-return-statements
             "x_axis": period_col,
             # multi: false — a list renders as an empty Y-axis control.
             "groupby": label_col,
-            "row_limit": 100,
+            "row_limit": 10000,
         }
 
     if viz_type == "dhis2_map":
@@ -6578,8 +6680,8 @@ class AIInsightService:
             provider_type=_provider_type,
         )
         if messages and messages[0].get("role") == "__direct_report__":
-            from superset.ai_insights.providers import GenerateResponse
-            response = GenerateResponse(
+            from superset.ai_insights.providers import ProviderResponse
+            response = ProviderResponse(
                 text=messages[0]["content"],
                 provider_id=provider_id or "local",
                 model="python-report",
@@ -6715,45 +6817,93 @@ class AIInsightService:
                 400,
             )
 
+        # Guided inputs (optional): the specific dataset/metric/period the user
+        # selected in the panel. When a dataset is chosen, narrow the schema
+        # context to that table so suggestions target it.
+        metric = str(payload.get("metric") or "").strip() or None
+        period = str(payload.get("period") or "").strip() or None
+        dataset_name: str | None = None
+        dataset_id = payload.get("dataset_id")
+        if dataset_id:
+            from superset.connectors.sqla.models import SqlaTable
+            from superset.extensions import db
+
+            dataset = (
+                db.session.query(SqlaTable).filter_by(id=int(dataset_id)).first()
+            )
+            if dataset is not None:
+                _, resolved_table = _resolve_dataset_table_ref(dataset)
+                dataset_name = resolved_table or dataset.table_name
+                scoped = [
+                    tbl
+                    for tbl in mart_schema_context
+                    if tbl.get("table") == resolved_table
+                ]
+                if scoped:
+                    mart_schema_context = scoped
+
         question = str(payload.get("question") or "").strip()
+        if not question and not metric:
+            raise AIInsightError("A question (or a metric) is required", 400)
         if not question:
-            raise AIInsightError("A question is required", 400)
+            # Synthesize a question from the guided inputs.
+            question = (
+                f"Show {metric}" + (f" by {period}" if period else "")
+            ).strip()
 
-        response = self.registry.generate(
-            messages=_build_sql_messages(
-                question=question,
-                database=exec_database,
-                mart_schema_context=mart_schema_context,
-                current_sql=payload.get("current_sql"),
-                conversation=payload.get("conversation") or [],
-            ),
-            provider_id=payload.get("provider_id"),
-            model=payload.get("model"),
+        def _generate(retry_error: str | None = None):
+            resp = self.registry.generate(
+                messages=_build_sql_messages(
+                    question=question,
+                    database=exec_database,
+                    mart_schema_context=mart_schema_context,
+                    current_sql=payload.get("current_sql"),
+                    conversation=payload.get("conversation") or [],
+                    metric=metric,
+                    period=period,
+                    dataset=dataset_name,
+                    retry_error=retry_error,
+                ),
+                provider_id=payload.get("provider_id"),
+                model=payload.get("model"),
+            )
+            try:
+                parsed = _extract_json_object(resp.text)
+            except json.JSONDecodeError as ex:
+                raise AIInsightError(
+                    "The AI provider returned invalid SQL metadata", 502
+                ) from ex
+            return resp, parsed
+
+        response, structured = _generate()
+        suggestions, errors = _collect_valid_sql_suggestions(
+            exec_database, structured, schema
         )
-        try:
-            structured = _extract_json_object(response.text)
-        except json.JSONDecodeError as ex:
-            raise AIInsightError("The AI provider returned invalid SQL metadata", 502) from ex
+        if not suggestions:
+            # One self-correction pass: re-prompt with the validation error.
+            retry_error = errors[0] if errors else "No valid read-only SELECT produced"
+            response, structured = _generate(retry_error=retry_error)
+            suggestions, errors = _collect_valid_sql_suggestions(
+                exec_database, structured, schema
+            )
+        if not suggestions:
+            detail = f": {errors[0]}" if errors else ""
+            raise AIInsightError(
+                f"The AI provider did not generate valid SQL{detail}", 502
+            )
 
-        sql = str(structured.get("sql") or "").strip()
-        if not sql:
-            raise AIInsightError("The AI provider did not generate SQL", 502)
-
-        try:
-            validation = ensure_mart_only_sql(exec_database, sql, schema=schema)
-        except AISQLValidationError as ex:
-            raise AIInsightError(str(ex), 400) from ex
-
+        primary = suggestions[0]
         result_payload: dict[str, Any] = {
             "mode": AI_MODE_SQL,
             "question": question,
             "provider": response.provider_id,
             "model": response.model,
-            "sql": validation["sql"],
-            "tables": validation["tables"],
+            "sql": primary["sql"],
+            "tables": primary["tables"],
             "validated": True,
-            "explanation": structured.get("explanation") or "",
-            "assumptions": structured.get("assumptions") or [],
+            "explanation": primary["explanation"],
+            "assumptions": primary["assumptions"],
+            "suggestions": suggestions,
             "follow_ups": structured.get("follow_ups") or [],
             "database_backend": exec_database.backend,
             "execution_database_id": exec_database.id,
@@ -6765,7 +6915,7 @@ class AIInsightService:
             config.get("allow_sql_execution")
         )
         if should_execute:
-            dataframe = exec_database.get_df(validation["sql"], schema=schema)
+            dataframe = exec_database.get_df(primary["sql"], schema=schema)
             rows = dataframe.to_dict(orient="records")
             result_payload["execution"] = {
                 "row_count": len(rows),
@@ -7320,7 +7470,9 @@ class AIInsightService:
             # Ensure required params fields
             params["datasource"] = f"{chart_ds_id}__table"
             params["viz_type"] = viz
-            params.setdefault("row_limit", 100)
+            # Match the default a manually-created chart gets (sharedControls
+            # row_limit default = 10000) so AI charts don't silently truncate.
+            params.setdefault("row_limit", 10000)
             params.setdefault("color_scheme", "supersetColors")
             params.setdefault("adhoc_filters", [])
             params.setdefault("time_range", "No filter")

@@ -43,6 +43,10 @@ import CodeSyntaxHighlighter, {
   preloadLanguages,
 } from '@superset-ui/core/components/CodeSyntaxHighlighter';
 import { useHistory } from 'react-router-dom';
+import {
+  setSqlWorkspaceHandoff,
+  datasetIdFromKey,
+} from 'src/pages/DHIS2SqlWorkspace/handoff';
 import { ExplorePageState } from 'src/explore/types';
 
 export interface ViewQueryProps {
@@ -128,18 +132,18 @@ const ViewQuery: FC<ViewQueryProps> = props => {
 
   const navToSQLLab = useCallback(
     (domEvent: KeyboardEvent<HTMLElement> | MouseEvent<HTMLElement>) => {
-      const requestedQuery = {
-        datasourceKey: datasource,
+      // Open the DHIS2 SQL Workspace (which runs against the serving DB) with
+      // this dataset + SQL handed off, instead of stock SQL Lab.
+      setSqlWorkspaceHandoff({
+        datasetId: datasetIdFromKey(datasource),
         sql: currentSQL,
-      };
+      });
+      const workspaceUrl = '/superset/dhis2/sql-workspace/';
       if (domEvent.metaKey || domEvent.ctrlKey) {
         domEvent.preventDefault();
-        window.open(
-          `/sqllab?datasourceKey=${datasource}&sql=${encodeURIComponent(currentSQL)}`,
-          '_blank',
-        );
+        window.open(workspaceUrl, '_blank');
       } else {
-        history.push({ pathname: '/sqllab', state: { requestedQuery } });
+        history.push(workspaceUrl);
       }
     },
     [history, datasource, currentSQL],

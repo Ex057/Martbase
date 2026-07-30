@@ -94,6 +94,12 @@ class DHIS2AdminView(BaseView):
         """Redirect to the React download datasets page."""
         return redirect(self._frontend_path("/superset/dhis2/downloads/"))
 
+    @expose("/sql-workspace/")
+    @has_access
+    def sql_workspace(self) -> object:
+        """Redirect to the React DHIS2 SQL Workspace page."""
+        return redirect(self._frontend_path("/superset/dhis2/sql-workspace/"))
+
 dhis2_frontend_blueprint = Blueprint(
     "dhis2_frontend",
     __name__,
@@ -150,6 +156,30 @@ def dhis2_local_data() -> FlaskResponse:
 @dhis2_frontend_blueprint.route("/downloads/")
 def dhis2_downloads() -> FlaskResponse:
     return _render_authenticated_shell()
+
+
+@dhis2_frontend_blueprint.route("/sql-workspace/")
+def dhis2_sql_workspace() -> FlaskResponse:
+    """Render the DHIS2 SQL Workspace shell.
+
+    This page replaces stock SQL Lab, so anyone who can use SQL Lab
+    (``can_sqllab`` on ``Superset``) may open it, in addition to DHIS2 admins
+    (``can_list`` on ``DHIS2AdminView``).
+    """
+    user = getattr(g, "user", None)
+    if user is None or getattr(user, "is_anonymous", True):
+        next_target = quote(request.full_path.rstrip("?"))
+        return redirect(f"/login/?next={next_target}")
+    if not (
+        security_manager.can_access("can_sqllab", "Superset")
+        or security_manager.can_access("can_list", "DHIS2AdminView")
+    ):
+        abort(403)
+    from superset.extensions import appbuilder
+
+    view = BaseSupersetView()
+    view.appbuilder = appbuilder
+    return view.render_app_template()
 
 
 local_staging_blueprint = Blueprint(

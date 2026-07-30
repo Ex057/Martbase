@@ -23,6 +23,7 @@ import {
   ComponentProps,
   LazyExoticComponent,
 } from 'react';
+import { Redirect } from 'react-router-dom';
 import { isUserAdmin } from 'src/dashboard/util/permissionUtils';
 import getBootstrapData from 'src/utils/getBootstrapData';
 
@@ -150,6 +151,20 @@ const LocalStagingSettings = lazy(
     ),
 );
 
+const DHIS2SqlWorkspace = lazy(
+  () =>
+    import(
+      /* webpackChunkName: "DHIS2SqlWorkspace" */ 'src/pages/DHIS2SqlWorkspace'
+    ),
+);
+
+// Stock SQL Lab is replaced by the DHIS2 SQL Workspace: the DHIS2 source
+// connection can't run SQL (only the analytics API), so any /sqllab/ visit is
+// redirected to the serving-aware workspace.
+const SqlLabRedirect = () => (
+  <Redirect to="/superset/dhis2/sql-workspace/" />
+);
+
 const AIManagement = lazy(
   () => import(/* webpackChunkName: "AIManagement" */ 'src/pages/AIManagement'),
 );
@@ -170,9 +185,8 @@ const SavedQueryList = lazy(
     import(/* webpackChunkName: "SavedQueryList" */ 'src/pages/SavedQueryList'),
 );
 
-const SqlLab = lazy(
-  () => import(/* webpackChunkName: "SqlLab" */ 'src/pages/SqlLab'),
-);
+// Stock SQL Lab page is no longer routed (replaced by DHIS2 SQL Workspace via
+// SqlLabRedirect below), so its lazy import has been removed.
 
 const AllEntities = lazy(
   () => import(/* webpackChunkName: "AllEntities" */ 'src/pages/AllEntities'),
@@ -388,6 +402,10 @@ export const routes: Routes = [
     path: '/superset/local-staging/',
     Component: LocalStagingSettings,
   },
+  {
+    path: '/superset/dhis2/sql-workspace/',
+    Component: DHIS2SqlWorkspace,
+  },
   ...(isFeatureEnabled(FeatureFlag.AiInsights)
     ? [
         { path: '/superset/ai-management/', Component: AIManagement },
@@ -400,7 +418,7 @@ export const routes: Routes = [
   },
   {
     path: '/sqllab/',
-    Component: SqlLab,
+    Component: SqlLabRedirect,
   },
   { path: '/user_info/', Component: UserInfo },
   {

@@ -43,7 +43,10 @@ import { allowCrossDomain as domainShardingEnabled } from 'src/utils/hostNamesCo
 import { updateDataMask } from 'src/dataMask/actions';
 import { waitForAsyncData } from 'src/middleware/asyncEvent';
 import { ensureAppRoot } from 'src/utils/pathUtils';
-import { safeStringify } from 'src/utils/safeStringify';
+import {
+  setSqlWorkspaceHandoff,
+  datasetIdFromKey,
+} from 'src/pages/DHIS2SqlWorkspace/handoff';
 import { extendedDayjs } from '@superset-ui/core/utils/dates';
 // DHIS2 data caching for faster chart loading
 import { getDHIS2DataCache } from 'src/dhis2/dataCache';
@@ -763,22 +766,17 @@ export function redirectSQLLab(formData, history) {
       resultType: 'query',
     })
       .then(({ json }) => {
-        const redirectUrl = '/sqllab/';
-        const payload = {
-          datasourceKey: formData.datasource,
+        // Stock SQL Lab can't run DHIS2 serving SQL — hand the dataset + compiled
+        // query to the DHIS2 SQL Workspace instead.
+        const workspaceUrl = '/superset/dhis2/sql-workspace/';
+        setSqlWorkspaceHandoff({
+          datasetId: datasetIdFromKey(formData.datasource),
           sql: json.result[0].query,
-        };
+        });
         if (history) {
-          history.push({
-            pathname: redirectUrl,
-            state: {
-              requestedQuery: payload,
-            },
-          });
+          history.push(workspaceUrl);
         } else {
-          SupersetClient.postForm(ensureAppRoot(redirectUrl), {
-            form_data: safeStringify(payload),
-          });
+          window.open(ensureAppRoot(workspaceUrl), '_blank');
         }
       })
       .catch(() =>

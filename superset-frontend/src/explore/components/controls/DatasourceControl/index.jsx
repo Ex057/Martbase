@@ -23,7 +23,6 @@ import PropTypes from 'prop-types';
 import {
   css,
   DatasourceType,
-  SupersetClient,
   styled,
   t,
   withTheme,
@@ -54,8 +53,8 @@ import { ErrorMessageWithStackTrace } from 'src/components/ErrorMessage/ErrorMes
 import ViewQueryModalFooter from 'src/explore/components/controls/ViewQueryModalFooter';
 import ViewQuery from 'src/explore/components/controls/ViewQuery';
 import { SaveDatasetModal } from 'src/SqlLab/components/SaveDatasetModal';
-import { safeStringify } from 'src/utils/safeStringify';
 import { Link } from 'react-router-dom';
+import { setSqlWorkspaceHandoff } from 'src/pages/DHIS2SqlWorkspace/handoff';
 
 const propTypes = {
   actions: PropTypes.object.isRequired,
@@ -255,16 +254,8 @@ class DatasourceControl extends PureComponent {
         break;
 
       case VIEW_IN_SQL_LAB:
-        {
-          const { datasource } = this.props;
-          const payload = {
-            datasourceKey: `${datasource.id}__${datasource.type}`,
-            sql: datasource.sql,
-          };
-          SupersetClient.postForm('/sqllab/', {
-            form_data: safeStringify(payload),
-          });
-        }
+        // Navigation + handoff are handled by the <Link> on the menu item
+        // (it points at the DHIS2 SQL Workspace). Nothing to do here.
         break;
 
       case SAVE_AS_DATASET:
@@ -312,10 +303,13 @@ class DatasourceControl extends PureComponent {
     const canAccessSqlLab = userHasPermission(user, 'SQL Lab', 'menu_access');
 
     const editText = t('Edit dataset');
-    const requestedQuery = {
-      datasourceKey: `${datasource.id}__${datasource.type}`,
-      sql: datasource.sql,
-    };
+    // "View in SQL Lab" now opens the DHIS2 SQL Workspace with this dataset
+    // pre-selected + its SQL loaded (handed off via localStorage before nav).
+    const openWorkspaceHandoff = () =>
+      setSqlWorkspaceHandoff({
+        datasetId: datasource.id,
+        sql: datasource.sql,
+      });
 
     const defaultDatasourceMenuItems = [];
     if (this.props.isEditable && !isMissingDatasource) {
@@ -347,11 +341,11 @@ class DatasourceControl extends PureComponent {
         key: VIEW_IN_SQL_LAB,
         label: (
           <Link
-            to={{
-              pathname: '/sqllab',
-              state: { requestedQuery },
+            to="/superset/dhis2/sql-workspace/"
+            onClick={evt => {
+              preventRouterLinkWhileMetaClicked(evt);
+              openWorkspaceHandoff();
             }}
-            onClick={preventRouterLinkWhileMetaClicked}
           >
             {t('View in SQL Lab')}
           </Link>
@@ -399,11 +393,11 @@ class DatasourceControl extends PureComponent {
         key: VIEW_IN_SQL_LAB,
         label: (
           <Link
-            to={{
-              pathname: '/sqllab',
-              state: { requestedQuery },
+            to="/superset/dhis2/sql-workspace/"
+            onClick={evt => {
+              preventRouterLinkWhileMetaClicked(evt);
+              openWorkspaceHandoff();
             }}
-            onClick={preventRouterLinkWhileMetaClicked}
           >
             {t('View in SQL Lab')}
           </Link>

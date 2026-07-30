@@ -68,6 +68,11 @@ class AIRequestSchema(Schema):
     schema = fields.String(load_default=None, allow_none=True)
     database_id = fields.Integer(load_default=None, allow_none=True)
     execute = fields.Boolean(load_default=False)
+    # Guided inputs for the SQL assistant: the specific dataset, metric column,
+    # and period the user selected in the panel.
+    dataset_id = fields.Integer(load_default=None, allow_none=True)
+    metric = fields.String(load_default=None, allow_none=True)
+    period = fields.String(load_default=None, allow_none=True)
 
 
 class AIChartRestApi(BaseSupersetApi):
@@ -350,6 +355,7 @@ class AISqlRestApi(BaseSupersetApi):
     def list_mart_tables_endpoint(self) -> Response:
         """List all MART tables available for SQL queries."""
         from superset.ai_insights.sql import (
+            _column_dhis2_markers,
             _resolve_dataset_table_ref,
             list_all_mart_tables,
         )
@@ -365,20 +371,33 @@ class AISqlRestApi(BaseSupersetApi):
         result = []
         for table in tables[:50]:
             resolved_schema, resolved_table = _resolve_dataset_table_ref(table)
-            cols = [
-                {
+            cols = []
+            period_column = None
+            for col in (table.columns or [])[:60]:
+                markers = _column_dhis2_markers(col)
+                col_entry = {
                     "name": col.column_name,
                     "type": str(col.type or ""),
                 }
-                for col in (table.columns or [])[:30]
-            ]
+                if markers:
+                    col_entry["dhis2"] = markers
+                    if markers.get("period") and not period_column:
+                        period_column = col.column_name
+                cols.append(col_entry)
+            # Serving database id — where this dataset's staged table actually
+            # lives (DuckDB/ClickHouse). Read from extra without side effects so
+            # the workspace can save/overwrite against the serving DB.
+            extra = getattr(table, "extra_dict", None) or {}
+            serving_database_id = extra.get("dhis2_serving_database_id")
             result.append({
                 "dataset_id": table.id,
                 "table_name": resolved_table,
                 "dataset_name": table.table_name,
                 "schema": resolved_schema,
+                "serving_database_id": serving_database_id,
                 "description": (table.description or "")[:200],
                 "columns": cols,
+                "period_column": period_column,
                 "column_count": len(table.columns or []),
             })
         return self.response(200, result=result)

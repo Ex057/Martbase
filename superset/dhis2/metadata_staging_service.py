@@ -524,6 +524,14 @@ def get_metadata_refresh_progress(database_id: int) -> dict[str, Any] | None:
 
 def _build_database_context(database: Database) -> MetadataContext:
     uri = make_url(database.sqlalchemy_uri_decrypted)
+    # Guard against the hostless DHIS2 container connection ("dhis2://"), which
+    # would otherwise build "https://None/api" and fail with an opaque DNS error.
+    if not uri.host:
+        raise ValueError(
+            f"DHIS2 database '{database.database_name}' has no host configured. "
+            "Configure a host on this DHIS2 connection (or select a fully-configured "
+            "DHIS2 connection) before staging metadata."
+        )
     api_path = uri.database or "/api"
     if not api_path.startswith("/"):
         api_path = f"/{api_path}"

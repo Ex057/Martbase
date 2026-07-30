@@ -45,6 +45,24 @@ def sanitize_dhis2_column_name(name: str) -> str:
     return name
 
 
+def looks_like_dhis2_data_element(name: str) -> bool:
+    """
+    Heuristic: DHIS2 data-element (metric) columns are named
+    ``<human_readable_name>_<uid-hash>`` where the trailing hash is a short
+    mixed alphanumeric token (e.g. ``mal_..._sprayed_d87f92``). Dimension
+    columns (org unit, period) have clean names without such a suffix.
+
+    Used to route data elements to the ``dx`` analytics dimension and, crucially,
+    to stop a data-element name that merely *contains* a period substring (e.g.
+    "5_years") from being misclassified as the ``pe`` (period) dimension.
+    """
+    match = re.search(r'_([A-Za-z0-9]{6,11})$', name)
+    if not match:
+        return False
+    suffix = match.group(1)
+    return any(c.isdigit() for c in suffix) and any(c.isalpha() for c in suffix)
+
+
 class DHIS2MappingDSL:
     """
     Simple JSONPath-like mapping DSL interpreter
@@ -1676,6 +1694,20 @@ class DHIS2Connection:
         """
         logger.debug(f"DHIS2Connection init - host: {host}, database: {database}, kwargs: {kwargs}")
 
+        # A hostless connection almost always means the chart/dataset is bound
+        # to the DHIS2 *container* connection (the bare "dhis2://" shell) rather
+        # than a fully-configured DHIS2 connection. Without this guard the base
+        # URL becomes "https://None/api", surfacing as the cryptic
+        # "host='none' ... NameResolutionError". Fail fast with an actionable message.
+        if not host:
+            raise DHIS2DBAPI.OperationalError(
+                "DHIS2 connection has no host configured. This usually means the "
+                "chart or dataset is bound to the DHIS2 container connection "
+                "instead of a fully-configured DHIS2 connection. Rebind it to a "
+                "configured DHIS2 connection (with a host), or use the staged "
+                "serving dataset."
+            )
+
         self.host = host
         self.username = username or ""
         self.password = password or ""
@@ -2589,9 +2621,13 @@ class DHIS2Cursor:
             if '(' in raw_col:
                 continue
             col = raw_col
-            # Handle aliases: "column AS alias" -> use "alias"
-            if ' AS ' in col.upper():
-                col = col.split()[-1]
+            # Handle aliases: "column" AS "alias" -> use the REAL column
+            # ("column"), NOT the alias. Superset appends a random 6-hex suffix
+            # to aliases (e.g. period -> period_a0acfa); using the alias would
+            # make that suffix look like a DHIS2 data-element UID and misroute
+            # the dimension (e.g. dx:period_a0acfa instead of pe:period).
+            if re.search(r'\s+AS\s+', col, flags=re.IGNORECASE):
+                col = re.split(r'\s+AS\s+', col, flags=re.IGNORECASE)[0]
             # Clean quotes if any
             col = col.strip('"\'`')
             if col and col != '*':
@@ -2689,25 +2725,52 @@ class DHIS2Cursor:
             col_sanitized = sanitize_dhis2_column_name(col.lower())
             col_lower = col.lower()
             original_col = col
-            
+
+            # FIRST: a data-element (metric) column carries a trailing UID hash.
+            # Route it to the dx (data) dimension. Doing this before any period
+            # matching is what prevents a name like
+            # "mal_targeted_children_5_years_in_hh_sprayed_d87f92" (contains
+            # "years") from being misclassified as pe: (the reported bug).
+            if looks_like_dhis2_data_element(original_col):
+                dimension_specs.append(f"dx:{original_col}")
+                logger.debug(f"[DHIS2] Mapped data-element column '{col}' to 'dx'")
+                continue
+
             # Skip if it's a known metric/value column
             is_metric = False
             for metric_pat in metric_patterns:
                 if metric_pat in col_lower:
                     is_metric = True
                     break
-            
+
             if is_metric:
                 logger.debug(f"[DHIS2] Skipping metric/value column: {col}")
                 continue
-            
-            # Try to match to a DHIS2 dimension
+
+            # Try to match to a DHIS2 dimension.
+            # Match on WHOLE underscore-delimited tokens (not raw substrings) so
+            # short keywords like "pe"/"year"/"month" only match a real period
+            # column ("period", "year") and never a token like "years".
+            col_tokens = set(col_sanitized.split('_'))
+            col_joined = col_sanitized.replace('_', '')
             matched = False
             for (pattern_key, dimension_prefix), patterns in dimension_patterns.items():
                 for pattern in patterns:
                     pattern_sanitized = sanitize_dhis2_column_name(pattern.lower())
-                    if pattern_sanitized in col_sanitized or col_sanitized.endswith(pattern_sanitized):
-                        # Format the dimension spec
+                    if not pattern_sanitized:
+                        continue
+                    if '_' in pattern_sanitized:
+                        # Multi-word pattern (e.g. "organisation_unit"): compare
+                        # the de-underscored forms.
+                        pattern_joined = pattern_sanitized.replace('_', '')
+                        hit = (
+                            col_joined == pattern_joined
+                            or col_joined.endswith(pattern_joined)
+                        )
+                    else:
+                        # Single-word pattern: require an exact token match.
+                        hit = pattern_sanitized in col_tokens
+                    if hit:
                         # Use the original column name as the value
                         dimension_specs.append(f"{dimension_prefix}:{original_col}")
                         logger.debug(f"[DHIS2] Mapped column '{col}' to dimension '{dimension_prefix}'")
@@ -2715,12 +2778,12 @@ class DHIS2Cursor:
                         break
                 if matched:
                     break
-            
+
             if not matched:
                 # If no pattern matched, still try to treat as dimension
                 # (fallback for unknown dimension types)
                 logger.debug(f"[DHIS2] Column '{col}' didn't match known patterns, will try as generic dimension")
-        
+
         return dimension_specs
 
     def _extract_query_params(self, query: str) -> dict[str, str]:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -36,6 +37,36 @@ def _resolve_dataset_table_ref(dataset: SqlaTable) -> tuple[str | None, str]:
     ):
         schema_name, table_name = table_ref
     return schema_name, table_name
+
+
+def _column_dhis2_markers(column: Any) -> dict[str, Any]:
+    """Extract the DHIS2 semantic markers from a column's ``extra`` blob.
+
+    These tags (``dhis2_is_period``, ``dhis2_is_indicator``, ``dhis2_default_agg``,
+    ``dhis2_is_ou_hierarchy``) tell the AI which column is the period, which are
+    pre-computed indicators vs raw data elements (aggregation), and the org-unit
+    hierarchy — the same signals the chart generator already uses.
+    """
+    extra = getattr(column, "extra", None) or {}
+    if isinstance(extra, str):
+        try:
+            extra = json.loads(extra)
+        except (json.JSONDecodeError, TypeError):
+            extra = {}
+    if not isinstance(extra, dict):
+        return {}
+    markers: dict[str, Any] = {}
+    if extra.get("dhis2_is_period"):
+        markers["period"] = True
+    if extra.get("dhis2_is_indicator"):
+        markers["indicator"] = True
+    if extra.get("dhis2_default_agg"):
+        markers["agg"] = extra["dhis2_default_agg"]
+    if extra.get("dhis2_is_ou_hierarchy"):
+        markers["ou_hierarchy"] = True
+        if extra.get("dhis2_ou_level"):
+            markers["ou_level"] = extra["dhis2_ou_level"]
+    return markers
 
 
 def is_mart_table(dataset: SqlaTable) -> bool:
@@ -146,12 +177,18 @@ def build_mart_schema_context(
     for table in tables[:max_tables]:
         resolved_schema, resolved_table = _resolve_dataset_table_ref(table)
         cols = []
+        period_column: str | None = None
         for column in (table.columns or [])[:max_columns]:
             col_entry: dict[str, Any] = {"name": column.column_name}
             if column.type:
                 col_entry["type"] = column.type
             if column.description:
                 col_entry["description"] = column.description[:100]
+            markers = _column_dhis2_markers(column)
+            if markers:
+                col_entry["dhis2"] = markers
+                if markers.get("period") and not period_column:
+                    period_column = column.column_name
             cols.append(col_entry)
 
         entry: dict[str, Any] = {
@@ -159,6 +196,8 @@ def build_mart_schema_context(
             "schema": resolved_schema,
             "columns": cols,
         }
+        if period_column:
+            entry["period_column"] = period_column
         if table.table_name and table.table_name != resolved_table:
             entry["dataset_name"] = table.table_name
         if table.description:

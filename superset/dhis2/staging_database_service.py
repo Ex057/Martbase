@@ -119,8 +119,15 @@ def get_staging_database(always_create: bool = True):
     is_new = not already_exists
 
     if configured_uri or configured_name:
+        # Auto-expose the *serving* DB (this staging DB — DuckDB or ClickHouse —
+        # is where the staged sv_/ds_ tables live and where chart queries already
+        # route) to SQL Lab, so users can run / edit / overwrite the AI-generated
+        # SQL against staged DHIS2 data. The DHIS2 source connection stays hidden
+        # (it can't execute SQL — it only speaks the DHIS2 API), and DML / CTAS
+        # remain disabled below (read-only). An explicit config value still wins
+        # for operators who want a different policy.
         desired_expose_in_sqllab = bool(
-            current_app.config.get("DHIS2_STAGING_DATABASE_EXPOSE_IN_SQLLAB", False)
+            current_app.config.get("DHIS2_STAGING_DATABASE_EXPOSE_IN_SQLLAB", True)
         )
         changed = False
         extra = _get_database_extra(database)

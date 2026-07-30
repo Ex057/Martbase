@@ -18,9 +18,10 @@
  */
 import { FC } from 'react';
 import { isObject } from 'lodash';
-import { t, SupersetClient } from '@superset-ui/core';
+import { t } from '@superset-ui/core';
 import { Button } from '@superset-ui/core/components';
 import { useHistory } from 'react-router-dom';
+import { setSqlWorkspaceHandoff } from 'src/pages/DHIS2SqlWorkspace/handoff';
 
 interface SimpleDataSource {
   id: string;
@@ -50,19 +51,18 @@ const ViewQueryModalFooter: FC<ViewQueryModalFooterProps> = (props: {
     type: string,
     sql: string,
   ) => {
-    const payload = {
-      datasourceKey: `${id}__${type}`,
+    // Open the DHIS2 SQL Workspace (serving-DB aware) with this dataset + SQL,
+    // instead of stock SQL Lab which can't run DHIS2 serving queries.
+    const datasetId = Number(id);
+    setSqlWorkspaceHandoff({
+      datasetId: Number.isFinite(datasetId) ? datasetId : null,
       sql,
-    };
+    });
+    const workspaceUrl = '/superset/dhis2/sql-workspace/';
     if (openInNewWindow) {
-      SupersetClient.postForm('/sqllab/', payload);
+      window.open(workspaceUrl, '_blank');
     } else {
-      history.push({
-        pathname: '/sqllab',
-        state: {
-          requestedQuery: payload,
-        },
-      });
+      history.push(workspaceUrl);
     }
   };
 

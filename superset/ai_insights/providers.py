@@ -1099,13 +1099,30 @@ class MockProvider(BaseProvider):
         combined = "\n".join(message.get("content", "") for message in messages)
         started_at = perf_counter()
 
-        if "Return a strict JSON object" in combined:
+        if (
+            "MART SQL assistant" in combined
+            or "Return a strict JSON object" in combined
+        ):
             table_name = self._resolve_mock_sql_table(messages)
+            mock_sql = f"SELECT * FROM {table_name} LIMIT 100"
+            mock_explanation = "Reads a MART table with a safe row limit."
+            mock_assumptions = [
+                "The MART metadata supplied to the assistant is authoritative."
+            ]
             text = json.dumps(
                 {
-                    "sql": f"SELECT * FROM {table_name} LIMIT 100",
-                    "explanation": "Reads a MART table with a safe row limit.",
-                    "assumptions": ["The MART metadata supplied to the assistant is authoritative."],
+                    # New multi-suggestion shape consumed by assist_sql...
+                    "suggestions": [
+                        {
+                            "sql": mock_sql,
+                            "explanation": mock_explanation,
+                            "assumptions": mock_assumptions,
+                        }
+                    ],
+                    # ...plus the legacy single-SQL keys for back-compat.
+                    "sql": mock_sql,
+                    "explanation": mock_explanation,
+                    "assumptions": mock_assumptions,
                     "follow_ups": ["Add a WHERE clause for a specific period."],
                 }
             )

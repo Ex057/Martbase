@@ -875,15 +875,10 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
     }
 
     if (isSqlMenu(newItem)) {
-      if (canUseSqlLab) {
-        movedDataChildren.push(
-          toDataChild({
-            name: newItem.name,
-            label: newItem.label,
-            url: newItem.url,
-          }),
-        );
-      }
+      // Discard the backend-provided SQL/SQL Lab menu category. Its URL is the
+      // FAB category route (not the SPA route), which renders as a dead <a href>
+      // — this is the broken "SQL" item. The single working "SQL Lab" entry is
+      // added from the hardcoded `sqlLabChild` below (pointing at the workspace).
       return;
     }
 
@@ -1005,7 +1000,9 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
   const sqlLabChild: MenuObjectChildProps = {
     name: 'SQL Lab',
     label: 'SQL Lab',
-    url: '/sqllab/',
+    // Points at the DHIS2 SQL Workspace, which replaces stock SQL Lab (the DHIS2
+    // source connection can't run SQL). /sqllab/ also redirects here.
+    url: '/superset/dhis2/sql-workspace/',
   };
 
   // Add Database Connections menu item

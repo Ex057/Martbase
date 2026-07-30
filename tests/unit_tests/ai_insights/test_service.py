@@ -117,11 +117,16 @@ def test_assist_sql_generates_validated_sql_and_optional_execution(
     database = SimpleNamespace(
         id=11,
         backend="postgresql",
+        database_name="staging",
         db_engine_spec=SimpleNamespace(engine="postgresql"),
         get_df=mocker.Mock(return_value=dataframe),
     )
 
     mocker.patch("superset.ai_insights.service.user_can_access_ai_mode", return_value=True)
+    mocker.patch(
+        "superset.ai_insights.service.resolve_mart_execution_database",
+        return_value=database,
+    )
     mocker.patch("superset.ai_insights.service.DatabaseDAO.find_by_id", return_value=database)
     mocker.patch("superset.ai_insights.service.security_manager.raise_for_access")
     mocker.patch(
@@ -159,6 +164,9 @@ def test_assist_sql_generates_validated_sql_and_optional_execution(
     assert result["validated"] is True
     assert result["sql"] == "SELECT * FROM public.admissions_mart LIMIT 100"
     assert result["tables"] == ["public.admissions_mart"]
+    # New: multiple pickable suggestions, each validated.
+    assert len(result["suggestions"]) >= 1
+    assert result["suggestions"][0]["sql"] == "SELECT * FROM public.admissions_mart LIMIT 100"
     assert result["execution"] == {
         "row_count": 2,
         "sample_rows": [

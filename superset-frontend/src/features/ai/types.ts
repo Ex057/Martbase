@@ -27,6 +27,13 @@ export type AICapabilities = {
   max_context_rows?: number;
 };
 
+export type AISqlSuggestion = {
+  sql: string;
+  explanation?: string;
+  assumptions?: string[];
+  tables?: string[];
+};
+
 export type AIInsightResult = {
   mode: AIInsightMode;
   question: string;
@@ -39,6 +46,8 @@ export type AIInsightResult = {
   validated?: boolean;
   explanation?: string;
   assumptions?: string[];
+  /** Multiple pickable SQL candidates (SQL mode). */
+  suggestions?: AISqlSuggestion[];
   follow_ups?: string[];
   execution?: {
     row_count: number;

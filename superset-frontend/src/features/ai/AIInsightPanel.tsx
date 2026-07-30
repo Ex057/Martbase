@@ -28,6 +28,7 @@ import {
   AIConversationSummary,
   AIInsightMode,
   AIInsightResult,
+  AISqlSuggestion,
   ChatMessage,
 } from './types';
 
@@ -3106,18 +3107,40 @@ export default function AIInsightPanel({
   }, [mode, dashboardAnalysisMode, dashboardCharts, dashboardChartImages]);
 
   // MART table browser (SQL mode)
+  type MartColumnInfo = {
+    name: string;
+    type: string;
+    dhis2?: {
+      period?: boolean;
+      indicator?: boolean;
+      agg?: string;
+      ou_hierarchy?: boolean;
+      ou_level?: number;
+    };
+  };
   type MartTableInfo = {
     dataset_id: number;
     table_name: string;
     dataset_name: string;
     schema?: string;
     description?: string;
-    columns: { name: string; type: string }[];
+    columns: MartColumnInfo[];
+    period_column?: string | null;
     column_count: number;
   };
   const [martTables, setMartTables] = useState<MartTableInfo[]>([]);
   const [martTablesLoaded, setMartTablesLoaded] = useState(false);
   const [expandedMartTable, setExpandedMartTable] = useState<string | null>(null);
+
+  // SQL guided inputs + multiple suggestions (SQL mode)
+  const [sqlDatasetId, setSqlDatasetId] = useState<number | null>(null);
+  const [sqlMetric, setSqlMetric] = useState<string>('');
+  const [sqlPeriod, setSqlPeriod] = useState<string>('');
+  const [sqlSuggestions, setSqlSuggestions] = useState<AISqlSuggestion[]>([]);
+  const selectedSqlDataset = useMemo(
+    () => martTables.find(tbl => tbl.dataset_id === sqlDatasetId) || null,
+    [martTables, sqlDatasetId],
+  );
 
   // Load MART tables for SQL mode
   useEffect(() => {
@@ -3296,15 +3319,31 @@ export default function AIInsightPanel({
             databaseId,
             schema,
             execute: false,
+            datasetId: sqlDatasetId,
+            metric: sqlMetric || null,
+            period: sqlPeriod || null,
           });
           if (!mountedRef.current) return;
           setLastResult(response);
-          if (response.sql) {
-            setLastSql(response.sql);
-            // Auto-apply generated SQL to the editor
-            if (onApplySql) {
-              onApplySql(response.sql);
-            }
+          // Prefer the multi-suggestion shape; fall back to a single sql.
+          const suggestions: AISqlSuggestion[] =
+            response.suggestions && response.suggestions.length
+              ? response.suggestions
+              : response.sql
+                ? [
+                    {
+                      sql: response.sql,
+                      explanation: response.explanation,
+                      assumptions: response.assumptions,
+                      tables: response.tables,
+                    },
+                  ]
+                : [];
+          setSqlSuggestions(suggestions);
+          // Show the first suggestion in the editor, but let the user pick
+          // another from the cards below (no silent overwrite of their choice).
+          if (suggestions.length) {
+            setLastSql(suggestions[0].sql);
           }
 
           const responseText =
@@ -3349,6 +3388,9 @@ export default function AIInsightPanel({
       currentSql,
       databaseId,
       schema,
+      sqlDatasetId,
+      sqlMetric,
+      sqlPeriod,
       ensureConversation,
       addDangerToast,
     ],
@@ -3387,6 +3429,7 @@ export default function AIInsightPanel({
     setConversationHistory([]);
     setLastSql(null);
     setLastResult(null);
+    setSqlSuggestions([]);
     setStreamingText('');
   }, []);
 
@@ -3922,40 +3965,88 @@ export default function AIInsightPanel({
               </TypingIndicator>
             )}
 
-            {/* SQL-specific actions */}
-            {lastSql && mode === 'sql' && (
+            {/* SQL suggestions — pick one to apply/run (like the AI chart creator) */}
+            {mode === 'sql' && sqlSuggestions.length > 0 && (
               <div>
-                <SqlBlock>{lastSql}</SqlBlock>
-                {onApplySql && (
-                  <div
-                    css={css`
-                      font-size: 11px;
-                      color: #16A34A;
-                      font-weight: 600;
-                      margin: 4px 0 6px;
-                    `}
-                  >
-                    {t('SQL applied to editor automatically')}
-                  </div>
-                )}
-                <ActionRow>
-                  {onRunSql && (
-                    <Button
-                      buttonStyle="primary"
-                      onClick={() => onRunSql(lastSql!)}
+                <div
+                  css={css`
+                    font-size: 11px;
+                    font-weight: 700;
+                    color: #6b7280;
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                    margin: 4px 0 8px;
+                  `}
+                >
+                  {sqlSuggestions.length > 1
+                    ? t('%s SQL suggestions — pick one', sqlSuggestions.length)
+                    : t('Suggested SQL')}
+                </div>
+                {sqlSuggestions.map((sug, idx) => {
+                  const isActive = sug.sql === lastSql;
+                  return (
+                    <div
+                      key={`${idx}-${sug.sql.slice(0, 24)}`}
+                      css={css`
+                        border: 1px solid ${isActive ? '#2563EB' : '#E5E7EB'};
+                        border-radius: 8px;
+                        padding: 8px;
+                        margin-bottom: 8px;
+                        background: ${isActive ? '#EFF6FF' : '#FFFFFF'};
+                      `}
                     >
-                      {t('Run Query')}
-                    </Button>
-                  )}
-                  {onApplySql && (
-                    <Button
-                      buttonStyle="secondary"
-                      onClick={() => onApplySql(lastSql!)}
-                    >
-                      {t('Re-apply to editor')}
-                    </Button>
-                  )}
-                </ActionRow>
+                      {sqlSuggestions.length > 1 && (
+                        <div
+                          css={css`
+                            font-size: 11px;
+                            font-weight: 600;
+                            color: #374151;
+                            margin-bottom: 4px;
+                          `}
+                        >
+                          {t('Option %s', idx + 1)}
+                        </div>
+                      )}
+                      {sug.explanation && (
+                        <div
+                          css={css`
+                            font-size: 12px;
+                            color: #4b5563;
+                            margin-bottom: 6px;
+                          `}
+                        >
+                          {sug.explanation}
+                        </div>
+                      )}
+                      <SqlBlock>{sug.sql}</SqlBlock>
+                      <ActionRow>
+                        {onRunSql && (
+                          <Button
+                            buttonStyle="primary"
+                            onClick={() => {
+                              setLastSql(sug.sql);
+                              onApplySql?.(sug.sql);
+                              onRunSql(sug.sql);
+                            }}
+                          >
+                            {t('Run')}
+                          </Button>
+                        )}
+                        {onApplySql && (
+                          <Button
+                            buttonStyle="secondary"
+                            onClick={() => {
+                              setLastSql(sug.sql);
+                              onApplySql(sug.sql);
+                            }}
+                          >
+                            {t('Apply to editor')}
+                          </Button>
+                        )}
+                      </ActionRow>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -3984,6 +4075,73 @@ export default function AIInsightPanel({
                 PPTX
               </ExportButton>
             </ExportBar>
+          )}
+
+          {mode === 'sql' && martTables.length > 0 && (
+            <div
+              css={css`
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                padding: 8px 4px 0;
+                align-items: center;
+                & > select,
+                & > input {
+                  flex: 1 1 140px;
+                  min-width: 0;
+                  height: 30px;
+                  padding: 0 8px;
+                  font-size: 12px;
+                  border: 1px solid #d1d5db;
+                  border-radius: 6px;
+                  background: #ffffff;
+                  color: #111827;
+                }
+              `}
+            >
+              <select
+                aria-label={t('Dataset')}
+                value={sqlDatasetId ?? ''}
+                onChange={e => {
+                  const id = e.target.value ? Number(e.target.value) : null;
+                  setSqlDatasetId(id);
+                  setSqlMetric('');
+                }}
+              >
+                <option value="">{t('Dataset (optional)')}</option>
+                {martTables.map(tbl => (
+                  <option key={tbl.dataset_id} value={tbl.dataset_id}>
+                    {tbl.dataset_name || tbl.table_name}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label={t('Metric')}
+                value={sqlMetric}
+                onChange={e => setSqlMetric(e.target.value)}
+                disabled={!selectedSqlDataset}
+              >
+                <option value="">{t('Metric (optional)')}</option>
+                {(selectedSqlDataset?.columns || [])
+                  .filter(c => !c.dhis2?.period)
+                  .map(c => (
+                    <option key={c.name} value={c.name}>
+                      {c.name}
+                      {c.dhis2?.indicator ? ' (indicator)' : ''}
+                    </option>
+                  ))}
+              </select>
+              <input
+                aria-label={t('Period')}
+                value={sqlPeriod}
+                onChange={e => setSqlPeriod(e.target.value)}
+                placeholder={
+                  selectedSqlDataset?.period_column
+                    ? t('Period e.g. 202501 (optional)')
+                    : t('Period (optional)')
+                }
+              />
+            </div>
           )}
 
           <InputArea>
