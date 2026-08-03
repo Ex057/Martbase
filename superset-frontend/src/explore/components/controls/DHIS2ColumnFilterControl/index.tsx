@@ -96,6 +96,7 @@ interface Props {
   onChange: (value: DHIS2ColumnFilter[]) => void;
   /** Datasource object injected via mapStateToProps. */
   datasource?: {
+    id?: number;
     columns?: DatasourceColumn[];
     extra?: string | Record<string, unknown>;
   };
@@ -224,6 +225,8 @@ const EmptyHint = styled.div`
 interface FilterEntryProps {
   filter: DHIS2ColumnFilter;
   stagedDatasetId: number | null;
+  /** Superset dataset id — fallback source of values when no staged dataset. */
+  datasetId?: number | null;
   /** When true, values are formatted using DHIS2 period labels. */
   isPeriod: boolean;
   onValuesChange: (values: string[], relativeLabel?: string) => void;
@@ -235,6 +238,7 @@ interface FilterEntryProps {
 const FilterEntry: React.FC<FilterEntryProps> = ({
   filter,
   stagedDatasetId,
+  datasetId,
   isPeriod,
   onValuesChange,
   onRemove,
@@ -245,10 +249,14 @@ const FilterEntry: React.FC<FilterEntryProps> = ({
   const fetchedRef = useRef(false);
 
   useEffect(() => {
-    if (!filter.column || !stagedDatasetId) return;
+    if (!filter.column) return;
     if (fetchedRef.current) return;
+    // Need either a staged dataset (preferred) or a dataset id (fallback).
+    if (!stagedDatasetId && !datasetId) return;
 
-    const key = colCacheKey(stagedDatasetId, filter.column);
+    const key = stagedDatasetId
+      ? colCacheKey(stagedDatasetId, filter.column)
+      : `dhis2colvals:ds:${datasetId}:${filter.column}`;
     const cached = readCache(key);
     if (cached) {
       setRawOptions(cached);
@@ -256,11 +264,15 @@ const FilterEntry: React.FC<FilterEntryProps> = ({
       return;
     }
 
+    // Prefer the staged-dataset endpoint; fall back to a dataset-level DISTINCT
+    // query for restored/static datasets that have no staged dataset linked.
+    const endpoint = stagedDatasetId
+      ? `/api/v1/dhis2/staged-datasets/${stagedDatasetId}/column-values?column=${encodeURIComponent(filter.column)}`
+      : `/api/v1/dhis2/staged-datasets/dataset-column-values?dataset_id=${datasetId}&column=${encodeURIComponent(filter.column)}`;
+
     fetchedRef.current = true;
     setLoading(true);
-    SupersetClient.get({
-      endpoint: `/api/v1/dhis2/staged-datasets/${stagedDatasetId}/column-values?column=${encodeURIComponent(filter.column)}`,
-    })
+    SupersetClient.get({ endpoint })
       .then(resp => {
         const vals: string[] = resp.json?.result || [];
         setRawOptions(vals);
@@ -270,7 +282,7 @@ const FilterEntry: React.FC<FilterEntryProps> = ({
         // User can still type values if fetch fails
       })
       .finally(() => setLoading(false));
-  }, [filter.column, stagedDatasetId]);
+  }, [filter.column, stagedDatasetId, datasetId]);
 
   // Build Ant Design Select options. For period columns we offer BOTH relative
   // periods (grouped, e.g. "Last 12 months") and the fixed period codes present
@@ -403,7 +415,7 @@ const FilterEntry: React.FC<FilterEntryProps> = ({
           notFoundContent={
             loading ? null : (
               <span style={{ fontSize: 12, color: '#aaa' }}>
-                {stagedDatasetId
+                {stagedDatasetId || datasetId
                   ? t('No values found')
                   : t('No staged dataset linked')}
               </span>
@@ -496,6 +508,7 @@ const DHIS2ColumnFilterControl: React.FC<Props> = ({
 
   const safeValue: DHIS2ColumnFilter[] = Array.isArray(value) ? value : [];
   const stagedDatasetId = getStagedDatasetId(datasource);
+  const datasetId = datasource?.id ?? null;
   const columns: DatasourceColumn[] = Array.isArray(datasource?.columns)
     ? (datasource.columns as DatasourceColumn[])
     : [];
@@ -549,6 +562,7 @@ const DHIS2ColumnFilterControl: React.FC<Props> = ({
           key={`${filter.column}-${idx}`}
           filter={filter}
           stagedDatasetId={stagedDatasetId}
+          datasetId={datasetId}
           isPeriod={periodColumnSet.has(filter.column)}
           onValuesChange={(values, relativeLabel) =>
             handleValuesChange(idx, values, relativeLabel)

@@ -1258,6 +1258,70 @@ class DHIS2StagedDatasetApi(BaseApi):
                 pass
         return self.response(200, result=values)
 
+    @expose("/dataset-column-values", methods=["GET"])
+    @protect()
+    @safe
+    @permission_name("read")
+    def get_dataset_column_values(self) -> Response:
+        """Distinct values for a column of a DHIS2 serving-backed Superset dataset.
+
+        Fallback for restored/static datasets that have NO linked staged dataset
+        (so ``/<pk>/column-values`` can't be used): resolves the serving table
+        straight from the SqlaTable and runs ``SELECT DISTINCT`` on its serving
+        database. Read-gated, so dashboard viewers can populate the period filter.
+
+        Query params: ``dataset_id`` (SqlaTable id), ``column``.
+        Returns ``{"result": ["v1", "v2", ...]}``.
+        """
+        from superset.connectors.sqla.models import SqlaTable
+        from superset.extensions import db as _db
+
+        dataset_id = request.args.get("dataset_id", type=int)
+        column = request.args.get("column", "").strip()
+        if not dataset_id or not column:
+            return self.response_400(
+                message="'dataset_id' and 'column' query parameters are required"
+            )
+        if not re.match(r"^[A-Za-z0-9_\- ]+$", column):
+            return self.response_400(message="Invalid column name")
+
+        table = _db.session.query(SqlaTable).filter_by(id=dataset_id).first()
+        if table is None:
+            return self.response_404()
+        # Only serve columns the dataset actually declares (defense-in-depth).
+        if column not in {c.column_name for c in (table.columns or [])}:
+            return self.response_400(message="Unknown column for this dataset")
+
+        def _q(ident: str) -> str:
+            return '"' + str(ident).replace('"', '""') + '"'
+
+        # Restored/static serving datasets are physical: schema + table_name ARE
+        # the serving table (e.g. dhis2_serving.sv_11_...).
+        from_ref = (
+            f"{_q(table.schema)}.{_q(table.table_name)}"
+            if table.schema
+            else _q(table.table_name)
+        )
+        try:
+            sql = (
+                f"SELECT DISTINCT {_q(column)} AS v FROM {from_ref} "
+                f"WHERE {_q(column)} IS NOT NULL ORDER BY 1 LIMIT 2000"
+            )
+            dataframe = table.database.get_df(sql)
+            values = [
+                str(v)
+                for v in dataframe["v"].tolist()
+                if v is not None and str(v).strip()
+            ]
+        except Exception:  # pylint: disable=broad-except
+            logger.exception(
+                "dataset-column-values failed dataset_id=%s column=%s",
+                dataset_id,
+                column,
+            )
+            return self.response_500(message="Failed to load column values")
+        return self.response(200, result=values)
+
     @expose("/<int:pk>/filters", methods=["GET", "POST"])
     @protect()
     @safe
