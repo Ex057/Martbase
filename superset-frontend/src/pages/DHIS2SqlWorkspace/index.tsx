@@ -41,7 +41,7 @@ import {
   Button,
   Card,
   Col,
-  Drawer,
+  Dropdown,
   Empty,
   Input,
   List,
@@ -55,11 +55,13 @@ import {
 } from 'antd';
 import {
   DatabaseOutlined,
+  DownloadOutlined,
   PlayCircleOutlined,
   RobotOutlined,
   SaveOutlined,
   TableOutlined,
 } from '@ant-design/icons';
+import { utils as XLSXUtils, write as writeXlsx } from 'xlsx';
 
 import { useToasts } from 'src/components/MessageToasts/withToasts';
 import AIInsightPanel from 'src/features/ai/AIInsightPanel';
@@ -166,6 +168,62 @@ function buildStarterSql(ds: MartDataset): string {
   const cols = ds.columns.slice(0, 8).map(c => `  "${c.name}"`);
   const colList = cols.length ? cols.join(',\n') : '  *';
   return `SELECT\n${colList}\nFROM ${quoteRef(ds.schema, ds.table_name)}\nLIMIT 100`;
+}
+
+// Trigger a browser download for a Blob (anchor-click, no extra deps).
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
+function csvCell(value: unknown): string {
+  if (value == null) return '';
+  const text = String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+// Export the current query result as CSV or Excel from its {columns, rows}.
+function downloadResult(
+  result: QueryResult,
+  format: 'csv' | 'xlsx',
+  baseName: string,
+): void {
+  const { columns, rows } = result;
+  if (format === 'csv') {
+    const header = columns.map(csvCell).join(',');
+    const body = rows
+      .map(row => columns.map(col => csvCell(row[col])).join(','))
+      .join('\n');
+    downloadBlob(
+      new Blob([`${header}\n${body}`], { type: 'text/csv;charset=utf-8;' }),
+      `${baseName}.csv`,
+    );
+    return;
+  }
+  // xlsx via SheetJS.
+  const ordered = rows.map(row => {
+    const o: Record<string, unknown> = {};
+    columns.forEach(col => {
+      o[col] = row[col];
+    });
+    return o;
+  });
+  const worksheet = XLSXUtils.json_to_sheet(ordered, { header: columns });
+  const workbook = XLSXUtils.book_new();
+  XLSXUtils.book_append_sheet(workbook, worksheet, 'Results');
+  const buffer = writeXlsx(workbook, { bookType: 'xlsx', type: 'array' });
+  downloadBlob(
+    new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }),
+    `${baseName}.xlsx`,
+  );
 }
 
 /* ── Component ─────────────────────────────────────────── */
@@ -460,18 +518,46 @@ export default function DHIS2SqlWorkspace() {
 
               {result ? (
                 <div>
-                  <Space wrap style={{ marginBottom: 8 }}>
-                    <Text type="secondary">
-                      {t('%s rows returned', result.rowcount)}
-                    </Text>
-                    {result.total_row_count != null ? (
-                      <Tag color="blue">
-                        {t(
-                          'Total rows: %s',
-                          result.total_row_count.toLocaleString(),
-                        )}
-                      </Tag>
-                    ) : null}
+                  <Space
+                    wrap
+                    style={{
+                      marginBottom: 8,
+                      width: '100%',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <Space wrap>
+                      <Text type="secondary">
+                        {t('%s rows returned', result.rowcount)}
+                      </Text>
+                      {result.total_row_count != null ? (
+                        <Tag color="blue">
+                          {t(
+                            'Total rows: %s',
+                            result.total_row_count.toLocaleString(),
+                          )}
+                        </Tag>
+                      ) : null}
+                    </Space>
+                    <Dropdown
+                      disabled={!result.rows.length}
+                      menu={{
+                        items: [
+                          { key: 'csv', label: t('CSV') },
+                          { key: 'xlsx', label: t('Excel (.xlsx)') },
+                        ],
+                        onClick: ({ key }) =>
+                          downloadResult(
+                            result,
+                            key as 'csv' | 'xlsx',
+                            selected?.table_name || 'query_results',
+                          ),
+                      }}
+                    >
+                      <Button icon={<DownloadOutlined />} size="small">
+                        {t('Download')}
+                      </Button>
+                    </Dropdown>
                   </Space>
                   <Table
                     dataSource={result.rows.map((r, i) => ({ ...r, __key: i }))}
@@ -495,14 +581,15 @@ export default function DHIS2SqlWorkspace() {
         </Col>
       </Row>
 
-      {/* AI SQL assistant */}
-      <Drawer
+      {/* AI SQL assistant — centered, roomy popup */}
+      <Modal
         title={t('AI SQL assistant')}
-        placement="right"
-        width={480}
         open={aiOpen}
-        onClose={() => setAiOpen(false)}
-        styles={{ body: { padding: 0 } }}
+        onCancel={() => setAiOpen(false)}
+        centered
+        width={960}
+        footer={null}
+        styles={{ body: { padding: 0, maxHeight: '78vh', overflowY: 'auto' } }}
         destroyOnClose
       >
         <AIInsightPanel
@@ -519,7 +606,7 @@ export default function DHIS2SqlWorkspace() {
             void runQueryWith(s);
           }}
         />
-      </Drawer>
+      </Modal>
 
       {/* Save as new dataset */}
       <Modal

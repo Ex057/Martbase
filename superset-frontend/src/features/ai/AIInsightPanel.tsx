@@ -10,7 +10,14 @@ import {
   SupersetClient,
   t,
 } from '@superset-ui/core';
-import { Alert, Button, Input, Loading } from '@superset-ui/core/components';
+import {
+  Alert,
+  Button,
+  Input,
+  Loading,
+  Select,
+} from '@superset-ui/core/components';
+import AiPeriodPicker from './AiPeriodPicker';
 import getBootstrapData from 'src/utils/getBootstrapData';
 import { useToasts } from 'src/components/MessageToasts/withToasts';
 import {
@@ -3134,8 +3141,8 @@ export default function AIInsightPanel({
 
   // SQL guided inputs + multiple suggestions (SQL mode)
   const [sqlDatasetId, setSqlDatasetId] = useState<number | null>(null);
-  const [sqlMetric, setSqlMetric] = useState<string>('');
-  const [sqlPeriod, setSqlPeriod] = useState<string>('');
+  const [sqlMetrics, setSqlMetrics] = useState<string[]>([]);
+  const [sqlPeriods, setSqlPeriods] = useState<string[]>([]);
   const [sqlSuggestions, setSqlSuggestions] = useState<AISqlSuggestion[]>([]);
   const selectedSqlDataset = useMemo(
     () => martTables.find(tbl => tbl.dataset_id === sqlDatasetId) || null,
@@ -3320,8 +3327,9 @@ export default function AIInsightPanel({
             schema,
             execute: false,
             datasetId: sqlDatasetId,
-            metric: sqlMetric || null,
-            period: sqlPeriod || null,
+            metric: sqlMetrics[0] || null,
+            metrics: sqlMetrics.length ? sqlMetrics : null,
+            period: sqlPeriods.length ? sqlPeriods.join(',') : null,
           });
           if (!mountedRef.current) return;
           setLastResult(response);
@@ -3389,8 +3397,8 @@ export default function AIInsightPanel({
       databaseId,
       schema,
       sqlDatasetId,
-      sqlMetric,
-      sqlPeriod,
+      sqlMetrics,
+      sqlPeriods,
       ensureConversation,
       addDangerToast,
     ],
@@ -4105,7 +4113,8 @@ export default function AIInsightPanel({
                 onChange={e => {
                   const id = e.target.value ? Number(e.target.value) : null;
                   setSqlDatasetId(id);
-                  setSqlMetric('');
+                  setSqlMetrics([]);
+                  setSqlPeriods([]);
                 }}
               >
                 <option value="">{t('Dataset (optional)')}</option>
@@ -4115,32 +4124,39 @@ export default function AIInsightPanel({
                   </option>
                 ))}
               </select>
-              <select
-                aria-label={t('Metric')}
-                value={sqlMetric}
-                onChange={e => setSqlMetric(e.target.value)}
+              <Select
+                mode="multiple"
+                allowClear
+                ariaLabel={t('Metrics')}
+                placeholder={t('Metrics (optional)')}
+                value={sqlMetrics}
+                onChange={(value: any) => setSqlMetrics(value as string[])}
                 disabled={!selectedSqlDataset}
-              >
-                <option value="">{t('Metric (optional)')}</option>
-                {(selectedSqlDataset?.columns || [])
-                  .filter(c => !c.dhis2?.period)
-                  .map(c => (
-                    <option key={c.name} value={c.name}>
-                      {c.name}
-                      {c.dhis2?.indicator ? ' (indicator)' : ''}
-                    </option>
-                  ))}
-              </select>
-              <input
-                aria-label={t('Period')}
-                value={sqlPeriod}
-                onChange={e => setSqlPeriod(e.target.value)}
-                placeholder={
-                  selectedSqlDataset?.period_column
-                    ? t('Period e.g. 202501 (optional)')
-                    : t('Period (optional)')
-                }
+                options={(selectedSqlDataset?.columns || [])
+                  // Only real measures — never period or org-unit/dimension
+                  // columns (aggregating a text column crashes the query).
+                  .filter(c => {
+                    if (c.dhis2?.period || c.dhis2?.ou_hierarchy) return false;
+                    if (c.dhis2?.indicator || c.dhis2?.agg) return true;
+                    return /INT|FLOAT|DOUBLE|DECIMAL|NUMERIC|REAL|NUMBER|BIGINT/i.test(
+                      c.type || '',
+                    );
+                  })
+                  .map(c => ({
+                    label: c.dhis2?.indicator ? `${c.name} (indicator)` : c.name,
+                    value: c.name,
+                  }))}
+                css={{ minWidth: 180, flex: '1 1 200px' }}
               />
+              {selectedSqlDataset?.period_column ? (
+                <AiPeriodPicker
+                  key={sqlDatasetId ?? 'none'}
+                  schema={selectedSqlDataset.schema ?? undefined}
+                  table={selectedSqlDataset.table_name}
+                  periodColumn={selectedSqlDataset.period_column}
+                  onChange={setSqlPeriods}
+                />
+              ) : null}
             </div>
           )}
 

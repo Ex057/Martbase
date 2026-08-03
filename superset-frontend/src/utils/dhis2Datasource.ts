@@ -36,7 +36,7 @@ function parseDatasourceExtra(
   return undefined;
 }
 
-function isStagedLocalDatasource(
+export function isStagedLocalDatasource(
   datasource: Record<string, any> | undefined,
 ): boolean {
   const extra = parseDatasourceExtra(datasource?.extra);
@@ -72,6 +72,30 @@ export function isDirectDhis2Datasource(
     .trim()
     .toLowerCase();
   return uri.includes('dhis2://');
+}
+
+/**
+ * True when a chart's datasource is DHIS2-related and should open in the DHIS2
+ * SQL Workspace (which runs against the serving DB) rather than stock SQL Lab.
+ * Covers direct DHIS2 connections, staged-local datasets, and serving-backed
+ * datasets. Non-DHIS2 datasources (Postgres, Google Sheets, …) return false and
+ * keep using stock SQL Lab, which handles them correctly.
+ */
+export function isDhis2WorkspaceDatasource(
+  datasource: Record<string, any> | undefined,
+): boolean {
+  if (!datasource) {
+    return false;
+  }
+  if (isStagedLocalDatasource(datasource) || isDirectDhis2Datasource(datasource)) {
+    return true;
+  }
+  const extra = parseDatasourceExtra(datasource?.extra);
+  return Boolean(
+    extra?.dhis2_serving_table_ref ||
+      extra?.dhis2_serving_database_id ||
+      extra?.dhis2_source_database_id,
+  );
 }
 
 export function getDhis2LegendSetDatabaseId(

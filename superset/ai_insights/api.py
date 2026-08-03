@@ -68,10 +68,11 @@ class AIRequestSchema(Schema):
     schema = fields.String(load_default=None, allow_none=True)
     database_id = fields.Integer(load_default=None, allow_none=True)
     execute = fields.Boolean(load_default=False)
-    # Guided inputs for the SQL assistant: the specific dataset, metric column,
+    # Guided inputs for the SQL assistant: the specific dataset, metric column(s),
     # and period the user selected in the panel.
     dataset_id = fields.Integer(load_default=None, allow_none=True)
     metric = fields.String(load_default=None, allow_none=True)
+    metrics = fields.List(fields.String(), load_default=None, allow_none=True)
     period = fields.String(load_default=None, allow_none=True)
 
 

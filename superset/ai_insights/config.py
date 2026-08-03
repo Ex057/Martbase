@@ -22,6 +22,13 @@ DEFAULT_AI_INSIGHTS_CONFIG: dict[str, Any] = {
     "max_dashboard_charts": 12,
     "max_follow_up_messages": 6,
     "max_generated_sql_rows": 200,
+    # AI SQL generation strategy:
+    #   "auto"  - use the offline rule-based generator when the configured
+    #             provider is weak/offline (mock/localai), the LLM otherwise, and
+    #             fall back to rules if the LLM produces no valid SQL.
+    #   "rules" - always use the deterministic rule-based generator (no LLM).
+    #   "llm"   - always use the configured LLM provider.
+    "sql_generator": "auto",
     "request_timeout_seconds": 300,
     "max_tokens": 16384,
     "temperature": 0.1,

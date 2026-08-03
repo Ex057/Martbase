@@ -55,6 +55,7 @@ import ViewQuery from 'src/explore/components/controls/ViewQuery';
 import { SaveDatasetModal } from 'src/SqlLab/components/SaveDatasetModal';
 import { Link } from 'react-router-dom';
 import { setSqlWorkspaceHandoff } from 'src/pages/DHIS2SqlWorkspace/handoff';
+import { isDhis2WorkspaceDatasource } from 'src/utils/dhis2Datasource';
 
 const propTypes = {
   actions: PropTypes.object.isRequired,
@@ -303,13 +304,26 @@ class DatasourceControl extends PureComponent {
     const canAccessSqlLab = userHasPermission(user, 'SQL Lab', 'menu_access');
 
     const editText = t('Edit dataset');
-    // "View in SQL Lab" now opens the DHIS2 SQL Workspace with this dataset
-    // pre-selected + its SQL loaded (handed off via localStorage before nav).
-    const openWorkspaceHandoff = () =>
-      setSqlWorkspaceHandoff({
-        datasetId: datasource.id,
-        sql: datasource.sql,
-      });
+    // DHIS2 datasets open the serving-aware DHIS2 SQL Workspace (handed off via
+    // localStorage); everything else (Postgres, Google Sheets, …) uses stock
+    // SQL Lab, which handles those correctly.
+    const isDhis2Ds = isDhis2WorkspaceDatasource(datasource);
+    const requestedQuery = {
+      datasourceKey: `${datasource.id}__${datasource.type}`,
+      sql: datasource.sql,
+    };
+    const viewInSqlLabTo = isDhis2Ds
+      ? '/superset/dhis2/sql-workspace/'
+      : { pathname: '/sqllab', state: { requestedQuery } };
+    const viewInSqlLabOnClick = isDhis2Ds
+      ? evt => {
+          preventRouterLinkWhileMetaClicked(evt);
+          setSqlWorkspaceHandoff({
+            datasetId: datasource.id,
+            sql: datasource.sql,
+          });
+        }
+      : preventRouterLinkWhileMetaClicked;
 
     const defaultDatasourceMenuItems = [];
     if (this.props.isEditable && !isMissingDatasource) {
@@ -340,13 +354,7 @@ class DatasourceControl extends PureComponent {
       defaultDatasourceMenuItems.push({
         key: VIEW_IN_SQL_LAB,
         label: (
-          <Link
-            to="/superset/dhis2/sql-workspace/"
-            onClick={evt => {
-              preventRouterLinkWhileMetaClicked(evt);
-              openWorkspaceHandoff();
-            }}
-          >
+          <Link to={viewInSqlLabTo} onClick={viewInSqlLabOnClick}>
             {t('View in SQL Lab')}
           </Link>
         ),
@@ -392,13 +400,7 @@ class DatasourceControl extends PureComponent {
       queryDatasourceMenuItems.push({
         key: VIEW_IN_SQL_LAB,
         label: (
-          <Link
-            to="/superset/dhis2/sql-workspace/"
-            onClick={evt => {
-              preventRouterLinkWhileMetaClicked(evt);
-              openWorkspaceHandoff();
-            }}
-          >
+          <Link to={viewInSqlLabTo} onClick={viewInSqlLabOnClick}>
             {t('View in SQL Lab')}
           </Link>
         ),

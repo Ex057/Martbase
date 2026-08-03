@@ -550,6 +550,11 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
           url: '/superset/dhis2/local-data/',
         },
         {
+          name: 'DHIS2 SQL Workspace',
+          label: 'DHIS2 SQL Workspace',
+          url: '/superset/dhis2/sql-workspace/',
+        },
+        {
           name: 'Download Datasets',
           label: 'Download Datasets',
           url: '/superset/dhis2/downloads/',
@@ -1000,9 +1005,10 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
   const sqlLabChild: MenuObjectChildProps = {
     name: 'SQL Lab',
     label: 'SQL Lab',
-    // Points at the DHIS2 SQL Workspace, which replaces stock SQL Lab (the DHIS2
-    // source connection can't run SQL). /sqllab/ also redirects here.
-    url: '/superset/dhis2/sql-workspace/',
+    // Stock SQL Lab, for non-DHIS2 databases (Postgres, Google Sheets, …). DHIS2
+    // datasets use the separate "DHIS2 SQL Workspace" item (added to the DHIS2
+    // tools group), which runs against the serving DB.
+    url: '/sqllab/',
   };
 
   // Add Database Connections menu item

@@ -23,7 +23,6 @@ import {
   ComponentProps,
   LazyExoticComponent,
 } from 'react';
-import { Redirect } from 'react-router-dom';
 import { isUserAdmin } from 'src/dashboard/util/permissionUtils';
 import getBootstrapData from 'src/utils/getBootstrapData';
 
@@ -158,13 +157,6 @@ const DHIS2SqlWorkspace = lazy(
     ),
 );
 
-// Stock SQL Lab is replaced by the DHIS2 SQL Workspace: the DHIS2 source
-// connection can't run SQL (only the analytics API), so any /sqllab/ visit is
-// redirected to the serving-aware workspace.
-const SqlLabRedirect = () => (
-  <Redirect to="/superset/dhis2/sql-workspace/" />
-);
-
 const AIManagement = lazy(
   () => import(/* webpackChunkName: "AIManagement" */ 'src/pages/AIManagement'),
 );
@@ -185,8 +177,9 @@ const SavedQueryList = lazy(
     import(/* webpackChunkName: "SavedQueryList" */ 'src/pages/SavedQueryList'),
 );
 
-// Stock SQL Lab page is no longer routed (replaced by DHIS2 SQL Workspace via
-// SqlLabRedirect below), so its lazy import has been removed.
+const SqlLab = lazy(
+  () => import(/* webpackChunkName: "SqlLab" */ 'src/pages/SqlLab'),
+);
 
 const AllEntities = lazy(
   () => import(/* webpackChunkName: "AllEntities" */ 'src/pages/AllEntities'),
@@ -418,7 +411,7 @@ export const routes: Routes = [
   },
   {
     path: '/sqllab/',
-    Component: SqlLabRedirect,
+    Component: SqlLab,
   },
   { path: '/user_info/', Component: UserInfo },
   {

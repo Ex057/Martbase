@@ -23,6 +23,7 @@ from superset.ai_insights.training_examples import (
     build_dhis2_context,
 )
 from superset.ai_insights.providers import AIProviderError, ProviderRegistry, StreamChunk
+from superset.ai_insights.local_sql import build_local_sql_suggestions
 from superset.ai_insights.sql import (
     AISQLValidationError,
     _resolve_dataset_table_ref,
@@ -6821,6 +6822,16 @@ class AIInsightService:
         # selected in the panel. When a dataset is chosen, narrow the schema
         # context to that table so suggestions target it.
         metric = str(payload.get("metric") or "").strip() or None
+        metrics = [
+            str(m).strip()
+            for m in (payload.get("metrics") or [])
+            if str(m).strip()
+        ]
+        if metric and metric not in metrics:
+            metrics.insert(0, metric)
+        # Keep `metric` as the first for the LLM prompt hint / back-compat.
+        if metrics and not metric:
+            metric = metrics[0]
         period = str(payload.get("period") or "").strip() or None
         dataset_name: str | None = None
         dataset_id = payload.get("dataset_id")
@@ -6875,42 +6886,93 @@ class AIInsightService:
                 ) from ex
             return resp, parsed
 
-        response, structured = _generate()
-        suggestions, errors = _collect_valid_sql_suggestions(
-            exec_database, structured, schema
+        config = get_ai_insights_config()
+
+        def _run_rules() -> tuple[list[dict[str, Any]], list[str]]:
+            raw = build_local_sql_suggestions(
+                exec_database,
+                mart_schema_context,
+                question=question,
+                metric=metric,
+                metrics=metrics or None,
+                period=period,
+                # Generous default so results aren't truncated (the config cap is
+                # only used to inject a LIMIT when SQL lacks one).
+                max_rows=max(int(config.get("max_generated_sql_rows") or 0), 1000),
+            )
+            return _collect_valid_sql_suggestions(
+                exec_database, {"suggestions": raw}, schema
+            )
+
+        # Choose the generator. The offline rule-based generator is used when
+        # configured (or when the provider is weak/offline), so the assistant
+        # produces valid SQL without a hosted LLM. The LLM path (if a real
+        # provider is set) still falls back to rules rather than hard-failing.
+        sql_mode = str(config.get("sql_generator") or "auto").lower()
+        provider = self.registry._lookup_provider(payload.get("provider_id"))
+        provider_type = getattr(provider, "provider_type", None)
+        use_rules = sql_mode == "rules" or (
+            sql_mode == "auto" and provider_type in {"mock", "localai", None}
         )
-        if not suggestions:
-            # One self-correction pass: re-prompt with the validation error.
-            retry_error = errors[0] if errors else "No valid read-only SELECT produced"
-            response, structured = _generate(retry_error=retry_error)
+
+        response = None
+        structured: dict[str, Any] = {}
+        if use_rules:
+            suggestions, errors = _run_rules()
+        else:
+            response, structured = _generate()
             suggestions, errors = _collect_valid_sql_suggestions(
                 exec_database, structured, schema
             )
+            if not suggestions:
+                # One self-correction pass: re-prompt with the validation error.
+                retry_error = (
+                    errors[0] if errors else "No valid read-only SELECT produced"
+                )
+                response, structured = _generate(retry_error=retry_error)
+                suggestions, errors = _collect_valid_sql_suggestions(
+                    exec_database, structured, schema
+                )
+            if not suggestions and sql_mode == "auto":
+                # Last-resort offline fallback so we never hard-fail.
+                response, structured = None, {}
+                suggestions, errors = _run_rules()
+
         if not suggestions:
             detail = f": {errors[0]}" if errors else ""
-            raise AIInsightError(
-                f"The AI provider did not generate valid SQL{detail}", 502
-            )
+            raise AIInsightError(f"Could not generate valid SQL{detail}", 502)
+
+        if response is not None:
+            provider_label = response.provider_id
+            model_label = response.model
+            duration_ms = response.duration_ms
+            response_len = len(response.text)
+            follow_ups = structured.get("follow_ups") or []
+        else:
+            provider_label = "rule-based"
+            model_label = "local-rules"
+            duration_ms = 0
+            response_len = 0
+            follow_ups = []
 
         primary = suggestions[0]
         result_payload: dict[str, Any] = {
             "mode": AI_MODE_SQL,
             "question": question,
-            "provider": response.provider_id,
-            "model": response.model,
+            "provider": provider_label,
+            "model": model_label,
             "sql": primary["sql"],
             "tables": primary["tables"],
             "validated": True,
             "explanation": primary["explanation"],
             "assumptions": primary["assumptions"],
             "suggestions": suggestions,
-            "follow_ups": structured.get("follow_ups") or [],
+            "follow_ups": follow_ups,
             "database_backend": exec_database.backend,
             "execution_database_id": exec_database.id,
             "execution_database_name": exec_database.database_name,
         }
 
-        config = get_ai_insights_config()
         should_execute = bool(payload.get("execute")) and bool(
             config.get("allow_sql_execution")
         )
@@ -6927,13 +6989,13 @@ class AIInsightService:
         _audit(
             AuditMetadata(
                 mode=AI_MODE_SQL,
-                provider=response.provider_id,
-                model=response.model,
-                duration_ms=response.duration_ms,
+                provider=provider_label,
+                model=model_label,
+                duration_ms=duration_ms,
                 database_backend=exec_database.backend,
             ),
             question_length=len(question),
-            response_length=len(response.text),
+            response_length=response_len,
             conversation_id=payload.get("conversation_id"),
         )
         return result_payload

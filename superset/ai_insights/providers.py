@@ -1074,12 +1074,19 @@ class MockProvider(BaseProvider):
                 payload = json.loads(content)
             except json.JSONDecodeError:
                 continue
-            mart_tables = payload.get("mart_tables") or []
-            if mart_tables and isinstance(mart_tables, list):
-                first_table = mart_tables[0]
+            # Support both the compact SQL prompt shape ("tables":[{"t","s"}]) and
+            # the older "mart_tables":[{"table","schema"}] shape, so the mock always
+            # references a REAL table instead of a placeholder.
+            tables = payload.get("tables") or payload.get("mart_tables") or []
+            if tables and isinstance(tables, list):
+                first_table = tables[0]
                 if isinstance(first_table, dict):
-                    schema = str(first_table.get("schema") or "").strip()
-                    table = str(first_table.get("table") or "").strip()
+                    schema = str(
+                        first_table.get("s") or first_table.get("schema") or ""
+                    ).strip()
+                    table = str(
+                        first_table.get("t") or first_table.get("table") or ""
+                    ).strip()
                     if table:
                         return f"{schema}.{table}" if schema else table
         return "analytics_mart"

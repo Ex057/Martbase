@@ -43,6 +43,8 @@ import { allowCrossDomain as domainShardingEnabled } from 'src/utils/hostNamesCo
 import { updateDataMask } from 'src/dataMask/actions';
 import { waitForAsyncData } from 'src/middleware/asyncEvent';
 import { ensureAppRoot } from 'src/utils/pathUtils';
+import { safeStringify } from 'src/utils/safeStringify';
+import { isDhis2WorkspaceDatasource } from 'src/utils/dhis2Datasource';
 import {
   setSqlWorkspaceHandoff,
   datasetIdFromKey,
@@ -759,24 +761,42 @@ export function postChartFormData(
 }
 
 export function redirectSQLLab(formData, history) {
-  return dispatch => {
+  return (dispatch, getState) => {
     getChartDataRequest({
       formData,
       resultFormat: 'json',
       resultType: 'query',
     })
       .then(({ json }) => {
-        // Stock SQL Lab can't run DHIS2 serving SQL — hand the dataset + compiled
-        // query to the DHIS2 SQL Workspace instead.
-        const workspaceUrl = '/superset/dhis2/sql-workspace/';
-        setSqlWorkspaceHandoff({
-          datasetId: datasetIdFromKey(formData.datasource),
-          sql: json.result[0].query,
-        });
+        const sql = json.result[0].query;
+        const datasource = getState()?.explore?.datasource;
+        // DHIS2 datasets can't run through stock SQL Lab (the DHIS2 source only
+        // speaks the analytics API) — hand them to the serving-aware DHIS2 SQL
+        // Workspace. Everything else uses stock SQL Lab.
+        if (isDhis2WorkspaceDatasource(datasource)) {
+          const workspaceUrl = '/superset/dhis2/sql-workspace/';
+          setSqlWorkspaceHandoff({
+            datasetId: datasetIdFromKey(formData.datasource),
+            sql,
+          });
+          if (history) {
+            history.push(workspaceUrl);
+          } else {
+            window.open(ensureAppRoot(workspaceUrl), '_blank');
+          }
+          return;
+        }
+        const redirectUrl = '/sqllab/';
+        const payload = { datasourceKey: formData.datasource, sql };
         if (history) {
-          history.push(workspaceUrl);
+          history.push({
+            pathname: redirectUrl,
+            state: { requestedQuery: payload },
+          });
         } else {
-          window.open(ensureAppRoot(workspaceUrl), '_blank');
+          SupersetClient.postForm(ensureAppRoot(redirectUrl), {
+            form_data: safeStringify(payload),
+          });
         }
       })
       .catch(() =>

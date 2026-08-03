@@ -62,6 +62,7 @@ export async function requestAIInsight(input: {
   execute?: boolean;
   datasetId?: number | null;
   metric?: string | null;
+  metrics?: string[] | null;
   period?: string | null;
 }): Promise<AIInsightResult> {
   const { json } = await SupersetClient.post({
@@ -79,6 +80,7 @@ export async function requestAIInsight(input: {
       execute: Boolean(input.execute),
       dataset_id: input.datasetId ?? null,
       metric: input.metric || null,
+      metrics: input.metrics ?? null,
       period: input.period || null,
     },
   });

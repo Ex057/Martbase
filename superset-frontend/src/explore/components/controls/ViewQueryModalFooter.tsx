@@ -18,10 +18,11 @@
  */
 import { FC } from 'react';
 import { isObject } from 'lodash';
-import { t } from '@superset-ui/core';
+import { t, SupersetClient } from '@superset-ui/core';
 import { Button } from '@superset-ui/core/components';
 import { useHistory } from 'react-router-dom';
 import { setSqlWorkspaceHandoff } from 'src/pages/DHIS2SqlWorkspace/handoff';
+import { isDhis2WorkspaceDatasource } from 'src/utils/dhis2Datasource';
 
 interface SimpleDataSource {
   id: string;
@@ -51,18 +52,27 @@ const ViewQueryModalFooter: FC<ViewQueryModalFooterProps> = (props: {
     type: string,
     sql: string,
   ) => {
-    // Open the DHIS2 SQL Workspace (serving-DB aware) with this dataset + SQL,
-    // instead of stock SQL Lab which can't run DHIS2 serving queries.
-    const datasetId = Number(id);
-    setSqlWorkspaceHandoff({
-      datasetId: Number.isFinite(datasetId) ? datasetId : null,
-      sql,
-    });
-    const workspaceUrl = '/superset/dhis2/sql-workspace/';
+    // DHIS2 datasets → serving-aware DHIS2 SQL Workspace; everything else →
+    // stock SQL Lab (which handles Postgres/Google Sheets/… correctly).
+    if (isDhis2WorkspaceDatasource(props.datasource as any)) {
+      const datasetId = Number(id);
+      setSqlWorkspaceHandoff({
+        datasetId: Number.isFinite(datasetId) ? datasetId : null,
+        sql,
+      });
+      const workspaceUrl = '/superset/dhis2/sql-workspace/';
+      if (openInNewWindow) {
+        window.open(workspaceUrl, '_blank');
+      } else {
+        history.push(workspaceUrl);
+      }
+      return;
+    }
+    const payload = { datasourceKey: `${id}__${type}`, sql };
     if (openInNewWindow) {
-      window.open(workspaceUrl, '_blank');
+      SupersetClient.postForm('/sqllab/', payload);
     } else {
-      history.push(workspaceUrl);
+      history.push({ pathname: '/sqllab', state: { requestedQuery: payload } });
     }
   };
 

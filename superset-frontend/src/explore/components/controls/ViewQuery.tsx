@@ -47,6 +47,7 @@ import {
   setSqlWorkspaceHandoff,
   datasetIdFromKey,
 } from 'src/pages/DHIS2SqlWorkspace/handoff';
+import { isDhis2WorkspaceDatasource } from 'src/utils/dhis2Datasource';
 import { ExplorePageState } from 'src/explore/types';
 
 export interface ViewQueryProps {
@@ -82,6 +83,9 @@ const ViewQuery: FC<ViewQueryProps> = props => {
   const datasetId = datasource?.split('__')[0];
   const exploreBackend = useSelector(
     (state: ExplorePageState) => state.explore?.datasource?.database?.backend,
+  );
+  const exploreDatasource = useSelector(
+    (state: ExplorePageState) => state.explore?.datasource,
   );
   const [formattedSQL, setFormattedSQL] = useState<string>();
   const [showFormatSQL, setShowFormatSQL] = useState(true);
@@ -132,21 +136,34 @@ const ViewQuery: FC<ViewQueryProps> = props => {
 
   const navToSQLLab = useCallback(
     (domEvent: KeyboardEvent<HTMLElement> | MouseEvent<HTMLElement>) => {
-      // Open the DHIS2 SQL Workspace (which runs against the serving DB) with
-      // this dataset + SQL handed off, instead of stock SQL Lab.
-      setSqlWorkspaceHandoff({
-        datasetId: datasetIdFromKey(datasource),
-        sql: currentSQL,
-      });
-      const workspaceUrl = '/superset/dhis2/sql-workspace/';
+      // DHIS2 datasets open the serving-aware DHIS2 SQL Workspace; everything
+      // else uses stock SQL Lab (which handles Postgres/Sheets/… correctly).
+      if (isDhis2WorkspaceDatasource(exploreDatasource)) {
+        setSqlWorkspaceHandoff({
+          datasetId: datasetIdFromKey(datasource),
+          sql: currentSQL,
+        });
+        const workspaceUrl = '/superset/dhis2/sql-workspace/';
+        if (domEvent.metaKey || domEvent.ctrlKey) {
+          domEvent.preventDefault();
+          window.open(workspaceUrl, '_blank');
+        } else {
+          history.push(workspaceUrl);
+        }
+        return;
+      }
+      const requestedQuery = { datasourceKey: datasource, sql: currentSQL };
       if (domEvent.metaKey || domEvent.ctrlKey) {
         domEvent.preventDefault();
-        window.open(workspaceUrl, '_blank');
+        window.open(
+          `/sqllab?datasourceKey=${datasource}&sql=${encodeURIComponent(currentSQL)}`,
+          '_blank',
+        );
       } else {
-        history.push(workspaceUrl);
+        history.push({ pathname: '/sqllab', state: { requestedQuery } });
       }
     },
-    [history, datasource, currentSQL],
+    [history, datasource, currentSQL, exploreDatasource],
   );
 
   useEffect(() => {
