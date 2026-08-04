@@ -792,11 +792,6 @@ export default function MenuWrapper({ data, ...rest }: MenuProps) {
               label: 'Portal Settings',
               url: '/superset/cms/?tab=portal',
             },
-            {
-              name: 'Public Portal',
-              label: 'Public Portal',
-              url: '/superset/public/',
-            },
           ],
         };
   const aiManagementMenu: MenuObjectProps | null =

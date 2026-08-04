@@ -137,9 +137,21 @@ import {
   resolveFocusedBoundaryRequest,
   resolveFocusedDataLevel,
 } from './focusMode';
-import LegendPanel from './components/LegendPanel';
+import LegendPanel, { computeLegendItems } from './components/LegendPanel';
 import MapCompass from './components/MapCompass';
 import DrillControls from './components/DrillControls';
+import {
+  EXPORT_HIDE_ATTRIBUTE,
+  MAP_EXPORTING_CLASS,
+} from '../mapExport/constants';
+import {
+  MAP_EXPORT_ID_ATTRIBUTE,
+  registerMapExporter,
+  unregisterMapExporter,
+  useMapExportId,
+} from '../mapExport/registry';
+import { countFeaturesPerClass } from '../mapExport/legendCounts';
+import type { MapExportSpec } from '../mapExport/types';
 import DataPreviewPanel from './components/DataPreviewPanel';
 import FiltersPanel from './components/FiltersPanel';
 import {
@@ -218,6 +230,22 @@ const MapWrapper = styled.div<{ $transparentCardContainer?: boolean }>`
     $transparentCardContainer ? 'none' : 'inherit'};
   box-shadow: ${({ $transparentCardContainer }) =>
     $transparentCardContainer ? 'none' : 'inherit'};
+
+  /*
+    Applied by the image exporter while it rasterises the Leaflet canvas.
+    Everything marked screen-only — zoom buttons, the focus button, the basemap
+    picker, the Leaflet attribution control — is dropped so the export can
+    compose its own title/legend/scale-bar furniture instead. All of these are
+    absolutely positioned, so hiding them cannot resize the map container.
+  */
+  &.${MAP_EXPORTING_CLASS} [${EXPORT_HIDE_ATTRIBUTE}],
+  &.${MAP_EXPORTING_CLASS} .leaflet-control-container,
+  /* Transient hover chrome — the permanent value labels (.map-label,
+     .dhis2-bubble-value-label) are data and must survive. */
+  &.${MAP_EXPORTING_CLASS} .dhis2-map-tooltip-container,
+  &.${MAP_EXPORTING_CLASS} .leaflet-popup {
+    display: none !important;
+  }
 `;
 
 const MapCanvas = styled.div<{ $backgroundColor?: string }>`
@@ -788,6 +816,7 @@ function FocusButton({
   return (
     <button
       className="map-aim-button map-zoom-button"
+      {...{ [EXPORT_HIDE_ATTRIBUTE]: '' }}
       onClick={handleFocus}
       aria-label={t('Aim map at visible boundaries')}
       title={t('Aim map at visible boundaries')}
@@ -816,7 +845,7 @@ function MapZoomButtons(): ReactElement | null {
   const map = useMap();
 
   return (
-    <div className="map-zoom-controls">
+    <div className="map-zoom-controls" {...{ [EXPORT_HIDE_ATTRIBUTE]: '' }}>
       <button
         className="map-zoom-button"
         title="Zoom in"
@@ -1530,6 +1559,11 @@ function DHIS2Map({
   // The map instance is tracked only to trigger updates on ready; on-map labels
   // and bubbles are React-managed children, so the value itself isn't read.
   const [, setMapInstance] = useState<L.Map | null>(null);
+  // ...except by the image exporter, which needs it to project boundary bounds
+  // and derive the scale bar at download time.
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const mapRootRef = useRef<HTMLDivElement | null>(null);
+  const exportId = useMapExportId();
   const [dhis2Data, setDhis2Data] = useState<Record<string, any>[] | null>(
     null,
   );
@@ -1733,6 +1767,7 @@ function DHIS2Map({
     ],
   );
   const handleMapInstanceReady = useCallback((map: L.Map) => {
+    mapInstanceRef.current = map;
     setMapInstance(currentMap => (currentMap === map ? currentMap : map));
   }, []);
 
@@ -3913,8 +3948,133 @@ function DHIS2Map({
   const subtitleColorCss = colorValueToCss(chartSubtitleColor) ?? '#6b7280';
   const hasChartTitle = Boolean(chartTitle || chartSubtitle);
 
+  // Period shown under the metric in the exported legend. Mirrors what the
+  // period slider is currently showing.
+  const exportPeriodLabel = useMemo(() => {
+    if (!orderedPeriods.length) return undefined;
+    const at = (index: number) =>
+      orderedPeriods[clampPeriodIndex(index, orderedPeriods)];
+    const start = at(periodWindow[0]);
+    const end = at(periodWindow[1]);
+    const label = (code?: string) =>
+      code ? formatDHIS2Period(code) || code : undefined;
+    const startLabel = label(start);
+    const endLabel = label(end);
+    if (!startLabel) return undefined;
+    return startLabel === endLabel ? startLabel : `${startLabel} – ${endLabel}`;
+  }, [orderedPeriods, periodWindow]);
+
+  /*
+    Export-only legend derivations. The on-screen LegendPanel keeps using its
+    own call to computeLegendItems, so nothing here changes what the map shows.
+  */
+  const exportLegendItems = useMemo(() => {
+    const items = computeLegendItems({
+      colorScale,
+      valueRange,
+      classes: legendClasses,
+      manualBreaks,
+      manualColors,
+      stagedLegendDefinition: effectiveStagedLegendDefinition,
+      legendEntries: computedLegendEntries,
+    });
+    const counts = countFeaturesPerClass(
+      items,
+      displayBoundaries.map(feature => getFeatureValue(feature)),
+    );
+    return items.map((item, index) => ({
+      key: item.key,
+      color: item.color,
+      label: item.label,
+      count: counts[index],
+    }));
+  }, [
+    colorScale,
+    valueRange,
+    legendClasses,
+    manualBreaks,
+    manualColors,
+    effectiveStagedLegendDefinition,
+    computedLegendEntries,
+    displayBoundaries,
+    getFeatureValue,
+  ]);
+
+  /*
+    The organisation-unit key. Shown even for a single level — that is the
+    common case and the one the DHIS2 reference illustrates. Falls back to the
+    plain boundary stroke when no per-level colours are configured.
+  */
+  const exportLevelItems = useMemo(() => {
+    const rgba = (c: { r: number; g: number; b: number; a: number }) =>
+      `rgba(${c.r},${c.g},${c.b},${c.a})`;
+    const nameFor = (level: number) =>
+      boundaryLevelLabels?.[level] || `Level ${level}`;
+
+    if (levelBorderColors?.length) {
+      return levelBorderColors.map(levelConfig => ({
+        key: String(levelConfig.level),
+        color: rgba(levelConfig.color),
+        width: levelConfig.width || 1,
+        label: nameFor(levelConfig.level),
+      }));
+    }
+    return (boundaryLevels || []).map(level => ({
+      key: String(level),
+      color: rgba(strokeColor),
+      width: 1,
+      label: nameFor(level),
+    }));
+  }, [boundaryLevelLabels, boundaryLevels, levelBorderColors, strokeColor]);
+
+  /*
+    Image export. The spec is rebuilt every render and mirrored into a ref that
+    a stable getter reads, so "Download as image" always sees current state
+    without re-registering — and without the exporter holding a stale closure.
+  */
+  const exportSpec: MapExportSpec = {
+    rootElement: null,
+    mapInstance: mapInstanceRef.current,
+    boundaries: displayBoundaries,
+    title: chartTitle,
+    subtitle: chartSubtitle,
+    metricName: metricDisplayName,
+    periodLabel: exportPeriodLabel,
+    legendItems: exportLegendItems,
+    noDataColor: `rgba(${legendNoDataColor.r},${legendNoDataColor.g},${legendNoDataColor.b},${legendNoDataColor.a})`,
+    levelItems: exportLevelItems,
+    levelsHeading: t('Organisation units'),
+    attributionHtml: BASE_MAPS[currentBasemap]?.attribution,
+    backgroundColor: chartBackgroundColor,
+    // Pinned to the map frame's top-left in the export regardless of where it
+    // sits on screen — that is the conventional spot for a printed map, and the
+    // frame's other corners carry the scale bar and attribution.
+    compassNode: compassVisible ? (
+      <MapCompass
+        position="topleft"
+        style={(compassStyle as CompassStyle) || 'north_badge'}
+      />
+    ) : undefined,
+  };
+
+  const exportSpecRef = useRef(exportSpec);
+  useEffect(() => {
+    exportSpecRef.current = exportSpec;
+  });
+
+  useEffect(() => {
+    registerMapExporter(exportId, () => ({
+      ...exportSpecRef.current,
+      // Resolved at download time — the ref is empty on the first render.
+      rootElement: mapRootRef.current,
+    }));
+    return () => unregisterMapExporter(exportId);
+  }, [exportId]);
+
   return (
     <MapWrapper
+      ref={mapRootRef}
+      {...{ [MAP_EXPORT_ID_ATTRIBUTE]: exportId }}
       $transparentCardContainer={transparentCardContainer}
       style={{ width, height }}
     >
@@ -4096,6 +4256,7 @@ function DHIS2Map({
         )}
 
         <div
+          {...{ [EXPORT_HIDE_ATTRIBUTE]: '' }}
           style={{
             position: 'absolute',
             top: 14,

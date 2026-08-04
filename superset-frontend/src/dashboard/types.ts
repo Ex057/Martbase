@@ -282,6 +282,8 @@ export enum MenuKeys {
   AiInsights = 'ai_insights',
   DownloadAsImage = 'download_as_image',
   DownloadAsPng = 'download_as_png',
+  /** Composed, print-ready map layout — map visualizations only. */
+  DownloadMapLayout = 'download_map_layout',
   DownloadAsJpg = 'download_as_jpg',
   DownloadAsSvg = 'download_as_svg',
   ExploreChart = 'explore_chart',

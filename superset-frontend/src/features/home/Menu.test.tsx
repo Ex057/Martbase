@@ -741,10 +741,6 @@ test('should add CMS Pages after Data for authenticated users', async () => {
 
   userEvent.hover(cmsPagesTab);
 
-  expect(await screen.findByText('Public Portal')).toHaveAttribute(
-    'href',
-    '/superset/public/',
-  );
   expect(await screen.findByText('Admin Dashboard')).toHaveAttribute(
     'href',
     '/superset/cms/',
@@ -761,6 +757,9 @@ test('should add CMS Pages after Data for authenticated users', async () => {
     'href',
     '/superset/cms/?tab=portal',
   );
+  // The public portal is reachable from the pages themselves; it was removed
+  // from this admin dropdown.
+  expect(screen.queryByText('Public Portal')).not.toBeInTheDocument();
 });
 
 test('should not add CMS Pages for anonymous users', async () => {

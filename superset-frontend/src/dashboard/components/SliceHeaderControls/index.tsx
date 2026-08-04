@@ -34,6 +34,7 @@ import {
   css,
   isFeatureEnabled,
   FeatureFlag,
+  logging,
   useTheme,
   getChartMetadataRegistry,
   styled,
@@ -51,7 +52,14 @@ import {
   ModalTrigger,
 } from '@superset-ui/core/components';
 import { useShareMenuItems } from 'src/dashboard/components/menu/ShareMenuItems';
-import downloadAsImage from 'src/utils/downloadAsImage';
+import downloadAsImage, {
+  generateFileStem,
+  type ImageDownloadFormat,
+} from 'src/utils/downloadAsImage';
+import {
+  downloadMapLayout,
+  isMapVizType,
+} from 'src/visualizations/mapExport/downloadMapLayout';
 import { getSliceHeaderTooltip } from 'src/dashboard/util/getSliceHeaderTooltip';
 import { Icons } from '@superset-ui/core/components/Icons';
 import ViewQueryModal from 'src/explore/components/controls/ViewQueryModal';
@@ -85,6 +93,13 @@ const RefreshTooltip = styled.div`
 
 const getScreenshotNodeSelector = (chartId: string | number) =>
   `.dashboard-chart-id-${chartId}`;
+
+/** The download submenu offers three formats; honour the one that was picked. */
+const IMAGE_FORMAT_BY_MENU_KEY: Record<string, ImageDownloadFormat> = {
+  [MenuKeys.DownloadAsPng]: 'png',
+  [MenuKeys.DownloadAsJpg]: 'jpg',
+  [MenuKeys.DownloadAsSvg]: 'svg',
+};
 
 const VerticalDotsTrigger = () => {
   const theme = useTheme();
@@ -338,10 +353,26 @@ const SliceHeaderControls = (
           props.slice.slice_name,
           true,
           theme,
+          IMAGE_FORMAT_BY_MENU_KEY[String(key)] ?? 'jpg',
         )(domEvent).then(() => {
           if (menu) {
             menu.style.visibility = 'visible';
           }
+        });
+        props.logEvent?.(LOG_ACTIONS_CHART_DOWNLOAD_AS_IMAGE, {
+          chartId: props.slice.slice_id,
+        });
+        break;
+      }
+      case MenuKeys.DownloadMapLayout: {
+        downloadMapLayout(
+          getScreenshotNodeSelector(props.slice.slice_id),
+          generateFileStem(props.slice.slice_name),
+        ).catch(error => {
+          logging.error(error);
+          props.addDangerToast?.(
+            t('Sorry, the map image could not be downloaded.'),
+          );
         });
         props.logEvent?.(LOG_ACTIONS_CHART_DOWNLOAD_AS_IMAGE, {
           chartId: props.slice.slice_id,
@@ -655,6 +686,16 @@ const SliceHeaderControls = (
               key: MenuKeys.DownloadAsPng,
               label: t('PNG'),
             },
+            // Map charts only: the composed print layout rather than a
+            // screenshot of the chart as it appears on the dashboard.
+            ...(isMapVizType(slice.viz_type)
+              ? [
+                  {
+                    key: MenuKeys.DownloadMapLayout,
+                    label: t('Map layout (PNG)'),
+                  },
+                ]
+              : []),
             {
               key: MenuKeys.DownloadAsJpg,
               label: t('JPG'),

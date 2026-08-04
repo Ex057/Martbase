@@ -23,6 +23,7 @@ import {
   css,
   isFeatureEnabled,
   FeatureFlag,
+  logging,
   styled,
   t,
   useTheme,
@@ -37,7 +38,11 @@ import {
 import { Menu } from '@superset-ui/core/components/Menu';
 import { useToasts } from 'src/components/MessageToasts/withToasts';
 import { exportChart, getChartKey } from 'src/explore/exploreUtils';
-import downloadAsImage from 'src/utils/downloadAsImage';
+import downloadAsImage, { generateFileStem } from 'src/utils/downloadAsImage';
+import {
+  downloadMapLayout,
+  isMapVizType,
+} from 'src/visualizations/mapExport/downloadMapLayout';
 import { getChartPermalink } from 'src/utils/urlUtils';
 import copyTextToClipboard from 'src/utils/copy';
 import { useHeaderReportMenuItems } from 'src/features/reports/ReportModal/HeaderReportDropdown';
@@ -68,6 +73,7 @@ const MENU_KEYS = {
   EXPORT_TO_JSON: 'export_to_json',
   EXPORT_TO_XLSX: 'export_to_xlsx',
   DOWNLOAD_AS_IMAGE: 'download_as_image',
+  DOWNLOAD_MAP_LAYOUT: 'download_map_layout',
   SHARE_SUBMENU: 'share_submenu',
   COPY_PERMALINK: 'copy_permalink',
   EMBED_CODE: 'embed_code',
@@ -421,6 +427,36 @@ export const useExploreAdditionalActionsMenu = (
           );
         },
       },
+      // Map charts only: the composed print layout — map cropped to its
+      // boundaries with a title/legend panel — rather than a screenshot of the
+      // chart with its on-map controls.
+      ...(isMapVizType(latestQueryFormData?.viz_type)
+        ? [
+            {
+              key: MENU_KEYS.DOWNLOAD_MAP_LAYOUT,
+              label: t('Download map layout (PNG)'),
+              icon: <Icons.FileImageOutlined />,
+              onClick: () => {
+                downloadMapLayout(
+                  '.panel-body .chart-container',
+                  generateFileStem(slice?.slice_name ?? t('New chart')),
+                ).catch(error => {
+                  logging.error(error);
+                  addDangerToast(
+                    t('Sorry, the map image could not be downloaded.'),
+                  );
+                });
+                setIsDropdownVisible(false);
+                dispatch(
+                  logEvent(LOG_ACTIONS_CHART_DOWNLOAD_AS_IMAGE, {
+                    chartId: slice?.slice_id,
+                    chartName: slice?.slice_name,
+                  }),
+                );
+              },
+            },
+          ]
+        : []),
       {
         key: MENU_KEYS.EXPORT_TO_XLSX,
         label: t('Export to Excel'),

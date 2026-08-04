@@ -31,7 +31,7 @@ const IMAGE_DOWNLOAD_QUALITY = 0.95;
  * @param description title or description of content of file
  * @param date date when file was generated
  */
-const generateFileStem = (description: string, date = new Date()) =>
+export const generateFileStem = (description: string, date = new Date()) =>
   `${kebabCase(description)}-${date.toISOString().replace(/[: ]/g, '-')}`;
 
 const CRITICAL_STYLE_PROPERTIES = new Set([
@@ -253,11 +253,23 @@ const createEnhancedClone = (
   return { clone, cleanup };
 };
 
+export type ImageDownloadFormat = 'jpg' | 'png' | 'svg';
+
+const RENDERERS: Record<
+  ImageDownloadFormat,
+  (node: Node, options: Record<string, unknown>) => Promise<string>
+> = {
+  jpg: (node, options) => domToImage.toJpeg(node, options),
+  png: (node, options) => domToImage.toPng(node, options),
+  svg: (node, options) => domToImage.toSvg(node, options),
+};
+
 export default function downloadAsImageOptimized(
   selector: string,
   description: string,
   isExactSelector = false,
   theme?: SupersetTheme,
+  format: ImageDownloadFormat = 'jpg',
 ) {
   return async (event: SyntheticEvent) => {
     const elementToPrint = isExactSelector
@@ -283,9 +295,10 @@ export default function downloadAsImageOptimized(
             !node.className.includes('header-controls')
           : true;
 
-      const dataUrl = await domToImage.toJpeg(clone, {
+      const dataUrl = await RENDERERS[format](clone, {
         bgcolor: theme?.colorBgContainer,
         filter,
+        // Only JPEG is lossy; the option is ignored by the other renderers.
         quality: IMAGE_DOWNLOAD_QUALITY,
         height: clone.scrollHeight,
         width: clone.scrollWidth,
@@ -296,7 +309,7 @@ export default function downloadAsImageOptimized(
       cleanup = null;
 
       const link = document.createElement('a');
-      link.download = `${generateFileStem(description)}.jpg`;
+      link.download = `${generateFileStem(description)}.${format}`;
       link.href = dataUrl;
       link.click();
     } catch (error) {

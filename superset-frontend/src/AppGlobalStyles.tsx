@@ -70,6 +70,14 @@ export function AppGlobalStyles() {
           --pro-surface: ${theme.colorBgContainer};
           --pro-sub-surface: ${theme.colorBgElevated};
 
+          /*
+            Toast chip. Kept as its own pair rather than reusing --pro-navy:
+            that token inverts to a pale blue in dark mode, which would leave
+            white-on-pale-blue text. These two are always a legible pairing.
+          */
+          --pro-toast-bg: ${isDark ? '#E3F2FD' : PRO_PALETTE.primaryNavy};
+          --pro-toast-text: ${isDark ? '#0D1B2A' : '#FFFFFF'};
+
           /* ── Border tokens ──────────────────────────────────────── */
           --pro-border: ${theme.colorBorderSecondary};
           --pro-border-strong: ${theme.colorBorder};
@@ -738,9 +746,29 @@ export function AppGlobalStyles() {
           border-color: var(--pro-accent);
         }
 
-        .ant-message-notice-content {
-          background: var(--pro-navy);
-          color: rgba(255, 255, 255, 0.92);
+        /*
+          antd styles the toast panel via
+          `.ant-message .ant-message-notice-wrapper .ant-message-notice-content`
+          — three classes — with `background: colorBgElevated` (white). A
+          single-class override lost the background to that rule while still
+          applying its own text colour, which is how every toast in the app
+          ended up white-on-white.
+
+          The repeated class is deliberate: it takes this to four classes, one
+          more than antd, so it wins outright. Matching antd's three would only
+          tie, and cssinjs injects its <style> when the first message renders —
+          i.e. after this Global block — so a tie would go to antd. Repeating
+          the content class rather than naming antd's wrapper also keeps this
+          working if that internal wrapper element ever changes.
+
+          Text colour is inherited by the icon/content wrappers, and antd's
+          per-variant `.anticon` rules are more specific, so success/error/
+          warning icons keep their colour.
+        */
+        .ant-message
+          .ant-message-notice-content.ant-message-notice-content.ant-message-notice-content {
+          background: var(--pro-toast-bg);
+          color: var(--pro-toast-text);
           font-size: 13px;
           border-radius: var(--pro-radius-input);
           box-shadow: var(--pro-shadow-dropdown);

@@ -44,6 +44,137 @@ interface LegendPanelProps {
   legendEntries?: ComputedLegendEntry[];
 }
 
+/** A rendered legend row: colour swatch plus its label. */
+export interface LegendItem {
+  key: string;
+  color: string;
+  label: string;
+  /**
+   * Numeric bounds of the class, when it has them. The on-screen legend has no
+   * use for these; the image export buckets feature values against them to show
+   * a per-class count.
+   */
+  min?: number;
+  max?: number;
+}
+
+export interface ComputeLegendItemsArgs {
+  colorScale: (value: number) => string;
+  valueRange: { min: number; max: number };
+  classes: number;
+  manualBreaks?: number[];
+  manualColors?: string[];
+  stagedLegendDefinition?: DHIS2LegendDefinition;
+  legendEntries?: ComputedLegendEntry[];
+}
+
+function computeBreaks({
+  valueRange,
+  classes,
+  manualBreaks,
+  stagedLegendDefinition,
+}: Pick<
+  ComputeLegendItemsArgs,
+  'valueRange' | 'classes' | 'manualBreaks' | 'stagedLegendDefinition'
+>): number[] {
+  if (stagedLegendDefinition?.items?.length) {
+    const boundaries = stagedLegendDefinition.items.flatMap(item =>
+      [item.startValue, item.endValue].filter(
+        (value): value is number =>
+          typeof value === 'number' && Number.isFinite(value),
+      ),
+    );
+    return Array.from(new Set(boundaries)).sort((a, b) => a - b);
+  }
+  if (manualBreaks && manualBreaks.length > 1) {
+    return [...manualBreaks].sort((a, b) => a - b);
+  }
+  const step = (valueRange.max - valueRange.min) / classes;
+  return Array.from(
+    { length: classes + 1 },
+    (_, i) => valueRange.min + step * i,
+  );
+}
+
+/**
+ * Build the legend rows for a set of legend settings.
+ *
+ * Pure and exported so the image exporter renders exactly the same rows as the
+ * on-screen legend, instead of re-deriving them and drifting.
+ */
+export function computeLegendItems({
+  colorScale,
+  valueRange,
+  classes,
+  manualBreaks,
+  manualColors,
+  stagedLegendDefinition,
+  legendEntries = [],
+}: ComputeLegendItemsArgs): LegendItem[] {
+  if (legendEntries.length) {
+    return legendEntries.map(entry => ({
+      key: entry.key,
+      color: entry.color,
+      label: entry.label,
+      min: entry.min,
+      max: entry.max,
+    }));
+  }
+
+  if (stagedLegendDefinition?.items?.length) {
+    return stagedLegendDefinition.items.map((item, index) => {
+      const { startValue, endValue } = item;
+      const displayColor = item.color;
+      const formattedRange =
+        typeof startValue === 'number' && typeof endValue === 'number'
+          ? `${formatValue(startValue)} – ${formatValue(endValue)}`
+          : item.label || t('Legend item');
+      const label = item.label
+        ? `${item.label}: ${formattedRange}`
+        : formattedRange;
+      return {
+        key: item.id || `${index}-${displayColor}`,
+        color: displayColor,
+        label,
+        min: typeof startValue === 'number' ? startValue : undefined,
+        max: typeof endValue === 'number' ? endValue : undefined,
+      };
+    });
+  }
+
+  const breaks = computeBreaks({
+    valueRange,
+    classes,
+    manualBreaks,
+    stagedLegendDefinition,
+  });
+
+  return breaks.slice(0, -1).map((breakValue, index) => {
+    const endValue = breaks[index + 1];
+    const midValue =
+      typeof breakValue === 'number' && typeof endValue === 'number'
+        ? (breakValue + endValue) / 2
+        : typeof breakValue === 'number'
+          ? breakValue
+          : 0;
+    const displayColor =
+      manualColors && manualColors[index]
+        ? manualColors[index]
+        : colorScale(midValue);
+    const label =
+      typeof breakValue === 'number' && typeof endValue === 'number'
+        ? `${formatValue(breakValue)} – ${formatValue(endValue)}`
+        : t('Legend item');
+    return {
+      key: `${index}-${displayColor}`,
+      color: displayColor,
+      label,
+      min: typeof breakValue === 'number' ? breakValue : undefined,
+      max: typeof endValue === 'number' ? endValue : undefined,
+    };
+  });
+}
+
 /* eslint-disable theme-colors/no-literal-colors */
 
 // Position the overlay on the map canvas
@@ -127,80 +258,31 @@ function LegendPanel({
   stagedLegendDefinition,
   legendEntries = [],
 }: LegendPanelProps): React.ReactElement | null {
-  const breaks = useMemo(() => {
-    if (stagedLegendDefinition?.items?.length) {
-      const boundaries = stagedLegendDefinition.items.flatMap(item =>
-        [item.startValue, item.endValue].filter(
-          (value): value is number =>
-            typeof value === 'number' && Number.isFinite(value),
-        ),
-      );
-      return Array.from(new Set(boundaries)).sort((a, b) => a - b);
-    }
-    if (manualBreaks && manualBreaks.length > 1) {
-      return [...manualBreaks].sort((a, b) => a - b);
-    }
-    const step = (valueRange.max - valueRange.min) / classes;
-    return Array.from(
-      { length: classes + 1 },
-      (_, i) => valueRange.min + step * i,
-    );
-  }, [classes, manualBreaks, stagedLegendDefinition, valueRange]);
-
   const getLevelName = (level: number): string =>
     levelLabels[level] || `Level ${level}`;
 
   // Build the list of items to render
-  const items = useMemo(() => {
-    if (legendEntries.length) {
-      return legendEntries.map(entry => ({
-        key: entry.key,
-        color: entry.color,
-        label: entry.label,
-      }));
-    }
-    if (stagedLegendDefinition?.items?.length) {
-      return stagedLegendDefinition.items.map((item, index) => {
-        const startValue = item.startValue;
-        const endValue = item.endValue;
-        const displayColor = item.color;
-        const formattedRange =
-          typeof startValue === 'number' && typeof endValue === 'number'
-            ? `${formatValue(startValue)} – ${formatValue(endValue)}`
-            : item.label || t('Legend item');
-        const label = item.label
-          ? `${item.label}: ${formattedRange}`
-          : formattedRange;
-        return {
-          key: item.id || `${index}-${displayColor}`,
-          color: displayColor,
-          label,
-        };
-      });
-    }
-    return breaks.slice(0, -1).map((breakValue, index) => {
-      const endValue = breaks[index + 1];
-      const midValue =
-        typeof breakValue === 'number' && typeof endValue === 'number'
-          ? (breakValue + endValue) / 2
-          : typeof breakValue === 'number'
-            ? breakValue
-            : 0;
-      const displayColor =
-        manualColors && manualColors[index]
-          ? manualColors[index]
-          : colorScale(midValue);
-      const label =
-        typeof breakValue === 'number' && typeof endValue === 'number'
-          ? `${formatValue(breakValue)} – ${formatValue(endValue)}`
-          : t('Legend item');
-      return {
-        key: `${index}-${displayColor}`,
-        color: displayColor,
-        label,
-      };
-    });
-  }, [legendEntries, stagedLegendDefinition, breaks, manualColors, colorScale]);
+  const items = useMemo(
+    () =>
+      computeLegendItems({
+        colorScale,
+        valueRange,
+        classes,
+        manualBreaks,
+        manualColors,
+        stagedLegendDefinition,
+        legendEntries,
+      }),
+    [
+      colorScale,
+      valueRange,
+      classes,
+      manualBreaks,
+      manualColors,
+      stagedLegendDefinition,
+      legendEntries,
+    ],
+  );
 
   const noDataColorStr = `rgba(${noDataColor.r},${noDataColor.g},${noDataColor.b},${noDataColor.a})`;
 

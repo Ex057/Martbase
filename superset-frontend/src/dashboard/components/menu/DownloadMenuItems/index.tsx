@@ -22,7 +22,9 @@ import { MenuItem } from '@superset-ui/core/components/Menu';
 import { useDownloadScreenshot } from 'src/dashboard/hooks/useDownloadScreenshot';
 import { MenuKeys } from 'src/dashboard/types';
 import downloadAsPdf from 'src/utils/downloadAsPdf';
-import downloadAsImage from 'src/utils/downloadAsImage';
+import downloadAsImage, {
+  type ImageDownloadFormat,
+} from 'src/utils/downloadAsImage';
 import {
   LOG_ACTIONS_DASHBOARD_DOWNLOAD_AS_PDF,
   LOG_ACTIONS_DASHBOARD_DOWNLOAD_AS_IMAGE,
@@ -72,13 +74,17 @@ export const useDownloadMenuItems = (
     logEvent?.(LOG_ACTIONS_DASHBOARD_DOWNLOAD_AS_PDF);
   };
 
-  const onDownloadImage = async (e: SyntheticEvent) => {
+  const onDownloadImage = async (
+    e: SyntheticEvent,
+    format: ImageDownloadFormat = 'jpg',
+  ) => {
     try {
       downloadAsImage(
         SCREENSHOT_NODE_SELECTOR,
         dashboardTitle,
         true,
         undefined,
+        format,
       )(e);
     } catch (error) {
       logging.error(error);
@@ -109,17 +115,17 @@ export const useDownloadMenuItems = (
         {
           key: 'download-png',
           label: t('Download as PNG'),
-          onClick: (e: any) => onDownloadImage(e.domEvent),
+          onClick: (e: any) => onDownloadImage(e.domEvent, 'png'),
         },
         {
           key: 'download-jpg',
           label: t('Download as JPG'),
-          onClick: (e: any) => onDownloadImage(e.domEvent),
+          onClick: (e: any) => onDownloadImage(e.domEvent, 'jpg'),
         },
         {
           key: 'download-svg',
           label: t('Download as SVG'),
-          onClick: (e: any) => onDownloadImage(e.domEvent),
+          onClick: (e: any) => onDownloadImage(e.domEvent, 'svg'),
         },
       ];
 
