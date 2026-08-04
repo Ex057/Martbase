@@ -230,6 +230,70 @@ class TestFetchFromInstanceBatching:
         svc._fetch_from_instance(inst, variables, {"periods": ["2024Q1"], "org_units": ["abc"]})
         assert call_count[0] == 1
 
+    def test_indicators_use_small_ou_chunks_data_elements_use_large(self):
+        """Indicator batches must be split into small OU chunks (heavy per-cell
+        computation), while data elements keep the large default chunk."""
+        svc = self._svc()
+        inst = _make_instance()
+        variables = [
+            _make_variable(variable_id="IND0000001", variable_type="indicator", id=1),
+            _make_variable(variable_id="IND0000002", variable_type="indicator", id=2),
+            _make_variable(variable_id="DE00000001", variable_type="dataElement", id=3),
+            _make_variable(variable_id="DE00000002", variable_type="dataElement", id=4),
+        ]
+        ous = [f"OU{i:05d}" for i in range(30)]
+        svc._resolve_org_units_for_instance = lambda instance, cfg: list(ous)
+
+        calls: list[dict] = []
+        mock_resp = {**SAMPLE_ANALYTICS_RESPONSE, "rows": []}
+
+        def fake_request(*args, dx_ids=None, org_units=None, **kwargs):
+            calls.append({"dx": list(dx_ids or []), "n_ou": len(org_units or [])})
+            return mock_resp
+
+        svc._make_analytics_request = fake_request
+        svc._fetch_from_instance(
+            inst, variables, {"periods": ["2024Q1"], "org_units": ous}
+        )
+
+        de_calls = [c for c in calls if all(d.startswith("DE") for d in c["dx"])]
+        ind_calls = [c for c in calls if all(d.startswith("IND") for d in c["dx"])]
+        # No batch ever mixes indicators with data elements.
+        assert len(de_calls) + len(ind_calls) == len(calls)
+        # Data elements: 30 OUs fit in a single 50-OU chunk.
+        assert len(de_calls) == 1
+        assert de_calls[0]["n_ou"] == 30
+        # Indicators: 30 OUs split into ceil(30/10) = 3 chunks of <=10.
+        assert len(ind_calls) == 3
+        assert all(c["n_ou"] <= 10 for c in ind_calls)
+
+    def test_indicator_ou_chunk_size_override(self):
+        """dataset_config['indicator_ou_chunk_size'] tunes the indicator chunk."""
+        svc = self._svc()
+        inst = _make_instance()
+        variables = [
+            _make_variable(variable_id="IND0000001", variable_type="indicator", id=1),
+        ]
+        ous = [f"OU{i:05d}" for i in range(30)]
+        svc._resolve_org_units_for_instance = lambda instance, cfg: list(ous)
+
+        n_ou_per_call: list[int] = []
+        mock_resp = {**SAMPLE_ANALYTICS_RESPONSE, "rows": []}
+
+        def fake_request(*args, org_units=None, **kwargs):
+            n_ou_per_call.append(len(org_units or []))
+            return mock_resp
+
+        svc._make_analytics_request = fake_request
+        svc._fetch_from_instance(
+            inst,
+            variables,
+            {"periods": ["2024Q1"], "org_units": ous, "indicator_ou_chunk_size": 5},
+        )
+        # 30 OUs / 5 = 6 indicator calls, each <=5 OUs.
+        assert len(n_ou_per_call) == 6
+        assert all(n <= 5 for n in n_ou_per_call)
+
     def test_requests_combo_dimensions_when_category_dimensions_enabled(self):
         svc = self._svc()
         inst = _make_instance()

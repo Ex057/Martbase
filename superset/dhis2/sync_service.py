@@ -85,6 +85,16 @@ _MAX_VARS_PER_REQUEST = 50
 # Override per-dataset via dataset_config["ou_chunk_size"].
 _MAX_OUS_PER_REQUEST = 50
 
+# Org-unit chunk size for batches that contain *indicators*.  Indicators force
+# DHIS2 to evaluate a formula and build an org-unit count map for every cell,
+# which is roughly an order of magnitude heavier than fetching a raw data
+# element.  The 50-OU chunk that data elements tolerate can push an
+# indicator query past an upstream/gateway (e.g. Cloudflare ~100 s) timeout,
+# surfacing as a 5xx "Upstream server error".  Fetch indicators in small OU
+# chunks so each request finishes comfortably.
+# Override per-dataset via dataset_config["indicator_ou_chunk_size"].
+_MAX_OUS_PER_REQUEST_INDICATOR = 10
+
 # Page size for DHIS2 analytics pagination.
 # Override per-dataset via dataset_config["analytics_page_size"].
 _ANALYTICS_PAGE_SIZE = 1000
@@ -132,7 +142,7 @@ _VARIABLE_TYPE_TO_METADATA_TYPE = {
     "eventdataitems": "eventDataItems",
     "eventdataelement": "eventDataItems",
 }
-_RETRYABLE_ANALYTICS_STATUS_CODES = {408, 429, 500, 502, 503, 504, 520, 522, 524}
+_RETRYABLE_ANALYTICS_STATUS_CODES = {408, 429, 500, 502, 503, 504, 520, 522, 524, 525}
 _ACTIVE_SYNC_JOB_STATUSES = {"pending", "queued", "running", "retry_pending"}
 _FIXED_PERIOD_PATTERNS = (
     re.compile(r"^\d{8}$"),
@@ -2911,87 +2921,125 @@ class DHIS2SyncService:
 
         all_rows: list[dict[str, Any]] = []
 
-        # Chunk org units to avoid sending too many OUs in a single request.
-        # DHIS2 can time out or return errors when a single query spans hundreds of
-        # org units, even via POST.  We iterate over chunks and merge the results.
-        ou_chunks: list[list[str]] = (
-            [
-                org_units_cfg[ou_start : ou_start + max_ous_per_request]
-                for ou_start in range(0, len(org_units_cfg), max_ous_per_request)
-            ]
-            if org_units_cfg
-            else [[]]  # empty list means DHIS2 will use the requesting user's org units
+        # Partition dx_ids by request weight.  Indicators force DHIS2 to
+        # evaluate a formula and build an org-unit count map per cell, so a
+        # chunk that raw data elements tolerate can push an indicator query
+        # past an upstream/gateway timeout.  Fetch each group with its own OU
+        # chunk size: data elements in large chunks (fast), indicators in
+        # small chunks (safe).  A dotted dx entry ("uid.coc") keeps the base
+        # uid for the type lookup.
+        indicator_ou_chunk = _clamp_chunk_size(
+            dataset_config.get("indicator_ou_chunk_size"),
+            _MAX_OUS_PER_REQUEST_INDICATOR,
+            _OU_CHUNK_SIZE_MIN,
+            _OU_CHUNK_SIZE_MAX,
         )
-        logger.info(
-            "Sync: instance '%s' — %d org unit(s) split into %d chunk(s) of up to %d "
-            "(var_chunk=%d, page_size=%d)",
-            instance.name,
-            len(org_units_cfg),
-            len(ou_chunks),
-            max_ous_per_request,
-            max_vars_per_request,
-            analytics_page_size,
-        )
+        indicator_dx: list[str] = []
+        plain_dx: list[str] = []
+        for entry in dx_ids:
+            base_uid = entry.split(".", 1)[0]
+            var = variable_map.get(base_uid)
+            if var is not None and str(
+                getattr(var, "variable_type", "") or ""
+            ).lower() == "indicator":
+                indicator_dx.append(entry)
+            else:
+                plain_dx.append(entry)
 
-        for ou_chunk in ou_chunks:
-            chunk_rows: list[dict[str, Any]] = []
-            # Split dx_ids into variable batches within each OU chunk.
-            for batch_start in range(0, max(1, len(dx_ids)), max_vars_per_request):
-                batch = dx_ids[batch_start : batch_start + max_vars_per_request]
-                if not batch:
-                    break
-                try:
-                    batch_rows = self._fetch_analytics_batch(
-                        instance=instance,
-                        batch=batch,
-                        periods=periods_cfg,
-                        org_units=ou_chunk,
-                        variable_map=variable_map,
-                        page_size=analytics_page_size,
-                        include_combo_dimensions=include_combo_dimensions,
-                        job_id=job_id,
-                    )
-                    chunk_rows.extend(batch_rows)
-                    all_rows.extend(batch_rows)
-                    # Heartbeat: refresh changed_on after every HTTP batch so
-                    # the 30-min stale-reset detector does not kill a
-                    # legitimately-running long fetch that yields no rows yet.
-                    if job_id is not None:
-                        try:
-                            self._update_job_progress(
-                                job_id,
-                                current_step=f"fetching from {instance.name}",
-                            )
-                        except Exception:  # pylint: disable=broad-except
-                            pass
-                finally:
-                    # Flush request log immediately after every batch (success
-                    # or failure) so the UI shows live progress without waiting
-                    # for the entire instance or job to complete.
-                    # Wrap in try/except so a DB error here never suppresses
-                    # the original batch exception.
-                    if job_id is not None and self._request_log_collector:
-                        try:
-                            self._flush_request_logs_to_session(job_id)
-                            db.session.commit()
-                        except Exception:  # pylint: disable=broad-except
-                            logger.warning(
-                                "Sync: failed to flush request logs after batch "
-                                "(instance '%s'); discarding %d pending entries",
-                                instance.name,
-                                len(self._request_log_collector),
-                                exc_info=True,
-                            )
-                            self._request_log_collector.clear()
+        def _fetch_group(
+            group_dx: list[str], ou_chunk_size: int, group_label: str
+        ) -> None:
+            """Fetch *group_dx* over all org units, chunked by *ou_chunk_size*."""
+            if not group_dx:
+                return
+            # Chunk org units to avoid sending too many OUs in a single request.
+            # DHIS2 can time out or fail when a single query spans hundreds of
+            # org units, even via POST.  We iterate over chunks and merge.
+            ou_chunks: list[list[str]] = (
+                [
+                    org_units_cfg[ou_start : ou_start + ou_chunk_size]
+                    for ou_start in range(0, len(org_units_cfg), ou_chunk_size)
+                ]
+                if org_units_cfg
+                else [[]]  # empty list => DHIS2 uses the requesting user's OUs
+            )
+            logger.info(
+                "Sync: instance '%s' — %s group: %d dx x %d org unit(s) in %d OU "
+                "chunk(s) of up to %d (var_chunk=%d, page_size=%d)",
+                instance.name,
+                group_label,
+                len(group_dx),
+                len(org_units_cfg),
+                len(ou_chunks),
+                ou_chunk_size,
+                max_vars_per_request,
+                analytics_page_size,
+            )
+
+            for ou_chunk in ou_chunks:
+                chunk_rows: list[dict[str, Any]] = []
+                # Split this group's dx into variable batches within each OU chunk.
+                for batch_start in range(0, len(group_dx), max_vars_per_request):
+                    batch = group_dx[batch_start : batch_start + max_vars_per_request]
+                    if not batch:
+                        break
+                    try:
+                        batch_rows = self._fetch_analytics_batch(
+                            instance=instance,
+                            batch=batch,
+                            periods=periods_cfg,
+                            org_units=ou_chunk,
+                            variable_map=variable_map,
+                            page_size=analytics_page_size,
+                            include_combo_dimensions=include_combo_dimensions,
+                            job_id=job_id,
+                        )
+                        chunk_rows.extend(batch_rows)
+                        all_rows.extend(batch_rows)
+                        # Heartbeat: refresh changed_on after every HTTP batch so
+                        # the 30-min stale-reset detector does not kill a
+                        # legitimately-running long fetch that yields no rows yet.
+                        if job_id is not None:
                             try:
-                                db.session.rollback()
+                                self._update_job_progress(
+                                    job_id,
+                                    current_step=f"fetching from {instance.name}",
+                                )
                             except Exception:  # pylint: disable=broad-except
                                 pass
+                    finally:
+                        # Flush request log immediately after every batch (success
+                        # or failure) so the UI shows live progress without waiting
+                        # for the entire instance or job to complete.
+                        # Wrap in try/except so a DB error here never suppresses
+                        # the original batch exception.
+                        if job_id is not None and self._request_log_collector:
+                            try:
+                                self._flush_request_logs_to_session(job_id)
+                                db.session.commit()
+                            except Exception:  # pylint: disable=broad-except
+                                logger.warning(
+                                    "Sync: failed to flush request logs after batch "
+                                    "(instance '%s'); discarding %d pending entries",
+                                    instance.name,
+                                    len(self._request_log_collector),
+                                    exc_info=True,
+                                )
+                                self._request_log_collector.clear()
+                                try:
+                                    db.session.rollback()
+                                except Exception:  # pylint: disable=broad-except
+                                    pass
 
-            # After all variable batches for this OU chunk complete, notify
-            # the caller so it can stage rows incrementally (real-time progress).
-            if on_chunk_rows is not None and chunk_rows:
-                on_chunk_rows(chunk_rows)
+                # After all variable batches for this OU chunk complete, notify
+                # the caller so it can stage rows incrementally (live progress).
+                if on_chunk_rows is not None and chunk_rows:
+                    on_chunk_rows(chunk_rows)
+
+        # Cheap data elements first (large chunks), then heavy indicators
+        # (small chunks) so a slow indicator group never delays raw data.
+        _fetch_group(plain_dx, max_ous_per_request, "data-element")
+        _fetch_group(indicator_dx, indicator_ou_chunk, "indicator")
 
         return all_rows
 
