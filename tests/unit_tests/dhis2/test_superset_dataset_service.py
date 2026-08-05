@@ -4,10 +4,39 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from superset.dhis2.superset_dataset_service import (
+    _build_metadata_wrapper_sql,
     _ensure_dhis2_extra,
     _is_metadata_wrapper_candidate,
     register_serving_table_as_superset_dataset,
 )
+
+
+def test_build_metadata_wrapper_sql_quotes_unquoted_ref() -> None:
+    # The bug: an unquoted serving_table_ref produced
+    # `SELECT * FROM dhis2_serving.sv_29_mal_pregnancy`, which the DHIS2 dialect
+    # parses as an API endpoint -> 404. It must be backtick-quoted.
+    assert (
+        _build_metadata_wrapper_sql("dhis2_serving.sv_29_mal_pregnancy")
+        == "SELECT * FROM `dhis2_serving`.`sv_29_mal_pregnancy`"
+    )
+
+
+def test_build_metadata_wrapper_sql_is_idempotent_for_backticked_ref() -> None:
+    assert (
+        _build_metadata_wrapper_sql("`dhis2_serving`.`sv_28_mal_prevention`")
+        == "SELECT * FROM `dhis2_serving`.`sv_28_mal_prevention`"
+    )
+
+
+def test_build_metadata_wrapper_sql_normalises_double_quoted_ref() -> None:
+    assert (
+        _build_metadata_wrapper_sql('"dhis2_serving"."sv_1_foo"')
+        == "SELECT * FROM `dhis2_serving`.`sv_1_foo`"
+    )
+
+
+def test_build_metadata_wrapper_sql_handles_bare_table() -> None:
+    assert _build_metadata_wrapper_sql("sv_1_foo") == "SELECT * FROM `sv_1_foo`"
 
 
 def test_ensure_dhis2_extra_updates_saved_dataset_display_name() -> None:

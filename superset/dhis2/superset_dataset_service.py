@@ -58,7 +58,7 @@ def _is_metadata_wrapper_candidate(
     if not getattr(candidate, "sql", None):
         return False
 
-    expected_sql = _normalized_sql(f"SELECT * FROM {serving_table_ref}")
+    expected_sql = _normalized_sql(_build_metadata_wrapper_sql(serving_table_ref))
     candidate_sql = _normalized_sql(getattr(candidate, "sql", None))
     candidate_serving_ref = str(extra.get("dhis2_serving_table_ref") or "").strip()
     return candidate_sql == expected_sql or candidate_serving_ref == serving_table_ref
@@ -78,6 +78,26 @@ def _parse_table_ref(table_ref: str) -> tuple[str | None, str]:
         table_name = table_name.strip('"').strip("`")
         return schema, table_name
     return None, table_ref.strip('"').strip("`")
+
+
+def _build_metadata_wrapper_sql(serving_table_ref: str) -> str:
+    """Build the wrapper ``SELECT`` with consistently backtick-quoted identifiers.
+
+    The generated SQL is executed through the DHIS2 staged-local dialect, which
+    routes ``SELECT * FROM `schema`.`table``` to the ClickHouse serving
+    database.  If the identifiers are left *unquoted* (``schema.table``) the
+    dialect instead parses the schema as an API endpoint and 404s — so a
+    wrapper built from an unquoted ``serving_table_ref`` silently fails to load
+    any data.  Historically the SQL was string-interpolated from the raw
+    ``serving_table_ref`` whose quoting depended on the caller, which produced
+    both working (quoted) and broken (unquoted) wrappers.  Normalising here via
+    :func:`_parse_table_ref` makes the wrapper SQL deterministic regardless of
+    how the caller quoted the reference.
+    """
+    schema, table_name = _parse_table_ref(serving_table_ref)
+    if schema:
+        return f"SELECT * FROM `{schema}`.`{table_name}`"
+    return f"SELECT * FROM `{table_name}`"
 
 
 def _get_staged_local_candidates(dataset_id: int, database_id: int | None = None) -> list[Any]:
@@ -135,7 +155,7 @@ def register_metadata_dataset_as_superset_dataset(
         effective_database_id = source_database_id
         effective_database = source_db
 
-    metadata_sql = f"SELECT * FROM {serving_table_ref}"
+    metadata_sql = _build_metadata_wrapper_sql(serving_table_ref)
 
     existing = None
     stale_metadata_records: list[Any] = []
