@@ -196,6 +196,7 @@ import {
   resolveQueryMetricColumnName,
 } from './loaderColumns';
 import { sanitizeDHIS2ColumnName } from '../../features/datasets/AddDataset/DHIS2ParameterBuilder/sanitize';
+import { resolveDhis2PeriodColumn } from './periodColumnResolver';
 import ugandaGeoJson from '../../../plugins/legacy-plugin-chart-country-map/src/countries/uganda.geojson';
 
 /* eslint-disable theme-colors/no-literal-colors */
@@ -2750,23 +2751,16 @@ function DHIS2Map({
   // the slider recolours the map without a re-query.
   const resolvedPeriodColumn = useMemo(() => {
     if (!showPeriodSlider || !data.length) return undefined;
-    const keys = Object.keys(data[0]);
-    const direct = periodColumns.find(col => keys.includes(col));
-    if (direct) return direct;
-    const bySanitized = periodColumns
-      .map(col => sanitizeDHIS2ColumnName(String(col || '')))
-      .find(Boolean);
-    if (bySanitized) {
-      const hit = keys.find(
-        key => sanitizeDHIS2ColumnName(String(key)) === bySanitized,
-      );
-      if (hit) return hit;
-    }
-    return keys.find(key => {
-      const normalized = sanitizeDHIS2ColumnName(String(key));
-      return normalized === 'period' || normalized.includes('period');
-    });
-  }, [showPeriodSlider, data, periodColumns]);
+    // Marker-driven resolution: prefer the column explicitly keyed as the
+    // primary period (dhis2_period_key === 'period'), never the blank
+    // `period_variant` hierarchy helper. Deterministic regardless of column
+    // order or the data-row load race — see periodColumnResolver.ts.
+    return resolveDhis2PeriodColumn(
+      Object.keys(data[0]),
+      datasourceColumns,
+      periodColumns,
+    );
+  }, [showPeriodSlider, data, periodColumns, datasourceColumns]);
 
   const orderedPeriods = useMemo(() => {
     if (!resolvedPeriodColumn) return [] as string[];
