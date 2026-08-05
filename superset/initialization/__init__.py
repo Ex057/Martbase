@@ -754,11 +754,32 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
 
         # Bring existing DHIS2 staging/serving tables up-to-date with the
         # current code without any data loss or table rebuilds.
-        try:
-            from superset.dhis2.backfill import run_compatibility_backfill  # pylint: disable=import-outside-toplevel
-            run_compatibility_backfill()
-        except Exception:  # pylint: disable=broad-except
-            logger.warning("DHIS2 compat backfill failed — non-fatal", exc_info=True)
+        #
+        # This runs on EVERY app init.  Its role-repair / recover-missing steps
+        # re-register and de-duplicate DHIS2 metadata wrappers, and when
+        # duplicate datasets exist (e.g. after a dataset was recreated a few
+        # times) the SqlaTable-delete cascade can drop a live dataset's staged
+        # row — i.e. a dataset "disappears" from the list after a restart.
+        # Set DHIS2_DISABLE_STARTUP_BACKFILL=True (superset_config.py) or the
+        # env var of the same name to skip it once your datasets are stable.
+        _skip_backfill = bool(
+            self.config.get("DHIS2_DISABLE_STARTUP_BACKFILL")
+        ) or os.environ.get("DHIS2_DISABLE_STARTUP_BACKFILL", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        if _skip_backfill:
+            logger.info(
+                "DHIS2 compat backfill skipped (DHIS2_DISABLE_STARTUP_BACKFILL set)"
+            )
+        else:
+            try:
+                from superset.dhis2.backfill import run_compatibility_backfill  # pylint: disable=import-outside-toplevel
+                run_compatibility_backfill()
+            except Exception:  # pylint: disable=broad-except
+                logger.warning("DHIS2 compat backfill failed — non-fatal", exc_info=True)
 
     def check_secret_key(self) -> None:
         def log_default_secret_key_warning() -> None:
