@@ -30,6 +30,8 @@ export type PortalLayoutSettings = {
   cardBorderColor?: string;
   strongBorderColor?: string;
   heroBackground?: string;
+  /** Any CSS background value for the whole page, gradients included. */
+  pageBackground?: string;
   radiusMd?: string;
   radiusLg?: string;
   blockGap?: string;

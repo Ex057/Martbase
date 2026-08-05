@@ -747,22 +747,22 @@ export function AppGlobalStyles() {
         }
 
         /*
-          antd styles the toast panel via
-          `.ant-message .ant-message-notice-wrapper .ant-message-notice-content`
-          — three classes — with `background: colorBgElevated` (white). A
-          single-class override lost the background to that rule while still
-          applying its own text colour, which is how every toast in the app
-          ended up white-on-white.
+          antd styles the toast panel with a three-class selector
+          (.ant-message .ant-message-notice-wrapper .ant-message-notice-content)
+          setting background to colorBgElevated, i.e. white. The override here
+          used to be a single class, so it lost the background to antd while
+          still applying its own text colour — which is how every toast in the
+          app ended up white-on-white.
 
           The repeated class is deliberate: it takes this to four classes, one
           more than antd, so it wins outright. Matching antd's three would only
-          tie, and cssinjs injects its <style> when the first message renders —
-          i.e. after this Global block — so a tie would go to antd. Repeating
+          tie, and cssinjs injects its style tag when the first message renders
+          — i.e. after this Global block — so a tie would go to antd. Repeating
           the content class rather than naming antd's wrapper also keeps this
           working if that internal wrapper element ever changes.
 
           Text colour is inherited by the icon/content wrappers, and antd's
-          per-variant `.anticon` rules are more specific, so success/error/
+          per-variant .anticon rules are more specific, so success, error and
           warning icons keep their colour.
         */
         .ant-message

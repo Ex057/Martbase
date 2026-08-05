@@ -1666,7 +1666,20 @@ def dataset_columns_payload(columns: list[dict[str, Any]]) -> list[dict[str, Any
             except Exception:  # pylint: disable=broad-except
                 extra = {}
 
-        is_indicator = extra.get(_DHIS2_INDICATOR_EXTRA_KEY) is True
+        # Resilient indicator detection: the boolean marker
+        # (dhis2_is_indicator) is written together with dhis2_variable_type
+        # by _build_variable_column_extra, but it can drift/be wiped on a
+        # dataset rebuild or metadata refresh.  If it drifts and we relied on
+        # it alone, an indicator (a proportion/rate) would fall through to
+        # SUM aggregation — summing percentages across the org-unit hierarchy
+        # yields nonsense (e.g. 40 facilities x ~70% = ~2,800%).  Treat the
+        # column as an indicator when EITHER marker says so, using the same
+        # type set that _build_variable_column_extra uses when it first sets
+        # the markers.
+        is_indicator = extra.get(_DHIS2_INDICATOR_EXTRA_KEY) is True or (
+            _normalize_variable_type(extra.get("dhis2_variable_type"))
+            in {"indicator", "indicators", "programindicator", "programindicators"}
+        )
         is_numeric = column["type"] in ("FLOAT", "INTEGER", "NUMBER")
 
         if is_numeric:

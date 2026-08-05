@@ -2071,18 +2071,23 @@ class PublicPageRestApi(BaseApi):
                     include_admin=not public_context,
                 )
                 if serialized_background_asset:
+                    # When a block points at a media asset, that asset is the
+                    # source of truth for the rendered URL. This previously
+                    # fell back to any existing backgroundImageUrl first, which
+                    # meant a URL written by an earlier save always won and the
+                    # background could never be changed to a different asset.
                     settings = {
                         **settings,
                         "background_asset_ref": {"id": background_asset.id},
                         "backgroundAssetRef": {"id": background_asset.id},
                         "background_asset_id": background_asset.id,
                         "backgroundAssetId": background_asset.id,
-                        "backgroundImageUrl": settings.get("backgroundImageUrl")
-                        or settings.get("background_image_url")
-                        or serialized_background_asset["download_url"],
-                        "background_image_url": settings.get("background_image_url")
-                        or settings.get("backgroundImageUrl")
-                        or serialized_background_asset["download_url"],
+                        "backgroundImageUrl": serialized_background_asset[
+                            "download_url"
+                        ],
+                        "background_image_url": serialized_background_asset[
+                            "download_url"
+                        ],
                     }
             elif public_context:
                 settings = {

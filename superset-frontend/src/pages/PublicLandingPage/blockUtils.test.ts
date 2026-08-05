@@ -24,10 +24,86 @@ import {
   createReusableReferenceBlock,
   detachReusableBlockByUid,
   insertBlocksRelative,
+  normalizeBlocks,
   setColumnsBlockTemplateByUid,
   splitBlockIntoColumnsByUid,
 } from './blockUtils';
 import type { PortalReusableBlock } from './types';
+
+/*
+ * A block's background comes from either a media asset or a typed-in URL, and
+ * the asset wins. The save payload used to carry both: the server writes the
+ * selected asset's URL into settings when it serialises a page, and the
+ * normaliser then wrote that URL straight back on the next save. It was
+ * therefore never empty again, so the server's asset lookup could never replace
+ * it — the picker showed the newly chosen asset while the page went on
+ * rendering the old one. These pin the behaviour that fixes it.
+ */
+describe('normalizeBlocks background persistence', () => {
+  const blockWith = (settings: Record<string, any>, styles = {}) => {
+    const block = createEmptyBlock('section');
+    block.settings = { ...block.settings, ...settings };
+    block.styles = { ...block.styles, ...styles };
+    return block;
+  };
+
+  test('drops a stale image URL when the block points at an asset', () => {
+    const [normalized] = normalizeBlocks([
+      blockWith({
+        background_asset_ref: { id: 42 },
+        backgroundImageUrl: '/api/v1/public_page/assets/7/download',
+        background_image_url: '/api/v1/public_page/assets/7/download',
+      }),
+    ]);
+
+    expect(normalized.settings.background_asset_id).toBe(42);
+    expect(normalized.settings.backgroundImageUrl).toBeUndefined();
+    expect(normalized.settings.background_image_url).toBeUndefined();
+  });
+
+  test('does not resurrect an asset URL from styles', () => {
+    const [normalized] = normalizeBlocks([
+      blockWith(
+        { backgroundAssetId: 9 },
+        { backgroundImage: 'url(/api/v1/public_page/assets/7/download)' },
+      ),
+    ]);
+
+    expect(normalized.settings.backgroundImageUrl).toBeUndefined();
+  });
+
+  test('keeps a typed-in URL when there is no asset', () => {
+    const [normalized] = normalizeBlocks([
+      blockWith({ backgroundImageUrl: 'https://example.com/hero.png' }),
+    ]);
+
+    expect(normalized.settings.backgroundImageUrl).toBe(
+      'https://example.com/hero.png',
+    );
+    expect(normalized.settings.background_image_url).toBe(
+      'https://example.com/hero.png',
+    );
+  });
+
+  test('still promotes a styles background image when there is no asset', () => {
+    const [normalized] = normalizeBlocks([
+      blockWith({}, { backgroundImage: 'https://example.com/from-styles.png' }),
+    ]);
+
+    expect(normalized.settings.backgroundImageUrl).toBe(
+      'https://example.com/from-styles.png',
+    );
+  });
+
+  test('keeps the asset reference in all four spellings the API accepts', () => {
+    const [normalized] = normalizeBlocks([blockWith({ backgroundAssetId: 3 })]);
+
+    expect(normalized.settings.background_asset_ref).toEqual({ id: 3 });
+    expect(normalized.settings.backgroundAssetRef).toEqual({ id: 3 });
+    expect(normalized.settings.background_asset_id).toBe(3);
+    expect(normalized.settings.backgroundAssetId).toBe(3);
+  });
+});
 
 test('insertBlocksRelative preserves multi-block starter pattern order', () => {
   const anchor = createEmptyBlock('section');

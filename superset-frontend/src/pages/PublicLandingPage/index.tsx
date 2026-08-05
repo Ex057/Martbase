@@ -757,6 +757,16 @@ export default function PublicLandingPage() {
     brandingAppearance.heroBackground ||
     publicThemeConfig.heroBackground ||
     cardBackground;
+  /*
+    The page background. Applied through the `background` shorthand on
+    PageShell, so this accepts any CSS background value — a gradient works
+    without further changes. Empty falls back to the built-in flat colours.
+  */
+  const pageBackground =
+    data?.portal_layout.config.pageBackground ||
+    brandingAppearance.pageBackground ||
+    publicThemeConfig.pageBackground ||
+    '';
   const shadowCard =
     data?.portal_layout.config.shadowCard ||
     surfacesAppearance.shadowCard ||
@@ -1338,7 +1348,8 @@ export default function PublicLandingPage() {
   const shellThemeStyle = {
     '--portal-accent': accentColor,
     '--portal-secondary': secondaryColor,
-    '--portal-bg': visualMode === 'dark' ? '#0A1929' : '#F5F7FA',
+    '--portal-bg':
+      pageBackground || (visualMode === 'dark' ? '#0A1929' : '#F5F7FA'),
     '--portal-bg-elevated': visualMode === 'dark' ? '#132F4C' : '#EEF2F7',
     '--portal-wash':
       visualMode === 'dark'

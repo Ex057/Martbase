@@ -30,6 +30,13 @@ export type ChartLegendPreset =
   | 'hidden';
 export type ChartEmbedAccessMode = 'public' | 'authenticated';
 
+/**
+ * How long to keep the loading overlay up before revealing the frame anyway.
+ * Generous, because a slow chart should still show its overlay — this only
+ * catches iframes that never fire `onLoad` at all.
+ */
+const FRAME_LOAD_TIMEOUT_MS = 20000;
+
 const MAP_VIZ_TYPES = new Set([
   'mapbox',
   'deck_polygon',
@@ -485,6 +492,19 @@ export default function PublicChartContainer({
 
   useEffect(() => {
     setIsLoading(true);
+    /*
+      The overlay is opaque and covers the whole chart, and `onLoad` is its only
+      other exit. An iframe that errors, is blocked, or is deferred by
+      loading="lazy" and never fires it would leave the chart permanently
+      hidden behind "Loading analytics…". Time out so the chart is revealed
+      either way — a chart that failed to load shows its own error, which is
+      more use than a stuck overlay.
+    */
+    const timeout = window.setTimeout(
+      () => setIsLoading(false),
+      FRAME_LOAD_TIMEOUT_MS,
+    );
+    return () => window.clearTimeout(timeout);
   }, [resolvedUrl]);
 
   return (

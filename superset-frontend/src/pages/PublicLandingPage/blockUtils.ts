@@ -156,13 +156,40 @@ function normalizeBlockPersistenceSettings(
   styles: Record<string, any> = {},
 ) {
   const nextSettings = { ...settings };
-  const backgroundImageUrl =
-    meaningfulString(nextSettings.backgroundImageUrl) ||
-    meaningfulString(nextSettings.background_image_url) ||
-    meaningfulString(styles.backgroundImage);
-  if (backgroundImageUrl) {
-    nextSettings.backgroundImageUrl = backgroundImageUrl;
-    nextSettings.background_image_url = backgroundImageUrl;
+
+  const backgroundAssetId =
+    nextSettings.background_asset_ref?.id ||
+    nextSettings.backgroundAssetRef?.id ||
+    nextSettings.background_asset_id ||
+    nextSettings.backgroundAssetId;
+
+  if (backgroundAssetId) {
+    nextSettings.background_asset_ref = { id: backgroundAssetId };
+    nextSettings.backgroundAssetRef = { id: backgroundAssetId };
+    nextSettings.background_asset_id = backgroundAssetId;
+    nextSettings.backgroundAssetId = backgroundAssetId;
+  }
+
+  /*
+    A block's background comes from either a media asset or a typed-in URL, and
+    the asset wins. When an asset is selected we must DROP any stored URL:
+    keeping it used to re-persist the previously-rendered image on every save,
+    so the URL was never empty again and the server's asset lookup could never
+    replace it — the picker showed the new asset while the page kept rendering
+    the old one. The server refills these keys from the asset on read.
+  */
+  if (backgroundAssetId) {
+    delete nextSettings.backgroundImageUrl;
+    delete nextSettings.background_image_url;
+  } else {
+    const backgroundImageUrl =
+      meaningfulString(nextSettings.backgroundImageUrl) ||
+      meaningfulString(nextSettings.background_image_url) ||
+      meaningfulString(styles.backgroundImage);
+    if (backgroundImageUrl) {
+      nextSettings.backgroundImageUrl = backgroundImageUrl;
+      nextSettings.background_image_url = backgroundImageUrl;
+    }
   }
 
   const backgroundOpacity =
@@ -171,18 +198,6 @@ function normalizeBlockPersistenceSettings(
   if (backgroundOpacity !== undefined && backgroundOpacity !== null) {
     nextSettings.backgroundImageOpacity = backgroundOpacity;
     nextSettings.background_image_opacity = backgroundOpacity;
-  }
-
-  const backgroundAssetId =
-    nextSettings.background_asset_ref?.id ||
-    nextSettings.backgroundAssetRef?.id ||
-    nextSettings.background_asset_id ||
-    nextSettings.backgroundAssetId;
-  if (backgroundAssetId) {
-    nextSettings.background_asset_ref = { id: backgroundAssetId };
-    nextSettings.backgroundAssetRef = { id: backgroundAssetId };
-    nextSettings.background_asset_id = backgroundAssetId;
-    nextSettings.backgroundAssetId = backgroundAssetId;
   }
 
   const backgroundSize =

@@ -147,6 +147,7 @@ export interface PublicPageThemeConfig {
   strongBorderColor?: string;
   /** Hero background surface when no image is present */
   heroBackground?: string;
+  pageBackground?: string;
   /** Medium radius token */
   radiusMd?: string;
   /** Large radius token */

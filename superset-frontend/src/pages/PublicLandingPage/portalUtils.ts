@@ -273,8 +273,19 @@ export function normalizeDraftPage(page: PortalPage): PortalPage {
       page.og_image_asset_id ?? page.og_image_asset?.id ?? null,
     seo_title: page.seo_title?.trim() || '',
     seo_description: page.seo_description?.trim() || '',
-    og_image_url: page.og_image_url?.trim() || '',
-    featured_image_url: page.featured_image_url?.trim() || '',
+    /*
+      Only send the raw URL when there is no asset backing it. The server
+      derives the URL from the asset when one is set, and re-sending the old
+      string was how a cleared featured/OG image kept rendering: the asset id
+      went null, so the server fell back to this stale value.
+    */
+    og_image_url: (page.og_image_asset_id ?? page.og_image_asset?.id)
+      ? ''
+      : page.og_image_url?.trim() || '',
+    featured_image_url: (page.featured_image_asset_id ??
+      page.featured_image_asset?.id)
+      ? ''
+      : page.featured_image_url?.trim() || '',
     scheduled_publish_at: page.scheduled_publish_at || null,
     settings: { ...(page.settings || {}) },
     blocks: normalizeBlocks(page.blocks || []),

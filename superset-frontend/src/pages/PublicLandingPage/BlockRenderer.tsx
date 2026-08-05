@@ -461,6 +461,17 @@ const SurfaceCard = styled.div`
   );
 `;
 
+/**
+ * Holds an unconfigured chart/dashboard block at the height its configured
+ * counterpart would take, so a half-filled grid row does not read as a gap.
+ */
+const EmptyFrame = styled.div<{ $height: number }>`
+  min-height: ${({ $height }) => $height}px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
 const DashboardDirectoryGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -859,15 +870,22 @@ function applyBackgroundImageOpacity(
   return `linear-gradient(rgba(var(--portal-hero-overlay-rgb, 255, 255, 255), ${overlayAlpha}), rgba(var(--portal-hero-overlay-rgb, 255, 255, 255), ${overlayAlpha})), ${backgroundImage}`;
 }
 
+/** The media asset a block's background points at, if any. */
+function backgroundAssetId(block: PortalPageBlock): number | string | undefined {
+  return (
+    block.settings?.background_asset_ref?.id ||
+    block.settings?.backgroundAssetRef?.id ||
+    block.settings?.background_asset_id ||
+    block.settings?.backgroundAssetId ||
+    undefined
+  );
+}
+
 function backgroundAssetUrl(
   block: PortalPageBlock,
   mediaAssets: PortalMediaAsset[],
 ): string | undefined {
-  const assetId =
-    block.settings?.background_asset_ref?.id ||
-    block.settings?.backgroundAssetRef?.id ||
-    block.settings?.background_asset_id ||
-    block.settings?.backgroundAssetId;
+  const assetId = backgroundAssetId(block);
   if (!assetId) {
     return undefined;
   }
@@ -918,11 +936,22 @@ function blockStyle(
   const pageFeaturedBackgroundImage = block.settings?.usePageFeaturedImage
     ? cssBackgroundImage(page?.featured_image_url)
     : undefined;
-  const backgroundImage =
-    normalizedStyles.backgroundImage ||
-    assetBackgroundImage ||
-    settingsBackgroundImage ||
-    pageFeaturedBackgroundImage;
+  /*
+    An explicitly chosen media asset is authoritative. Previously a typed-in
+    URL in `styles.backgroundImage` ranked first, and since the server writes
+    the selected asset's URL into settings automatically, any stored URL
+    shadowed every later asset choice — the background looked unchangeable.
+
+    When an asset is set we deliberately ignore `styles.backgroundImage`, which
+    may still hold a stale URL on pages saved before this fix. On the public
+    page `mediaAssets` is not available, so the asset resolves through the URL
+    the server filled in from that same asset.
+  */
+  const backgroundImage = backgroundAssetId(block)
+    ? assetBackgroundImage || settingsBackgroundImage
+    : normalizedStyles.backgroundImage ||
+      settingsBackgroundImage ||
+      pageFeaturedBackgroundImage;
   const backgroundImageWithOpacity = applyBackgroundImageOpacity(
     backgroundImage,
     block.settings?.backgroundImageOpacity ??
@@ -2085,8 +2114,20 @@ export function RenderBlockTree({
             id={block.settings?.anchor || undefined}
             className={className}
             style={{
+              /*
+                `background` is a shorthand and resets background-image to none.
+                Applying it after `...style` meant a section with this field set
+                could never show a background image. Fall back to the longhand
+                colour when the block also has an image, and only use the
+                shorthand (which may carry a gradient) when it does not.
+              */
+              ...(block.settings?.background && !style.backgroundImage
+                ? { background: block.settings.background }
+                : {}),
               ...style,
-              background: block.settings?.background || undefined,
+              ...(block.settings?.background && style.backgroundImage
+                ? { backgroundColor: block.settings.background }
+                : {}),
               padding: block.styles?.padding || undefined,
               marginTop: sectionTopGap,
               marginBottom: sectionGap,
@@ -2321,8 +2362,12 @@ export function RenderBlockTree({
         );
       }
       case 'columns': {
+        // `columns` is what the Auto Generate templates write; `columnCount` is
+        // what the properties panel writes. Both must be honoured — reading
+        // only one silently fell back to the child count.
         const columnCount =
           Number(block.settings?.columnCount) ||
+          Number(block.settings?.columns) ||
           Math.max(block.children.length, 1);
         const columnSpan =
           columnCount > 1 ? Math.max(Math.floor(12 / columnCount), 1) : 12;
@@ -3096,9 +3141,19 @@ export function RenderBlockTree({
                 );
               })()
             ) : (
-              <Empty
-                description={t('Choose a public chart to render this block.')}
-              />
+              /*
+                Match the height a resolved chart would occupy. Without this the
+                empty state is only as tall as its own text, and because the
+                grid cell stretches to the tallest sibling, an unconfigured
+                chart next to a configured one reads as a large blank gap —
+                which is exactly what the Auto Generate templates produce, since
+                every chart they insert starts with no chart_id.
+              */
+              <EmptyFrame $height={blockFrameHeight(block, 360)}>
+                <Empty
+                  description={t('Choose a public chart to render this block.')}
+                />
+              </EmptyFrame>
             )}
           </SurfaceCard>
         );

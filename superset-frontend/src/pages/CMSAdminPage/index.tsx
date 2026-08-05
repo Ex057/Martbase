@@ -38,6 +38,7 @@ import {
   FilterOutlined,
   FormatPainterOutlined,
   GlobalOutlined,
+  HomeOutlined,
   LayoutOutlined,
   MenuOutlined,
   PlusOutlined,
@@ -55,6 +56,7 @@ import {
   Empty,
   Input,
   InputNumber,
+  Popconfirm,
   Result,
   Select,
   Space,
@@ -836,6 +838,7 @@ function normalizePortalLayoutConfig(config?: Record<string, any> | null): Recor
     strongBorderColor:
       config?.strongBorderColor || branding.strongBorderColor || '',
     heroBackground: config?.heroBackground || branding.heroBackground || '',
+    pageBackground: config?.pageBackground || branding.pageBackground || '',
     bodyFontFamily: config?.bodyFontFamily || typography.bodyFontFamily || '',
     headingFontFamily:
       config?.headingFontFamily || typography.headingFontFamily || '',
@@ -872,6 +875,7 @@ function buildPortalAppearanceConfig(layout: Record<string, any>) {
       cardBorderColor: layout.cardBorderColor || '',
       strongBorderColor: layout.strongBorderColor || '',
       heroBackground: layout.heroBackground || '',
+      pageBackground: layout.pageBackground || '',
     },
     typography: {
       bodyFontFamily: layout.bodyFontFamily || '',
@@ -1450,6 +1454,49 @@ export default function CMSAdminPage() {
     }
   }
 
+  /**
+   * Make `page` the portal's landing page.
+   *
+   * The backend only keeps `is_homepage` on a page that is both published and
+   * publicly visible (`_page_is_publicly_viewable`), and it clears the flag
+   * from whichever page held it before — so there is nothing to unset first.
+   * Publishing here is therefore part of the operation, not a side effect, and
+   * the confirmation says so.
+   *
+   * The publish endpoint merges the request body onto the page's own
+   * serialized state, so this minimal payload cannot disturb the page content.
+   */
+  async function setLandingPage(page: PortalPageSummary) {
+    if (!page.id) {
+      return;
+    }
+    setSavingPage(true);
+    try {
+      const response = await SupersetClient.post({
+        endpoint: `/api/v1/public_page/admin/pages/${page.id}/publish`,
+        jsonPayload: {
+          ...buildPublishStatePayload(page, true),
+          is_homepage: true,
+        },
+      });
+      const savedPage = response.json?.result as PortalPage;
+      await loadBootstrap();
+      if (isMountedRef.current) {
+        messageApi.success(
+          t('“%s” is now the landing page.', savedPage.title || page.title),
+        );
+      }
+    } catch (caughtError) {
+      messageApi.error(
+        caughtError instanceof Error
+          ? caughtError.message
+          : t('Failed to set the landing page.'),
+      );
+    } finally {
+      setSavingPage(false);
+    }
+  }
+
   async function archivePage() {
     if (!draftPage?.id) {
       return;
@@ -1656,6 +1703,7 @@ export default function CMSAdminPage() {
           cardBorderColor: portalLayout.cardBorderColor || '',
           strongBorderColor: portalLayout.strongBorderColor || '',
           heroBackground: portalLayout.heroBackground || '',
+          pageBackground: portalLayout.pageBackground || '',
           radiusMd: portalLayout.radiusMd || '',
           radiusLg: portalLayout.radiusLg || '',
           blockGap: portalLayout.blockGap || '',
@@ -3063,6 +3111,56 @@ export default function CMSAdminPage() {
                   >
                     {t('Preview')}
                   </Button>
+                  {(() => {
+                    /*
+                      A landing page must be public and published. We will
+                      publish a draft as part of this action, but we will not
+                      quietly turn an `authenticated` page into a public one —
+                      that is a visibility decision the admin has to make
+                      deliberately.
+                    */
+                    const isArchived = page.status === 'archived';
+                    const needsPublicVisibility =
+                      page.visibility === 'authenticated';
+                    if (page.is_homepage || isArchived) {
+                      return null;
+                    }
+                    return (
+                      <Popconfirm
+                        title={t('Set as landing page')}
+                        description={
+                          page.is_published
+                            ? t(
+                                'Visitors to the portal will land on this page instead of the current one.',
+                              )
+                            : t(
+                                'This will publish the page and make it the portal landing page.',
+                              )
+                        }
+                        okText={t('Set as landing page')}
+                        cancelText={t('Cancel')}
+                        disabled={needsPublicVisibility}
+                        onConfirm={() => setLandingPage(page)}
+                      >
+                        <Button
+                          size="small"
+                          icon={<HomeOutlined />}
+                          disabled={
+                            !page.id || savingPage || needsPublicVisibility
+                          }
+                          title={
+                            needsPublicVisibility
+                              ? t(
+                                  'Only a public page can be the landing page. Change this page to Public visibility first.',
+                                )
+                              : undefined
+                          }
+                        >
+                          {t('Set as landing')}
+                        </Button>
+                      </Popconfirm>
+                    );
+                  })()}
                   <Button
                     size="small"
                     icon={<CopyOutlined />}
@@ -4135,6 +4233,26 @@ export default function CMSAdminPage() {
                     }))
                   }
                 />
+              </FieldBlock>
+              <FieldBlock>
+                <FieldLabel>{t('Page Background')}</FieldLabel>
+                <Input
+                  value={portalLayout.pageBackground || ''}
+                  placeholder={t(
+                    'e.g. linear-gradient(180deg, #0f172a, #334155)',
+                  )}
+                  onChange={event =>
+                    setPortalLayout(previous => ({
+                      ...previous,
+                      pageBackground: event.target.value,
+                    }))
+                  }
+                />
+                <TinyMeta>
+                  {t(
+                    'Any CSS background value, including gradients. Cards, hero and footer paint their own opaque backgrounds over this — give those translucent colours if you want the gradient to show through.',
+                  )}
+                </TinyMeta>
               </FieldBlock>
             </FieldGrid>
             <FieldGrid>

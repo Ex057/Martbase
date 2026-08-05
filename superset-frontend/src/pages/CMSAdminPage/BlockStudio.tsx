@@ -126,7 +126,14 @@ const StudioRoot = styled.div`
 
 const StudioHeader = styled.header`
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  /*
+    minmax(0, auto) rather than auto on the outer columns: a grid item's
+    automatic minimum size is its content, so a long page title in the left
+    group would grow past its track and shunt the centred mode chips into the
+    right-hand group. Allowing the tracks to shrink below content lets the
+    children below ellipsise instead.
+  */
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto);
   align-items: center;
   height: 52px;
   padding: 0 16px;
@@ -139,6 +146,12 @@ const HeaderLeft = styled.div`
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+
+  /* Let the page picker give way rather than push the rest of the header. */
+  .ant-select {
+    min-width: 0;
+  }
 `;
 
 const HeaderCenter = styled.div`
@@ -146,12 +159,15 @@ const HeaderCenter = styled.div`
   align-items: center;
   justify-content: center;
   gap: 8px;
+  min-width: 0;
 `;
 
 const HeaderRight = styled.div`
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  justify-content: flex-end;
 `;
 
 const StudioWorkspace = styled.div<{ $leftCollapsed?: boolean }>`
@@ -4755,14 +4771,26 @@ export default function BlockStudio({
                   );
                   return asset?.asset_type === 'image';
                 })}
-                onChange={value =>
-                  updateSelectedBlockSettings({
-                    background_asset_ref: value ? { id: value } : null,
-                    backgroundAssetRef: value ? { id: value } : null,
-                    background_asset_id: value || null,
-                    backgroundAssetId: value || null,
-                  })
-                }
+                onChange={value => {
+                  /*
+                    Clear the URL fields as well. The server fills these in from
+                    the asset when it serialises the page, so a value left here
+                    is the PREVIOUS asset's URL — and it would shadow the newly
+                    picked one, both in the free-text field below and when
+                    rendering.
+                  */
+                  updateSelectedBlockStylesAndSettings(
+                    { backgroundImage: null },
+                    {
+                      background_asset_ref: value ? { id: value } : null,
+                      backgroundAssetRef: value ? { id: value } : null,
+                      background_asset_id: value || null,
+                      backgroundAssetId: value || null,
+                      backgroundImageUrl: null,
+                      background_image_url: null,
+                    },
+                  );
+                }}
               />
               <TinyMeta>
                 {t(
@@ -5522,32 +5550,45 @@ export default function BlockStudio({
     const template = AUTO_GENERATE_TEMPLATES.find(t => t.id === templateId);
     if (!template || !draftPage) return;
 
-    const generateBlockWithUid = (blockDef: any): PortalPageBlock => {
+    const generateBlockWithUid = (
+      blockDef: any,
+      sortOrder: number,
+    ): PortalPageBlock => {
       const uid = `${blockDef.block_type}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const block: PortalPageBlock = {
         uid,
         block_type: blockDef.block_type,
         slot: blockDef.slot || 'content',
-        sort_order: 0,
+        // Every generated block used to be sort_order 0, which left the order
+        // within a slot undefined once the server round-tripped them.
+        sort_order: sortOrder,
         is_container: isContainerBlock(blockDef.block_type),
         content: blockDef.content || {},
         settings: blockDef.settings || {},
         styles: blockDef.styles || {},
         metadata: {},
         children: blockDef.children
-          ? blockDef.children.map((child: any) => generateBlockWithUid(child))
+          ? blockDef.children.map((child: any, childIndex: number) =>
+              generateBlockWithUid(child, childIndex),
+            )
           : [],
       };
       return block;
     };
 
-    const newBlocks = template.blocks.map((blockDef: any) =>
-      generateBlockWithUid(blockDef),
+    // Append after whatever is already on the page, keeping existing order.
+    const existingBlocks = draftPage.blocks || [];
+    const nextSortOrder = existingBlocks.reduce(
+      (highest, existing) => Math.max(highest, Number(existing.sort_order) || 0),
+      -1,
+    );
+    const newBlocks = template.blocks.map((blockDef: any, index: number) =>
+      generateBlockWithUid(blockDef, nextSortOrder + 1 + index),
     );
 
     const updatedPage = {
       ...draftPage,
-      blocks: [...(draftPage.blocks || []), ...newBlocks],
+      blocks: [...existingBlocks, ...newBlocks],
     };
     onChangeDraftPage(updatedPage);
   }
@@ -6043,21 +6084,28 @@ export default function BlockStudio({
           )}
         </HeaderLeft>
         <HeaderCenter>
+          {/*
+            Labelled, not icon-only: these two chips were otherwise visually
+            identical apart from the glyph, with the mode readable only from a
+            hover tooltip.
+          */}
           <StudioModeChip
             type="button"
             $active={canvasMode === 'compose'}
             onClick={() => setCanvasMode('compose')}
             title={t('Edit mode')}
+            aria-pressed={canvasMode === 'compose'}
           >
-            <EditOutlined />
+            <EditOutlined /> {t('Edit')}
           </StudioModeChip>
           <StudioModeChip
             type="button"
             $active={canvasMode === 'preview'}
             onClick={() => setCanvasMode('preview')}
             title={t('Preview mode')}
+            aria-pressed={canvasMode === 'preview'}
           >
-            <EyeOutlined />
+            <EyeOutlined /> {t('Preview')}
           </StudioModeChip>
           <span style={{ width: 12 }} />
           {PREVIEW_VIEWPORTS.map(viewport => (

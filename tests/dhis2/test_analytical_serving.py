@@ -2101,6 +2101,84 @@ def test_dataset_columns_payload_indicator_uses_bare_column():
     assert extra["dhis2_default_agg"] == "NONE"
 
 
+def test_dataset_columns_payload_indicator_detected_via_variable_type_when_marker_drifts():
+    """Regression: the dhis2_is_indicator boolean can be lost on a dataset
+    rebuild/metadata refresh while dhis2_variable_type survives.  The guard
+    must still classify the column as an indicator (bare column, NONE agg) —
+    otherwise a proportion would be SUMmed across org units (e.g. facility
+    percentages summed into a district → ~2,800%)."""
+    import json
+    from superset.dhis2.analytical_serving import dataset_columns_payload
+
+    # Note: NO dhis2_is_indicator key — only the surviving variable_type.
+    col = _dcp_col(
+        "mal_proportion_receiving_llins",
+        extra={"dhis2_variable_type": "indicator"},
+    )
+    result = dataset_columns_payload([col])
+    expr = result[0]["expression"]
+    assert expr == "`mal_proportion_receiving_llins`", f"Expected bare col, got: {expr}"
+    assert "SUM" not in expr and "AVG" not in expr
+    assert json.loads(result[0]["extra"])["dhis2_default_agg"] == "NONE"
+
+
+def test_dataset_columns_payload_program_indicator_variable_type_is_not_summed():
+    """programIndicator is also a rate/proportion type — never SUM."""
+    import json
+    from superset.dhis2.analytical_serving import dataset_columns_payload
+
+    col = _dcp_col("pi_something", extra={"dhis2_variable_type": "programIndicator"})
+    result = dataset_columns_payload([col])
+    assert result[0]["expression"] == "`pi_something`"
+    assert json.loads(result[0]["extra"])["dhis2_default_agg"] == "NONE"
+
+
+def test_dataset_columns_payload_data_element_variable_type_still_sums():
+    """The resilient indicator check must NOT misclassify data elements:
+    a dhis2_variable_type of 'dataElement' still gets SUM."""
+    import json
+    from superset.dhis2.analytical_serving import dataset_columns_payload
+
+    col = _dcp_col("anc_1st_visit", extra={"dhis2_variable_type": "dataElement"})
+    result = dataset_columns_payload([col])
+    assert result[0]["expression"] == "SUM(`anc_1st_visit`)"
+    assert json.loads(result[0]["extra"])["dhis2_default_agg"] == "SUM"
+
+
+def test_dataset_columns_payload_mixed_indicators_and_data_elements():
+    """A dataset mixing indicators and data elements (the real DHIS2 case)
+    must classify each column independently in the same call — indicators
+    bare/NONE, data elements SUM — regardless of which marker each carries."""
+    import json
+    from superset.dhis2.analytical_serving import dataset_columns_payload
+
+    cols = [
+        # data element via variable_type marker
+        _dcp_col("anc_1st_visit", extra={"dhis2_variable_type": "dataElement"}),
+        # indicator via variable_type marker only (boolean drifted away)
+        _dcp_col("mal_ipt2_coverage", extra={"dhis2_variable_type": "indicator"}),
+        # data element with no markers at all -> defaults to SUM
+        _dcp_col("babies_received_llin", "FLOAT"),
+        # indicator via the boolean marker
+        _dcp_col("incidence_rate", is_indicator=True),
+        # a dimension (string) -> no expression
+        _dcp_col("district_name", col_type="STRING"),
+    ]
+    by_name = {r["column_name"]: r for r in dataset_columns_payload(cols)}
+
+    # Data elements are summed …
+    assert by_name["anc_1st_visit"]["expression"] == "SUM(`anc_1st_visit`)"
+    assert by_name["babies_received_llin"]["expression"] == "SUM(`babies_received_llin`)"
+    # … indicators are never summed, in the very same payload …
+    assert by_name["mal_ipt2_coverage"]["expression"] == "`mal_ipt2_coverage`"
+    assert by_name["incidence_rate"]["expression"] == "`incidence_rate`"
+    # … and the dimension is expression-less.
+    assert by_name["district_name"].get("expression") is None
+
+    assert json.loads(by_name["mal_ipt2_coverage"]["extra"])["dhis2_default_agg"] == "NONE"
+    assert json.loads(by_name["anc_1st_visit"]["extra"])["dhis2_default_agg"] == "SUM"
+
+
 def test_dataset_columns_payload_string_has_no_expression():
     """Non-numeric columns are dimension-only: no expression, no default_agg."""
     import json

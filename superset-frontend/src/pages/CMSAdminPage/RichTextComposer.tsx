@@ -20,6 +20,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BoldOutlined,
+  FontColorsOutlined,
   ItalicOutlined,
   LinkOutlined,
   OrderedListOutlined,
@@ -28,7 +29,57 @@ import {
   UnorderedListOutlined,
 } from '@ant-design/icons';
 import { isProbablyHTML, sanitizeHtml, styled, t } from '@superset-ui/core';
-import { Button, Space } from 'antd';
+import { Button, Popover, Space } from 'antd';
+
+/**
+ * Palette offered for text colour. Deliberately a short, legible set rather
+ * than a full picker — page text needs to stay readable against the portal
+ * surfaces, and a custom value is still available underneath.
+ */
+const TEXT_COLORS: { label: string; value: string }[] = [
+  { label: t('Default'), value: '' },
+  { label: t('Ink'), value: '#0f172a' },
+  { label: t('Muted'), value: '#64748b' },
+  { label: t('Blue'), value: '#1d4ed8' },
+  { label: t('Teal'), value: '#0f766e' },
+  { label: t('Green'), value: '#15803d' },
+  { label: t('Amber'), value: '#b45309' },
+  { label: t('Red'), value: '#b91c1c' },
+  { label: t('Purple'), value: '#6d28d9' },
+  { label: t('White'), value: '#ffffff' },
+];
+
+const ColorSwatchGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(5, 24px);
+  gap: 8px;
+`;
+
+const ColorSwatch = styled.button<{ $color: string }>`
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: ${({ $color }) =>
+    $color ||
+    'linear-gradient(135deg, #ffffff 45%, #ef4444 45%, #ef4444 55%, #ffffff 55%)'};
+
+  &:hover {
+    outline: 2px solid rgba(29, 78, 216, 0.35);
+  }
+`;
+
+const CustomColorRow = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #475569;
+  cursor: pointer;
+`;
 
 const Composer = styled.div`
   display: flex;
@@ -153,7 +204,9 @@ export default function RichTextComposer({
   helperText,
 }: RichTextComposerProps) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const savedRangeRef = useRef<Range | null>(null);
   const [isFocused, setIsFocused] = useState(false);
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const normalizedValue = useMemo(() => toEditorHtml(value), [value]);
 
   useEffect(() => {
@@ -172,13 +225,69 @@ export default function RichTextComposer({
     onChange(sanitizeHtml(editorRef.current.innerHTML || ''));
   }
 
+  /**
+   * Remember where the caret/selection is inside the editor.
+   *
+   * Opening the colour popover or the native colour input moves focus out of
+   * the contentEditable, and the browser drops the selection with it — the
+   * command would then apply to nothing. The toolbar buttons avoid this by
+   * preventing mousedown, but the native input cannot, so we restore it.
+   */
+  function rememberSelection() {
+    const selection = window.getSelection();
+    if (
+      !selection ||
+      selection.rangeCount === 0 ||
+      !editorRef.current?.contains(selection.anchorNode)
+    ) {
+      return;
+    }
+    savedRangeRef.current = selection.getRangeAt(0).cloneRange();
+  }
+
+  function restoreSelection() {
+    const range = savedRangeRef.current;
+    if (!range || !editorRef.current?.contains(range.commonAncestorContainer)) {
+      return;
+    }
+    const selection = window.getSelection();
+    if (!selection) {
+      return;
+    }
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
   function runCommand(command: string, argument?: string) {
     if (readOnly || !editorRef.current) {
       return;
     }
     editorRef.current.focus();
+    restoreSelection();
     document.execCommand(command, false, argument);
     emitChange();
+  }
+
+  function applyTextColor(color: string) {
+    if (readOnly) {
+      return;
+    }
+    /*
+      styleWithCSS makes foreColor emit <span style="color:…"> rather than the
+      deprecated <font color> element. Both survive the HTML sanitiser (span
+      carries `style` on its whitelist, and `font` is on the xss default list),
+      but the inline style composes with the rest of the block's styling and
+      does not depend on a legacy element.
+    */
+    document.execCommand('styleWithCSS', false, 'true');
+    if (color) {
+      runCommand('foreColor', color);
+    } else {
+      // Clearing: removeFormat would also drop bold/italic, so re-apply the
+      // inherited colour instead.
+      runCommand('foreColor', 'inherit');
+    }
+    setColorPickerOpen(false);
   }
 
   function promptForLink() {
@@ -210,6 +319,57 @@ export default function RichTextComposer({
           <Button size="small" onClick={() => runCommand('strikeThrough')}>
             <StrikethroughOutlined />
           </Button>
+          <Popover
+            open={colorPickerOpen}
+            onOpenChange={open => {
+              if (open) {
+                rememberSelection();
+              }
+              setColorPickerOpen(open);
+            }}
+            trigger="click"
+            placement="bottom"
+            title={t('Text colour')}
+            content={
+              <div>
+                <ColorSwatchGrid>
+                  {TEXT_COLORS.map(color => (
+                    <ColorSwatch
+                      key={color.value || 'default'}
+                      type="button"
+                      $color={color.value}
+                      title={color.label}
+                      aria-label={color.label}
+                      /*
+                        Keep focus in the editor so the selection survives the
+                        click. The saved range is the real safety net (the
+                        native colour input below cannot preventDefault without
+                        blocking its own picker), but not blurring at all is
+                        cheaper and more reliable.
+                      */
+                      onMouseDown={event => event.preventDefault()}
+                      onClick={() => applyTextColor(color.value)}
+                    />
+                  ))}
+                </ColorSwatchGrid>
+                <CustomColorRow>
+                  {t('Custom')}
+                  <input
+                    type="color"
+                    onChange={event => applyTextColor(event.target.value)}
+                  />
+                </CustomColorRow>
+              </div>
+            }
+          >
+            <Button
+              size="small"
+              title={t('Text colour')}
+              onMouseDown={event => event.preventDefault()}
+            >
+              <FontColorsOutlined />
+            </Button>
+          </Popover>
           <Button
             size="small"
             onClick={() => runCommand('insertUnorderedList')}
