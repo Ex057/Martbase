@@ -1840,7 +1840,10 @@ def test_cleanup_linked_dhis2_staged_dataset_removes_local_tables_and_metadata(
         "superset.local_staging.engine_factory.get_active_staging_engine",
         return_value=duckdb_engine,
     )
+    count_result = mocker.MagicMock()
+    count_result.scalar.return_value = 0  # no OTHER SqlaTables link to it
     connection.execute.side_effect = [
+        count_result,
         select_result,
         mocker.MagicMock(),
         mocker.MagicMock(),
@@ -1857,6 +1860,40 @@ def test_cleanup_linked_dhis2_staged_dataset_removes_local_tables_and_metadata(
     assert staging_dataset_ref.staging_table_name == "ds_4_anc_coverage"
     assert any("DELETE FROM staged_datasets" in sql for sql in executed_sql)
     assert any("DELETE FROM dhis2_staged_datasets" in sql for sql in executed_sql)
+
+
+def test_cleanup_linked_dhis2_staged_dataset_kept_when_other_tables_still_link(
+    mocker: MockerFixture,
+) -> None:
+    """Deleting ONE linked SqlaTable (e.g. a wrapper being re-registered) must
+    NOT delete the shared staged dataset while its other tables (source/mart)
+    still reference it — otherwise those tables are orphaned (Empty query,
+    empty filter, edit fails). This is the self-destruct that lost staged 29."""
+    database = Database(
+        id=2,
+        database_name="dhis2_repo",
+        sqlalchemy_uri="dhis2://admin:district@none",
+    )
+    sqla_table = SqlaTable(
+        id=283,
+        table_name="mal_pregnancy",
+        sql="SELECT * FROM `dhis2_serving`.`sv_29_mal_pregnancy`",
+        extra='{"dhis2_staged_local": true, "dhis2_staged_dataset_id": 29}',
+        database=database,
+        database_id=2,
+    )
+    connection = mocker.MagicMock()
+    count_result = mocker.MagicMock()
+    count_result.scalar.return_value = 2  # source + mart still link to staged 29
+    connection.execute.side_effect = [count_result]
+
+    sqla_table.cleanup_linked_dhis2_staged_dataset(connection)
+
+    executed_sql = [call.args[0].text for call in connection.execute.call_args_list]
+    # Only the "any other links?" count query ran; NO teardown happened.
+    assert len(connection.execute.call_args_list) == 1
+    assert not any("DELETE FROM dhis2_staged_datasets" in sql for sql in executed_sql)
+    assert not any("DELETE FROM staged_datasets" in sql for sql in executed_sql)
 
 
 def test_permissions_without_catalog() -> None:

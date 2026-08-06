@@ -2729,6 +2729,41 @@ class SqlaTable(
         if staged_dataset_id is None:
             return
 
+        # A DHIS2 staged dataset has MULTIPLE linked SqlaTables (source, mart,
+        # and the user-facing metadata wrapper).  Deleting or replacing any ONE
+        # of them (e.g. when a wrapper is re-registered) must NOT nuke the
+        # shared staged dataset — doing so orphans the remaining tables, leaving
+        # a wrapper whose staged dataset is gone ("Empty query", empty data
+        # filter, "Failed to load dataset configuration for editing").  Only
+        # tear the staged dataset down when this is the LAST table referencing
+        # it.  self.id is already flushed for delete but still queryable, so we
+        # exclude it explicitly.
+        remaining_links = connection.execute(
+            sa.text(
+                """
+                SELECT COUNT(*)
+                FROM tables
+                WHERE id != :self_id
+                  AND (extra LIKE :pat_spaced OR extra LIKE :pat_tight)
+                """
+            ),
+            {
+                "self_id": self.id,
+                "pat_spaced": f'%"dhis2_staged_dataset_id": {staged_dataset_id}%',
+                "pat_tight": f'%"dhis2_staged_dataset_id":{staged_dataset_id}%',
+            },
+        ).scalar()
+        if remaining_links and int(remaining_links) > 0:
+            logger.info(
+                "cleanup_linked_dhis2_staged_dataset: %s other SqlaTable(s) still "
+                "reference staged dataset id=%s — keeping it (only SqlaTable "
+                "id=%s removed)",
+                int(remaining_links),
+                staged_dataset_id,
+                self.id,
+            )
+            return
+
         result = connection.execute(
             sa.text(
                 """
