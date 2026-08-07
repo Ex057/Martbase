@@ -286,8 +286,20 @@ class Dashboard(AuditMixinNullable, ImportExportMixin, Model):
             )
 
             if datasource:
-                # Filter out unneeded fields from the datasource payload
-                result.append(datasource.data_for_slices(slices))
+                # Filter out unneeded fields from the datasource payload.
+                # Isolate per-datasource failures: a single broken/orphaned
+                # datasource (e.g. a DHIS2 wrapper that can't resolve its
+                # serving DB) must not fail the whole dashboard-datasets call
+                # and blank the entire dashboard — skip it and let the other
+                # charts render. The affected chart surfaces its own error.
+                try:
+                    result.append(datasource.data_for_slices(slices))
+                except Exception:  # pylint: disable=broad-except
+                    logger.exception(
+                        "Skipping datasource id=%s in dashboard datasets — its "
+                        "metadata failed to build; other charts will still render",
+                        datasource_id,
+                    )
 
         return result
 
