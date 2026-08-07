@@ -61,54 +61,86 @@ def test_delete_staged_dataset_cascades_to_sqla_table():
         return_value=staged_dataset,
     ), patch(
         "superset.dhis2.staged_dataset_service._get_engine",
-    ) as mock_get_engine:
+    ) as mock_get_engine, patch(
+        "superset.dhis2.superset_dataset_service."
+        "cleanup_staged_dataset_superset_resources",
+    ) as mock_cleanup:
         mock_engine = MagicMock()
         mock_get_engine.return_value = mock_engine
-        
-        # session.query(SqlaTable).get(22)
-        session.query.return_value.get.return_value = sqla_table
 
         svc.delete_staged_dataset(11)
 
     # Verify physical tables dropped
     mock_engine.drop_staging_table.assert_called_once_with(staged_dataset)
-    
-    # Verify models deleted
+
+    # The associated Superset datasets are removed via the dedicated helper,
+    # and the staged dataset + its generic record are deleted from the session.
+    mock_cleanup.assert_called_once()
     session.delete.assert_has_calls([
-        call(sqla_table),
         call(staged_dataset),
         call(generic_dataset)
     ], any_order=True)
     session.commit.assert_called_once()
 
 
-def test_after_sqla_table_delete_listener():
-    from superset.dhis2.listeners import _after_sqla_table_delete
-    from superset.dhis2.models import DHIS2StagedDataset
-    import superset
-
-    session = superset.db.session
-    session.query = MagicMock()
-    session.delete = MagicMock()
-
-    sqla_table = SimpleNamespace(
+def _listener_source_table(staged_id: int = 11):
+    return SimpleNamespace(
         id=22,
         table_name="sv_test",
-        extra=json.dumps({
-            "dhis2_staged_local": True,
-            "dhis2_staged_dataset_id": 11
-        })
+        dataset_role="DHIS2_SOURCE_DATASET",
+        extra=json.dumps(
+            {"dhis2_staged_local": True, "dhis2_staged_dataset_id": staged_id}
+        ),
     )
-    
-    staged_dataset = DHIS2StagedDataset(id=11, name="Test Staged")
-    session.query.return_value.get.return_value = staged_dataset
 
-    # Trigger listener
-    _after_sqla_table_delete(None, None, sqla_table)
 
-    # Verify it attempted to delete the staged dataset
-    session.query.return_value.get.assert_called_with(11)
-    session.delete.assert_called_once_with(staged_dataset)
+def test_after_sqla_table_delete_removes_staged_when_last_table():
+    """When no other SqlaTable references the staged dataset, deleting this one
+    tears it down (the intended cleanup on a genuine dataset delete)."""
+    from superset.dhis2.listeners import _after_sqla_table_delete
+
+    connection = MagicMock()
+    count_result = MagicMock()
+    count_result.scalar.return_value = 0  # no other tables link
+    staged_result = MagicMock()
+    staged_result.mappings.return_value.first.return_value = {
+        "id": 11,
+        "database_id": 10,
+        "generic_dataset_id": 9,
+        "name": "Test Staged",
+    }
+    connection.execute.side_effect = [
+        count_result,
+        staged_result,
+        MagicMock(),
+        MagicMock(),
+    ]
+
+    with patch("superset.dhis2.listeners._get_engine", return_value=MagicMock()):
+        _after_sqla_table_delete(None, connection, _listener_source_table())
+
+    executed = [str(c.args[0]) for c in connection.execute.call_args_list]
+    assert any("DELETE FROM dhis2_staged_datasets" in s for s in executed)
+
+
+def test_after_sqla_table_delete_keeps_staged_when_other_tables_link():
+    """Regression: deleting ONE linked table (e.g. the SOURCE while a wrapper is
+    re-registered) must NOT delete the shared staged dataset while its other
+    tables still reference it. This listener was the UNGUARDED second delete
+    path that kept orphaning datasets even after the models.py guard."""
+    from superset.dhis2.listeners import _after_sqla_table_delete
+
+    connection = MagicMock()
+    count_result = MagicMock()
+    count_result.scalar.return_value = 2  # mart + wrapper still link
+    connection.execute.side_effect = [count_result]
+
+    _after_sqla_table_delete(None, connection, _listener_source_table())
+
+    # Only the "any other links?" count ran; no staged-dataset teardown.
+    assert connection.execute.call_count == 1
+    executed = [str(c.args[0]) for c in connection.execute.call_args_list]
+    assert not any("DELETE FROM dhis2_staged_datasets" in s for s in executed)
 
 
 def test_before_dhis2_staged_dataset_delete_listener():

@@ -77,6 +77,40 @@ def _after_sqla_table_delete(mapper: Mapper, connection: Any, target: Any) -> No
             )
             return
 
+        # Do NOT cascade-delete the shared staged dataset while OTHER SqlaTables
+        # still reference it. A staged dataset owns source/mart/wrapper tables;
+        # re-registration deletes+recreates one of them, and without this guard
+        # that delete destroys the staged dataset and orphans the rest — the
+        # dataset "disappears", the map shows "Empty query?", and editing throws
+        # "Failed to load dataset configuration for editing". This mirrors the
+        # guard in SqlaTable.cleanup_linked_dhis2_staged_dataset; BOTH
+        # after_delete handlers must agree or one silently overrides the other.
+        # target.id is excluded — it is the row currently being deleted.
+        remaining_links = connection.execute(
+            sa.text(
+                """
+                SELECT COUNT(*)
+                FROM tables
+                WHERE id != :self_id
+                  AND (extra LIKE :pat_spaced OR extra LIKE :pat_tight)
+                """
+            ),
+            {
+                "self_id": target.id,
+                "pat_spaced": f'%"dhis2_staged_dataset_id": {staged_dataset_id}%',
+                "pat_tight": f'%"dhis2_staged_dataset_id":{staged_dataset_id}%',
+            },
+        ).scalar()
+        if remaining_links and int(remaining_links) > 0:
+            logger.info(
+                "DHIS2 listener: %s other SqlaTable(s) still reference staged "
+                "dataset id=%s — keeping it (only SqlaTable id=%s removed)",
+                int(remaining_links),
+                staged_dataset_id,
+                target.id,
+            )
+            return
+
         logger.info(
             "DHIS2 listener: SqlaTable id=%s ('%s') deleted; cleaning up DHIS2StagedDataset id=%s",
             target.id,
