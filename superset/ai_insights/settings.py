@@ -344,7 +344,7 @@ DEEPSEEK_TEXT_MODEL_CATALOG: list[dict[str, Any]] = [
     },
 ]
 
-LOCALAI_DEFAULT_MODEL_ID = "qwen3.5-4b"
+LOCALAI_DEFAULT_MODEL_ID = "qwen3.5-4b-dflash"
 LOCALAI_SECONDARY_MODEL_ID = "deepseek-r1-distill-qwen-7b"
 
 LOCALAI_SUPERSET_CAPABILITIES: list[str] = [

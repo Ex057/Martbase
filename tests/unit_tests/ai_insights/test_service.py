@@ -40,14 +40,14 @@ def make_localai_config() -> dict[str, object]:
     return {
         "enabled": True,
         "default_provider": "localai",
-        "default_model": "qwen3.5-4b",
+        "default_model": "qwen3.5-4b-dflash",
         "providers": {
             "localai": {
                 "type": "localai",
                 "enabled": True,
                 "base_url": "http://127.0.0.1:39671",
-                "models": ["qwen3.5-4b", "deepseek-r1-distill-qwen-7b"],
-                "default_model": "qwen3.5-4b",
+                "models": ["qwen3.5-4b-dflash", "deepseek-r1-distill-qwen-7b"],
+                "default_model": "qwen3.5-4b-dflash",
                 "api_key": "test-key",
             }
         },
@@ -159,7 +159,7 @@ def test_generate_chart_insight_surfaces_localai_backend_readiness_error(
             {
                 "question": "Summarize this chart",
                 "provider_id": "localai",
-                "model": "qwen3.5-4b",
+                "model": "qwen3.5-4b-dflash",
             },
         )
 

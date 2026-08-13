@@ -149,7 +149,7 @@ const GROUP_COLORS: Record<string, string> = {
   Installed: 'green',
 };
 
-const DEFAULT_LOCALAI_MODEL_ID = 'qwen3.5-4b';
+const DEFAULT_LOCALAI_MODEL_ID = 'qwen3.5-4b-dflash';
 
 /* ── Component ────────────────────────────────────────── */
 

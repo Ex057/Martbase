@@ -16,7 +16,7 @@
 # Port: 39671 (configurable via LOCALAI_PORT env var)
 #
 # Recommended models for Superset analytics:
-#   1. qwen3.5-4b                        — daily CPU-friendly default
+#   1. qwen3.5-4b-dflash                 — daily CPU-friendly default
 #   2. deepseek-r1-distill-qwen-7b       — slower secondary reasoning model
 # =============================================================================
 
@@ -41,7 +41,7 @@ LOCALAI_API_KEY_ENV="${LOCALAI_API_KEY_ENV:-LOCALAI_API_KEY}"
 LOCALAI_API_KEY_VALUE="${!LOCALAI_API_KEY_ENV:-${LOCALAI_API_KEY:-}}"
 
 GALLERY_MODELS=(
-    "qwen3.5-4b"
+    "qwen3.5-4b-dflash"
     "deepseek-r1-distill-qwen-7b"
 )
 

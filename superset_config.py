@@ -130,11 +130,11 @@ _AI_INSIGHTS_PROVIDERS["localai"] = {
         model.strip()
         for model in os.environ.get(
             "LOCALAI_MODELS",
-            "qwen3.5-4b,deepseek-r1-distill-qwen-7b",
+            "qwen3.5-4b-dflash,deepseek-r1-distill-qwen-7b",
         ).split(",")
         if model.strip()
     ],
-    "default_model": os.environ.get("LOCALAI_DEFAULT_MODEL", "qwen3.5-4b"),
+    "default_model": os.environ.get("LOCALAI_DEFAULT_MODEL", "qwen3.5-4b-dflash"),
     "is_local": True,
 }
 

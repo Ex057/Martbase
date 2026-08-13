@@ -173,6 +173,8 @@ logs/*.log
 
 # Local Superset override config
 superset_config2.py
+superset_config_server.py
+superset_config.py
 
 # Local logs
 logs/*.log
