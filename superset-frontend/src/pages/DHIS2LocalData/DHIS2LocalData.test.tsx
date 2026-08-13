@@ -123,6 +123,19 @@ beforeEach(() => {
         },
       } as any;
     }
+    if (endpoint === '/api/v1/dhis2/staged-datasets/12') {
+      return {
+        json: {
+          result: {
+            id: 12,
+            database_id: 7,
+            name: 'Malaria Incidence',
+            description: 'Secondary malaria dataset',
+            is_active: true,
+          },
+        },
+      } as any;
+    }
     if (endpoint.startsWith('/api/v1/dhis2/staged-datasets/11/preview?limit=')) {
       const limit = Number(endpoint.split('limit=')[1] || 25);
       return {
@@ -390,6 +403,38 @@ test('loads raw staged preview rows and diagnostics for the selected dataset', a
       'SELECT * FROM dhis2_staging.ds_11_anc_coverage ORDER BY "source_instance_id", "pe", "dx_uid", "ou" LIMIT 25',
     ),
   ).toBeInTheDocument();
+});
+
+test('resolves the owning database from dataset-only URLs without falling back to another dataset', async () => {
+  render(
+    <MemoryRouter initialEntries={['/superset/dhis2/local-data/?dataset=12']}>
+      <DHIS2LocalData />
+    </MemoryRouter>,
+  );
+
+  await waitFor(() => {
+    expect(mockClient.get).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpoint: '/api/v1/dhis2/staged-datasets/12',
+      }),
+    );
+  });
+
+  await waitFor(() => {
+    expect(mockClient.get).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpoint: '/api/v1/dhis2/staged-datasets/?database_id=7&include_inactive=true&include_stats=true',
+      }),
+    );
+  });
+
+  expect(
+    await screen.findByText(
+      'No staged datasets are available for this database yet.',
+    ),
+  ).toBeInTheDocument();
+  expect(screen.queryByText('ANC Coverage')).not.toBeInTheDocument();
+  expect(screen.queryByText('Malaria Incidence')).not.toBeInTheDocument();
 });
 
 test('applies staged local org-unit cascade and period filters to the query', async () => {

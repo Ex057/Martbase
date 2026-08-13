@@ -4,7 +4,7 @@ import { useHistory, useLocation } from 'react-router-dom';
 import rison from 'rison';
 
 import type { DHIS2DatabaseOption } from './types';
-import { getDatabaseIdFromSearch } from './utils';
+import { getDatabaseIdFromSearch, getDatasetIdFromSearch } from './utils';
 
 interface UseDHIS2DatabasesResult {
   databases: DHIS2DatabaseOption[];
@@ -72,10 +72,11 @@ export default function useDHIS2Databases(
     const hasSelectedDatabase = selectedDatabaseId
       ? databases.some(database => database.id === selectedDatabaseId)
       : false;
-    if (!hasSelectedDatabase) {
+    const hasRequestedDataset = Boolean(getDatasetIdFromSearch(location.search));
+    if (!hasSelectedDatabase && !hasRequestedDataset) {
       setSelectedDatabaseIdState(databases[0].id);
     }
-  }, [databases, selectedDatabaseId]);
+  }, [databases, location.search, selectedDatabaseId]);
 
   // Sync state → URL. Uses locationSearchRef (not location.search) to avoid
   // a feedback loop: history.replace() changes location.search which would

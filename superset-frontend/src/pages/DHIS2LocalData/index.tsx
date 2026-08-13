@@ -292,11 +292,11 @@ export default function DHIS2LocalData() {
         isEqual(current, nextDatasets) ? current : nextDatasets,
       );
       setActiveDatasetId(currentId => {
-        if (
-          requestedDatasetId &&
-          nextDatasets.some(dataset => dataset.id === requestedDatasetId)
-        ) {
-          return requestedDatasetId;
+        const requestedDatasetExists = requestedDatasetId
+          ? nextDatasets.some(dataset => dataset.id === requestedDatasetId)
+          : false;
+        if (requestedDatasetId) {
+          return requestedDatasetExists ? requestedDatasetId : undefined;
         }
         if (currentId && nextDatasets.some(dataset => dataset.id === currentId)) {
           return currentId;
@@ -321,6 +321,45 @@ export default function DHIS2LocalData() {
   useEffect(() => {
     void loadDatasets();
   }, [selectedDatabaseId, requestedDatasetId]);
+
+  useEffect(() => {
+    if (!requestedDatasetId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const resolveDatasetDatabase = async () => {
+      try {
+        const response = await SupersetClient.get({
+          endpoint: `/api/v1/dhis2/staged-datasets/${requestedDatasetId}`,
+        });
+        if (cancelled) {
+          return;
+        }
+
+        const requestedDataset = response.json?.result as
+          | { database_id?: number | null }
+          | null;
+        const resolvedDatabaseId = requestedDataset?.database_id;
+        if (
+          typeof resolvedDatabaseId === 'number' &&
+          resolvedDatabaseId > 0 &&
+          resolvedDatabaseId !== selectedDatabaseId
+        ) {
+          setSelectedDatabaseId(resolvedDatabaseId);
+        }
+      } catch {
+        // If the dataset lookup fails, fall back to the currently selected
+        // database logic. The page may still recover once the user picks a DB.
+      }
+    };
+
+    void resolveDatasetDatabase();
+    return () => {
+      cancelled = true;
+    };
+  }, [requestedDatasetId, selectedDatabaseId, setSelectedDatabaseId]);
 
   useEffect(() => {
     if (!requestedDatasetId) {
