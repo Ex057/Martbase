@@ -6547,6 +6547,39 @@ class AIInsightService:
     def __init__(self) -> None:
         self.registry = ProviderRegistry()
 
+    def _raise_provider_error(
+        self,
+        ex: AIProviderError,
+        *,
+        provider_id: str | None,
+        model: str | None,
+    ) -> None:
+        looked_up = self.registry._lookup_provider(provider_id)
+        provider_type = looked_up.provider_type if looked_up else None
+        selected_model = (
+            model
+            or self.registry._default_model
+            or (looked_up.default_model if looked_up else None)
+            or "unknown"
+        )
+        error_str = str(ex)
+        lowered = error_str.lower()
+
+        if provider_type == "localai" and (
+            "backend not found" in lowered or "no backends found" in lowered
+        ):
+            raise AIInsightError(
+                (
+                    f"LocalAI is running but not ready to infer for model "
+                    f"'{selected_model}'. The required 'llama-cpp' backend is "
+                    "unavailable in the current LocalAI runtime, so this model "
+                    "cannot answer requests yet."
+                ),
+                503,
+            ) from ex
+
+        raise AIInsightError(error_str, 502) from ex
+
     def _generate_localai_response(
         self,
         *,
@@ -6582,11 +6615,18 @@ class AIInsightService:
         attempt_messages = messages
         last_response = None
         for attempt in range(3):
-            response = self.registry.generate(
-                messages=attempt_messages,
-                provider_id=provider_id,
-                model=model,
-            )
+            try:
+                response = self.registry.generate(
+                    messages=attempt_messages,
+                    provider_id=provider_id,
+                    model=model,
+                )
+            except AIProviderError as ex:
+                self._raise_provider_error(
+                    ex,
+                    provider_id=provider_id,
+                    model=model,
+                )
             last_response = response
             if not _is_invalid(response.text):
                 return response
@@ -6689,11 +6729,18 @@ class AIInsightService:
                 duration_ms=int((perf_counter() - started_at) * 1000),
             )
         else:
-            response = self.registry.generate(
-                messages=messages,
-                provider_id=provider_id,
-                model=payload.get("model"),
-            )
+            try:
+                response = self.registry.generate(
+                    messages=messages,
+                    provider_id=provider_id,
+                    model=payload.get("model"),
+                )
+            except AIProviderError as ex:
+                self._raise_provider_error(
+                    ex,
+                    provider_id=provider_id,
+                    model=payload.get("model"),
+                )
         total_ms = int((perf_counter() - started_at) * 1000)
         _audit(
             AuditMetadata(
@@ -6761,11 +6808,18 @@ class AIInsightService:
                 duration_ms=int((perf_counter() - started_at_dash) * 1000),
             )
         else:
-            response = self.registry.generate(
-                messages=messages,
-                provider_id=provider_id,
-                model=payload.get("model"),
-            )
+            try:
+                response = self.registry.generate(
+                    messages=messages,
+                    provider_id=provider_id,
+                    model=payload.get("model"),
+                )
+            except AIProviderError as ex:
+                self._raise_provider_error(
+                    ex,
+                    provider_id=provider_id,
+                    model=payload.get("model"),
+                )
         _audit(
             AuditMetadata(
                 mode=AI_MODE_DASHBOARD,
@@ -6863,21 +6917,28 @@ class AIInsightService:
             ).strip()
 
         def _generate(retry_error: str | None = None):
-            resp = self.registry.generate(
-                messages=_build_sql_messages(
-                    question=question,
-                    database=exec_database,
-                    mart_schema_context=mart_schema_context,
-                    current_sql=payload.get("current_sql"),
-                    conversation=payload.get("conversation") or [],
-                    metric=metric,
-                    period=period,
-                    dataset=dataset_name,
-                    retry_error=retry_error,
-                ),
-                provider_id=payload.get("provider_id"),
-                model=payload.get("model"),
-            )
+            try:
+                resp = self.registry.generate(
+                    messages=_build_sql_messages(
+                        question=question,
+                        database=exec_database,
+                        mart_schema_context=mart_schema_context,
+                        current_sql=payload.get("current_sql"),
+                        conversation=payload.get("conversation") or [],
+                        metric=metric,
+                        period=period,
+                        dataset=dataset_name,
+                        retry_error=retry_error,
+                    ),
+                    provider_id=payload.get("provider_id"),
+                    model=payload.get("model"),
+                )
+            except AIProviderError as ex:
+                self._raise_provider_error(
+                    ex,
+                    provider_id=payload.get("provider_id"),
+                    model=payload.get("model"),
+                )
             try:
                 parsed = _extract_json_object(resp.text)
             except json.JSONDecodeError as ex:
@@ -7392,11 +7453,18 @@ class AIInsightService:
             {"role": "user", "content": user_content},
         ]
 
-        response = self.registry.generate(
-            messages=messages,
-            provider_id=provider_id_gen,
-            model=payload.get("model"),
-        )
+        try:
+            response = self.registry.generate(
+                messages=messages,
+                provider_id=provider_id_gen,
+                model=payload.get("model"),
+            )
+        except AIProviderError as ex:
+            self._raise_provider_error(
+                ex,
+                provider_id=provider_id_gen,
+                model=payload.get("model"),
+            )
 
         # Parse the JSON array from the AI response
         raw = response.text.strip()

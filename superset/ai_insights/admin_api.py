@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -170,7 +171,11 @@ class AIManagementRestApi(BaseSupersetApi):
             )
         except AIProviderError as ex:
             error_str = str(ex)
-            if "backend not found" in error_str and provider_id == "localai":
+            lowered_error = error_str.lower()
+            if (
+                ("backend not found" in lowered_error or "no backends found" in lowered_error)
+                and provider_id == "localai"
+            ):
                 model_name = temp_config.get("default_model") or "unknown"
                 logger.warning(
                     "test-provider %s: backend unavailable for model %s: %s",
@@ -182,7 +187,7 @@ class AIManagementRestApi(BaseSupersetApi):
                     400,
                     message=(
                         f"LocalAI backend is not available for model '{model_name}'. "
-                        "This repo-managed model requires the 'llama-cpp' backend. "
+                        "This LocalAI model requires the 'llama-cpp' backend. "
                         "Restart LocalAI so it boots with LOCALAI_EXTERNAL_BACKENDS=llama-cpp, "
                         "or install the backend before testing again."
                     ),
@@ -829,6 +834,37 @@ class AIManagementRestApi(BaseSupersetApi):
         }
 
     @classmethod
+    def _repo_managed_backend(cls, model_id: str) -> str:
+        yaml_text = cls._read_repo_managed_model_yaml(model_id)
+        if not yaml_text:
+            return ""
+        match = re.search(r"^\s*backend:\s*(.+?)\s*$", yaml_text, re.MULTILINE)
+        return match.group(1).strip().strip("'\"") if match else ""
+
+    @classmethod
+    def _localai_backend_status(cls, model_id: str) -> dict[str, Any]:
+        backend = cls._repo_managed_backend(model_id)
+        if not backend:
+            return {"backend": "", "backend_ready": True, "backend_error": ""}
+
+        system_name = platform.system().lower()
+        machine_name = platform.machine().lower()
+        if backend == "llama-cpp" and system_name == "darwin" and machine_name in {
+            "x86_64",
+            "amd64",
+        }:
+            return {
+                "backend": backend,
+                "backend_ready": False,
+                "backend_error": (
+                    "LocalAI's llama-cpp backend is not available in this "
+                    "Intel macOS runtime, so the model cannot infer here."
+                ),
+            }
+
+        return {"backend": backend, "backend_ready": True, "backend_error": ""}
+
+    @classmethod
     def _check_model_dependencies(cls, model_id: str) -> dict[str, Any]:
         """Check if a repo-managed model has all required files.
 
@@ -1028,6 +1064,9 @@ class AIManagementRestApi(BaseSupersetApi):
                 if is_repo_managed
                 else {}
             )
+            backend_status = (
+                self._localai_backend_status(model_id) if is_repo_managed else {}
+            )
 
             dep_check = (
                 self._check_model_dependencies(model_id)
@@ -1055,6 +1094,9 @@ class AIManagementRestApi(BaseSupersetApi):
                 "lora_adapter_file_size": dependency_info.get(
                     "lora_adapter_file_size", ""
                 ),
+                "backend": backend_status.get("backend", ""),
+                "backend_ready": backend_status.get("backend_ready", True),
+                "backend_error": backend_status.get("backend_error", ""),
                 "model_ready": dep_check.get("ready", True),
                 "missing_dependencies": dep_check.get("missing", []),
             })
@@ -1079,6 +1121,9 @@ class AIManagementRestApi(BaseSupersetApi):
                     "base_model_file_size": "",
                     "lora_adapter": "",
                     "lora_adapter_file_size": "",
+                    "backend": "",
+                    "backend_ready": True,
+                    "backend_error": "",
                 })
 
         return self.response(
@@ -1110,6 +1155,11 @@ class AIManagementRestApi(BaseSupersetApi):
         dep_status = {
             "model_ready": dep_check["ready"],
             "missing_dependencies": dep_check.get("missing", []),
+            "dependency_error": (
+                ", ".join(dep_check.get("missing", []))
+                if not dep_check["ready"]
+                else ""
+            ),
         }
 
         try:
@@ -1124,6 +1174,11 @@ class AIManagementRestApi(BaseSupersetApi):
             "http://localai:39671",
         )
         running = self._localai_health_check(base_url)
+        startup_error = (
+            (stderr or stdout or "").strip()
+            if command_result["returncode"] != 0 or not running
+            else ""
+        )
 
         if command_result["returncode"] == 0 and running:
             self._persist_localai_recommended_defaults()
@@ -1136,25 +1191,31 @@ class AIManagementRestApi(BaseSupersetApi):
                     "stderr": stderr,
                     "default_provider": "localai",
                     "default_model": LOCALAI_DEFAULT_MODEL_ID,
+                    "configured_base_url": base_url,
+                    "startup_error": "",
                     **dep_status,
                 },
             )
 
-        message = stderr or stdout or "LocalAI failed to start"
+        message_parts = [part for part in [startup_error] if part]
         if not dep_check["ready"]:
-            message += (
-                f"\n\nModel '{LOCALAI_DEFAULT_MODEL_ID}' has missing dependencies: "
+            message_parts.append(
+                f"Model '{LOCALAI_DEFAULT_MODEL_ID}' has missing dependencies: "
                 + ", ".join(dep_check.get("missing", []))
             )
+        if not message_parts:
+            message_parts.append("LocalAI failed to start")
         return self.response(
             400,
-            message=message,
+            message="\n\n".join(message_parts),
             result={
                 "localai_running": running,
                 "base_url": base_url,
+                "configured_base_url": base_url,
                 "stdout": stdout,
                 "stderr": stderr,
                 "returncode": command_result["returncode"],
+                "startup_error": startup_error,
                 **dep_status,
             },
         )

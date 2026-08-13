@@ -39,8 +39,18 @@ type GalleryModel = {
   installed: boolean;
   is_default_model?: boolean;
   is_repo_managed?: boolean;
+  backend?: string;
+  backend_ready?: boolean;
+  backend_error?: string;
   model_ready?: boolean;
   missing_dependencies?: string[];
+};
+
+type LocalAIStartFailure = {
+  startup_error?: string;
+  dependency_error?: string;
+  missing_dependencies?: string[];
+  configured_base_url?: string;
 };
 
 type DownloadJob = {
@@ -139,7 +149,7 @@ const GROUP_COLORS: Record<string, string> = {
   Installed: 'green',
 };
 
-const CUSTOM_MODEL_ID = 'ai-insights-model-26.04';
+const DEFAULT_LOCALAI_MODEL_ID = 'qwen3.5-4b';
 
 /* ── Component ────────────────────────────────────────── */
 
@@ -155,6 +165,9 @@ export default function LocalAIModelHub() {
   const [jobs, setJobs] = useState<Record<string, DownloadJob>>({});
   const [startingLocalAI, setStartingLocalAI] = useState(false);
   const [stoppingLocalAI, setStoppingLocalAI] = useState(false);
+  const [startFailure, setStartFailure] = useState<LocalAIStartFailure | null>(
+    null,
+  );
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [trainingStatus, setTrainingStatus] = useState<TrainingStatus | null>(
@@ -180,6 +193,9 @@ export default function LocalAIModelHub() {
       setProviderDefaultModel(result.provider_default_model || '');
       setDefaultProvider(result.default_provider || '');
       setBaseUrl(result.base_url || '');
+      if (result.localai_running) {
+        setStartFailure(null);
+      }
     } catch (err: any) {
       addDangerToast(err?.message || t('Unable to load LocalAI model gallery'));
     } finally {
@@ -299,6 +315,7 @@ export default function LocalAIModelHub() {
         endpoint: '/api/v1/ai-management/localai/start',
       });
       const result = json.result || {};
+      setStartFailure(null);
       addSuccessToast(
         result.localai_running
           ? t(
@@ -312,6 +329,14 @@ export default function LocalAIModelHub() {
       try {
         if (typeof err?.json === 'function') {
           const body = await err.json();
+          const result = body?.result || {};
+          setStartFailure({
+            startup_error: result.startup_error || '',
+            dependency_error: result.dependency_error || '',
+            missing_dependencies: result.missing_dependencies || [],
+            configured_base_url:
+              result.configured_base_url || result.base_url || '',
+          });
           if (body?.message) msg = `${msg}: ${body.message}`;
         } else if (err?.message) {
           msg = `${msg}: ${err.message}`;
@@ -393,7 +418,7 @@ export default function LocalAIModelHub() {
     try {
       const { json } = await SupersetClient.post({
         endpoint: '/api/v1/ai-management/localai/training/evaluate',
-        jsonPayload: { model_id: CUSTOM_MODEL_ID },
+        jsonPayload: { model_id: DEFAULT_LOCALAI_MODEL_ID },
       });
       const r = json.result || {};
       setEvalOutput(r.stdout || '');
@@ -439,7 +464,17 @@ export default function LocalAIModelHub() {
 
   /* ── Render ─────────────────────────────────────────── */
 
+  const isModelReadyToInfer = (model: GalleryModel) =>
+    Boolean(
+      model.installed &&
+        localaiRunning &&
+        (model.backend_ready ?? true) &&
+        (model.model_ready ?? true) &&
+        (!model.is_repo_managed || model.missing_dependencies?.length === 0),
+    );
+
   const installedCount = models.filter(m => m.installed).length;
+  const readyToInferCount = models.filter(isModelReadyToInfer).length;
   const activeDownloads = Object.values(jobs).filter(
     j => !j.processed && !j.error,
   ).length;
@@ -485,7 +520,8 @@ export default function LocalAIModelHub() {
             </Tag>
           )}
           <Tag color="blue">{t('%s models available', models.length)}</Tag>
-          <Tag color="green">{t('%s installed', installedCount)}</Tag>
+          <Tag color="green">{t('%s ready to infer', readyToInferCount)}</Tag>
+          <Tag color="default">{t('%s assets installed', installedCount)}</Tag>
           {activeDownloads > 0 && (
             <Tag color="orange" icon={<Icons.SyncOutlined spin />}>
               {t('%s downloading', activeDownloads)}
@@ -528,33 +564,72 @@ export default function LocalAIModelHub() {
       </StatusBar>
 
       {!localaiRunning && (
-        <Alert
-          type="warning"
-          showIcon
-          message={t('LocalAI is not running')}
-          description={
-            <Space direction="vertical" size={8}>
-              <Text type="secondary">
-                {t(
-                  'Start LocalAI on port 39671 to manage runtime-backed models. The repo-managed ai-insights-model-26.04 can be deployed from local codebase assets even before LocalAI is running.',
-                )}
-              </Text>
-              <Space wrap>
-                <Button
-                  type="primary"
-                  icon={<Icons.ThunderboltOutlined />}
-                  loading={startingLocalAI}
-                  onClick={startLocalAI}
-                >
-                  {t('Start LocalAI')}
-                </Button>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {t('CLI fallback: bash scripts/setup_localai.sh start')}
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          <Alert
+            type="warning"
+            showIcon
+            message={t('LocalAI is not running')}
+            description={
+              <Space direction="vertical" size={8}>
+                <Text type="secondary">
+                  {t(
+                    'Start LocalAI on port 39671 to manage the local model catalog. Qwen 3.5 4B is the default model and DeepSeek R1 Distill Qwen 7B is the secondary reasoning model.',
+                  )}
                 </Text>
+                <Space wrap>
+                  <Button
+                    type="primary"
+                    icon={<Icons.ThunderboltOutlined />}
+                    loading={startingLocalAI}
+                    onClick={startLocalAI}
+                  >
+                    {t('Start LocalAI')}
+                  </Button>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {t('CLI fallback: bash scripts/setup_localai.sh start')}
+                  </Text>
+                </Space>
               </Space>
-            </Space>
-          }
-        />
+            }
+          />
+          {startFailure?.startup_error && (
+            <Alert
+              type="error"
+              showIcon
+              message={t('LocalAI runtime startup failed')}
+              description={
+                <Space direction="vertical" size={4}>
+                  <Text>
+                    {startFailure.startup_error}
+                  </Text>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {t(
+                      'Martbase expects LocalAI at %s.',
+                      startFailure.configured_base_url || baseUrl || 'http://127.0.0.1:39671',
+                    )}
+                  </Text>
+                </Space>
+              }
+            />
+          )}
+          {startFailure?.dependency_error && (
+            <Alert
+              type="warning"
+              showIcon
+              message={t('Default model dependencies are missing')}
+              description={
+                <Space direction="vertical" size={4}>
+                  <Text>{startFailure.dependency_error}</Text>
+                  {startFailure.missing_dependencies?.map(dep => (
+                    <Text key={dep} type="secondary" style={{ fontSize: 12 }}>
+                      {dep}
+                    </Text>
+                  ))}
+                </Space>
+              }
+            />
+          )}
+        </Space>
       )}
 
       {/* ── Model grid ─────────────────────────────────── */}
@@ -566,6 +641,7 @@ export default function LocalAIModelHub() {
             const job = jobs[model.id];
             const isDownloading = job && !job.processed && !job.error;
             const hasFailed = job && job.error;
+            const readyToInfer = isModelReadyToInfer(model);
 
             return (
               <ModelCard
@@ -585,17 +661,12 @@ export default function LocalAIModelHub() {
                   <div style={{ flex: 1 }}>
                     <Space size={6} wrap>
                       <Text strong>{model.label}</Text>
-                      {model.id === CUSTOM_MODEL_ID && (
+                      {model.id === DEFAULT_LOCALAI_MODEL_ID && (
                         <Tag
                           color="magenta"
                           style={{ fontSize: 10, fontWeight: 600 }}
                         >
-                          Superset Optimized
-                        </Tag>
-                      )}
-                      {model.is_repo_managed && (
-                        <Tag color="cyan" style={{ fontSize: 10 }}>
-                          {t('Repo managed')}
+                          Featured
                         </Tag>
                       )}
                       {model.is_default_model && (
@@ -603,7 +674,7 @@ export default function LocalAIModelHub() {
                           {t('Default model')}
                         </Tag>
                       )}
-                      {model.id === CUSTOM_MODEL_ID &&
+                      {model.id === DEFAULT_LOCALAI_MODEL_ID &&
                         defaultProvider === 'localai' && (
                           <Tag color="geekblue" style={{ fontSize: 10 }}>
                             {t('Default provider')}
@@ -638,7 +709,7 @@ export default function LocalAIModelHub() {
                 </div>
 
                 {/* Custom model training info banner */}
-                {model.id === CUSTOM_MODEL_ID && (
+                {model.is_repo_managed && (
                   <div
                     style={{
                       background:
@@ -650,12 +721,12 @@ export default function LocalAIModelHub() {
                     }}
                   >
                     <Text strong style={{ fontSize: 11 }}>
-                      {t('Purpose-built for Superset Analytics Copilot')}
+                      {t('Default CPU-friendly LocalAI model')}
                     </Text>
                     <div style={{ marginTop: 4 }}>
                       <Text type="secondary" style={{ fontSize: 11 }}>
                         {t(
-                          'Optimized for natural-language analytics, SQL reasoning, chart and dashboard generation, screenshot interpretation, structured JSON outputs, narrative reporting, and deterministic export workflows for professional decision support.',
+                          'Optimized for daily analytics chat, chart narration, and structured summaries on a CPU-only LocalAI host.',
                         )}
                       </Text>
                     </div>
@@ -726,6 +797,37 @@ export default function LocalAIModelHub() {
                     />
                   )}
 
+                {model.installed &&
+                  model.backend_ready === false &&
+                  model.backend_error && (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      style={{ marginBottom: 8, fontSize: 11 }}
+                      message={t('Backend unavailable')}
+                      description={
+                        <div style={{ fontSize: 11 }}>
+                          <div>{model.backend_error}</div>
+                          {model.backend && (
+                            <Text
+                              type="secondary"
+                              style={{
+                                fontSize: 11,
+                                marginTop: 4,
+                                display: 'block',
+                              }}
+                            >
+                              {t(
+                                'Configured backend: %s',
+                                model.backend,
+                              )}
+                            </Text>
+                          )}
+                        </div>
+                      }
+                    />
+                  )}
+
                 {/* Description */}
                 <Paragraph
                   type="secondary"
@@ -745,7 +847,7 @@ export default function LocalAIModelHub() {
                       <Tag
                         key={`${model.id}-${capability}`}
                         color={
-                          model.id === CUSTOM_MODEL_ID ? 'blue' : 'default'
+                          model.id === DEFAULT_LOCALAI_MODEL_ID ? 'blue' : 'default'
                         }
                         style={{ fontSize: 10, marginInlineEnd: 0 }}
                       >
@@ -791,12 +893,21 @@ export default function LocalAIModelHub() {
                   <Col flex="auto">
                     {model.installed ? (
                       <Space size={8}>
-                        <Tag
-                          color="success"
-                          icon={<Icons.CheckCircleOutlined />}
-                        >
-                          {t('Installed')}
-                        </Tag>
+                        {readyToInfer ? (
+                          <Tag
+                            color="success"
+                            icon={<Icons.CheckCircleOutlined />}
+                          >
+                            {t('Ready to infer')}
+                          </Tag>
+                        ) : (
+                          <Tag
+                            color="default"
+                            icon={<Icons.DatabaseOutlined />}
+                          >
+                            {t('Installed assets')}
+                          </Tag>
+                        )}
                         <Tooltip title={t('Remove this model from LocalAI')}>
                           <Button
                             size="small"
@@ -804,9 +915,7 @@ export default function LocalAIModelHub() {
                             icon={<Icons.DeleteOutlined />}
                             onClick={() => deleteModel(model.id)}
                           >
-                            {model.is_repo_managed
-                              ? t('Remove local deploy')
-                              : t('Remove')}
+                            {t('Remove')}
                           </Button>
                         </Tooltip>
                       </Space>
@@ -822,12 +931,10 @@ export default function LocalAIModelHub() {
                         type="primary"
                         size="small"
                         icon={<Icons.DownloadOutlined />}
-                        disabled={!localaiRunning && !model.is_repo_managed}
+                        disabled={!localaiRunning}
                         onClick={() => installModel(model.id)}
                       >
-                        {model.is_repo_managed
-                          ? t('Deploy local model')
-                          : t('Download')}
+                        {t('Download')}
                         {model.file_size ? ` (${model.file_size})` : ''}
                       </Button>
                     )}
@@ -849,7 +956,7 @@ export default function LocalAIModelHub() {
               <Space>
                 <Icons.BulbOutlined />
                 <Text strong>
-                  {t('Fine-Tuning Pipeline — %s', CUSTOM_MODEL_ID)}
+                  {t('Fine-Tuning Pipeline — %s', DEFAULT_LOCALAI_MODEL_ID)}
                 </Text>
                 {trainingStatus?.training_data?.exists && (
                   <Tag color="blue">

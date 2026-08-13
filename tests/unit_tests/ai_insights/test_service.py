@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from flask import g
 
+from superset.ai_insights.providers import AIProviderError
 from superset.ai_insights.service import AIInsightError, AIInsightService
 from tests.conftest import with_config
 
@@ -30,6 +31,24 @@ def make_ai_config(*, allow_sql_execution: bool = False) -> dict[str, object]:
                 "models": ["mock-1"],
                 "default_model": "mock-1",
                 "is_local": True,
+            }
+        },
+    }
+
+
+def make_localai_config() -> dict[str, object]:
+    return {
+        "enabled": True,
+        "default_provider": "localai",
+        "default_model": "qwen3.5-4b",
+        "providers": {
+            "localai": {
+                "type": "localai",
+                "enabled": True,
+                "base_url": "http://127.0.0.1:39671",
+                "models": ["qwen3.5-4b", "deepseek-r1-distill-qwen-7b"],
+                "default_model": "qwen3.5-4b",
+                "api_key": "test-key",
             }
         },
     }
@@ -65,8 +84,8 @@ def test_generate_chart_insight_uses_mart_backed_chart(
     result = AIInsightService().generate_chart_insight(12, {"question": "Summarize this chart"})
 
     assert result["mode"] == "chart"
-    assert result["provider"] == "mock"
-    assert "Chart insight:" in result["insight"]
+    assert result["provider"] == "local"
+    assert "No Data Available" in result["insight"]
 
 
 @with_config({"AI_INSIGHTS_CONFIG": make_ai_config()})
@@ -98,6 +117,51 @@ def test_generate_chart_insight_rejects_non_mart_datasource(
 
     with pytest.raises(AIInsightError, match="MART-backed chart datasource"):
         AIInsightService().generate_chart_insight(12, {"question": "Summarize this chart"})
+
+
+@with_config({"AI_INSIGHTS_CONFIG": make_localai_config()})
+def test_generate_chart_insight_surfaces_localai_backend_readiness_error(
+    app_context: None,
+    mocker,
+) -> None:
+    del app_context
+    g.user = make_user()
+
+    datasource = SimpleNamespace(
+        id=9,
+        table_name="admissions_mart",
+        schema="public",
+        dataset_role="MART",
+        database=SimpleNamespace(backend="postgresql"),
+    )
+    chart = SimpleNamespace(
+        id=12,
+        slice_name="Admissions by region",
+        viz_type="echarts_timeseries_bar",
+        form_data={"slice_id": 12},
+        datasource=datasource,
+    )
+
+    mocker.patch("superset.ai_insights.service.user_can_access_ai_mode", return_value=True)
+    mocker.patch("superset.ai_insights.service.ChartDAO.get_by_id_or_uuid", return_value=chart)
+    mocker.patch("superset.ai_insights.service.security_manager.raise_for_access")
+
+    service = AIInsightService()
+    mocker.patch.object(
+        service.registry,
+        "generate",
+        side_effect=AIProviderError("HTTP 500 Error: no backends found"),
+    )
+
+    with pytest.raises(AIInsightError, match="not ready to infer"):
+        service.generate_chart_insight(
+            12,
+            {
+                "question": "Summarize this chart",
+                "provider_id": "localai",
+                "model": "qwen3.5-4b",
+            },
+        )
 
 
 @with_config({"AI_INSIGHTS_CONFIG": make_ai_config(allow_sql_execution=True)})

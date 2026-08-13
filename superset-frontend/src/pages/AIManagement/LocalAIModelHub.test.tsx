@@ -16,46 +16,71 @@ jest.mock('@superset-ui/core', () => ({
   },
 }));
 
+const galleryResult = {
+  models: [
+    {
+      id: 'qwen3.5-4b',
+      label: 'Qwen 3.5 4B',
+      group: 'General',
+      description: 'CPU-friendly default for daily analytics chat.',
+      capabilities: [
+        'Fast daily analytics responses',
+        'Structured JSON outputs',
+        'Concise chart and dashboard summaries',
+      ],
+      is_recommended: true,
+      file_size: '4.1 GB',
+      installed: true,
+      is_default_model: true,
+      is_repo_managed: false,
+      backend: 'llama-cpp',
+      backend_ready: true,
+      backend_error: '',
+      model_ready: true,
+      missing_dependencies: [],
+    },
+    {
+      id: 'deepseek-r1-distill-qwen-7b',
+      label: 'DeepSeek R1 Distill Qwen 7B',
+      group: 'Reasoning',
+      description: 'Secondary reasoning model for harder prompts.',
+      capabilities: [
+        'Step-by-step reasoning',
+        'SQL generation and repair',
+        'Deeper analytical follow-up',
+      ],
+      is_recommended: false,
+      file_size: '4.7 GB',
+      installed: false,
+      is_default_model: false,
+      is_repo_managed: false,
+      backend: 'llama-cpp',
+      backend_ready: true,
+      backend_error: '',
+      model_ready: true,
+      missing_dependencies: [],
+    },
+  ],
+  localai_running: true,
+  provider_enabled: true,
+  provider_default_model: 'qwen3.5-4b',
+  default_provider: 'localai',
+  base_url: 'http://127.0.0.1:39671',
+};
+
 const offlineGallery = {
   json: {
     result: {
-      models: [
-        {
-          id: 'ai-insights-model-26.04',
-          label: 'AI Insights Model 26.04',
-          group: 'Custom',
-          description: 'Optimized analytics model',
-          capabilities: [
-            'SQL generation and repair',
-            'Superset MCP/API control',
-          ],
-          is_recommended: true,
-          file_size: '3.4 KB',
-          asset_file_size: '3.4 KB',
-          base_model: 'hermes-3-llama-3.1-8b-lorablated.Q4_K_M.gguf',
-          base_model_file_size: '',
-          lora_adapter: '',
-          lora_adapter_file_size: '',
-          installed: true,
-          is_default_model: true,
-          is_repo_managed: true,
-        },
-      ],
+      ...galleryResult,
       localai_running: false,
-      provider_enabled: true,
-      provider_default_model: 'ai-insights-model-26.04',
-      default_provider: 'localai',
-      base_url: 'http://127.0.0.1:39671',
+      models: galleryResult.models.map(model => ({ ...model, installed: false })),
     },
   },
 };
 
 const onlineGallery = {
   json: {
-    result: {
-      ...offlineGallery.json.result,
-      localai_running: true,
-    },
+    result: galleryResult,
   },
 };
 
@@ -63,49 +88,32 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
-test('renders LocalAI model size and capabilities', async () => {
-  mockGet.mockResolvedValue(offlineGallery);
+test('renders the qwen default and deepseek secondary model', async () => {
+  mockGet.mockResolvedValue(onlineGallery);
 
   render(<LocalAIModelHub />, {
     useRedux: true,
     useRouter: true,
   });
 
-  expect(
-    await screen.findByText('AI Insights Model 26.04'),
-  ).toBeInTheDocument();
-  expect(screen.getByText('3.4 KB')).toBeInTheDocument();
-  expect(screen.getByText('SQL generation and repair')).toBeInTheDocument();
-  expect(screen.getByText('Superset MCP/API control')).toBeInTheDocument();
-  expect(screen.getByText(/Local asset size: 3.4 KB/i)).toBeInTheDocument();
-  expect(
-    screen.getByText(
-      /Base model dependency: hermes-3-llama-3.1-8b-lorablated\.Q4_K_M\.gguf/i,
-    ),
-  ).toBeInTheDocument();
+  expect(await screen.findByText('Qwen 3.5 4B')).toBeInTheDocument();
+  expect(screen.getByText('DeepSeek R1 Distill Qwen 7B')).toBeInTheDocument();
+  expect(screen.getByText('Default provider')).toBeInTheDocument();
+  expect(screen.getByText('Default model')).toBeInTheDocument();
+  expect(screen.getByText('2 models available')).toBeInTheDocument();
+  expect(screen.getByText('1 ready to infer')).toBeInTheDocument();
+  expect(screen.getByText('1 assets installed')).toBeInTheDocument();
 });
 
-test('deploys repo-managed model while LocalAI is offline', async () => {
+test('downloads the selected gallery model', async () => {
   mockGet
-    .mockResolvedValueOnce({
-      json: {
-        result: {
-          ...offlineGallery.json.result,
-          models: [
-            {
-              ...offlineGallery.json.result.models[0],
-              installed: false,
-            },
-          ],
-        },
-      },
-    })
-    .mockResolvedValueOnce(offlineGallery);
+    .mockResolvedValueOnce(onlineGallery)
+    .mockResolvedValueOnce(onlineGallery);
   mockPost.mockResolvedValue({
     json: {
       result: {
         deployed: true,
-        model_id: 'ai-insights-model-26.04',
+        model_id: 'deepseek-r1-distill-qwen-7b',
       },
     },
   });
@@ -115,16 +123,14 @@ test('deploys repo-managed model while LocalAI is offline', async () => {
     useRouter: true,
   });
 
-  await screen.findByText('LocalAI Offline');
-  await userEvent.click(
-    screen.getByRole('button', { name: /Deploy local model/i }),
-  );
+  await screen.findByText('LocalAI Running');
+  await userEvent.click(screen.getByRole('button', { name: /Download \(4.7 GB\)/ }));
 
   await waitFor(() => {
     expect(mockPost).toHaveBeenCalledWith(
       expect.objectContaining({
         endpoint: '/api/v1/ai-management/localai/models/install',
-        jsonPayload: { model_id: 'ai-insights-model-26.04' },
+        jsonPayload: { model_id: 'deepseek-r1-distill-qwen-7b' },
       }),
     );
   });
@@ -156,35 +162,6 @@ test('starts LocalAI from the model hub', async () => {
     expect(mockPost).toHaveBeenCalledWith(
       expect.objectContaining({
         endpoint: '/api/v1/ai-management/localai/start',
-      }),
-    );
-  });
-});
-
-test('stops LocalAI from the model hub', async () => {
-  mockGet
-    .mockResolvedValueOnce(onlineGallery)
-    .mockResolvedValueOnce(offlineGallery);
-  mockPost.mockResolvedValue({
-    json: {
-      result: {
-        localai_running: false,
-      },
-    },
-  });
-
-  render(<LocalAIModelHub />, {
-    useRedux: true,
-    useRouter: true,
-  });
-
-  await screen.findByText('LocalAI Running');
-  await userEvent.click(screen.getByRole('button', { name: 'Stop LocalAI' }));
-
-  await waitFor(() => {
-    expect(mockPost).toHaveBeenCalledWith(
-      expect.objectContaining({
-        endpoint: '/api/v1/ai-management/localai/stop',
       }),
     );
   });

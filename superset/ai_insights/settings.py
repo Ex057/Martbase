@@ -25,7 +25,10 @@ LOCALAI_API_KEY_ENV_VAR = "LOCALAI_API_KEY_ENV"
 LOCALAI_BASE_URL_ENV_VAR = "LOCALAI_BASE_URL"
 LOCALAI_EXTERNAL_BACKENDS_ENV_VAR = "LOCALAI_EXTERNAL_BACKENDS"
 LOCALAI_DEFAULT_EXTERNAL_BACKENDS = "llama-cpp"
-LOCALAI_SERVICE_BASE_URL = os.environ.get(LOCALAI_BASE_URL_ENV_VAR, "http://localai:39671")
+LOCALAI_SERVICE_BASE_URL = os.environ.get(
+    LOCALAI_BASE_URL_ENV_VAR,
+    "http://127.0.0.1:39671",
+)
 OLLAMA_SERVICE_BASE_URL = (
     os.environ.get("OLLAMA_BASE_URL")
     or os.environ.get("OLLAMA_HOST")
@@ -341,7 +344,8 @@ DEEPSEEK_TEXT_MODEL_CATALOG: list[dict[str, Any]] = [
     },
 ]
 
-LOCALAI_DEFAULT_MODEL_ID = "tinyllama"
+LOCALAI_DEFAULT_MODEL_ID = "qwen3.5-4b"
+LOCALAI_SECONDARY_MODEL_ID = "deepseek-r1-distill-qwen-7b"
 
 LOCALAI_SUPERSET_CAPABILITIES: list[str] = [
     "Natural-language analytics chat",
@@ -359,101 +363,29 @@ LOCALAI_SUPERSET_CAPABILITIES: list[str] = [
 ]
 
 LOCALAI_TEXT_MODEL_CATALOG: list[dict[str, Any]] = [
-    # Recommended models for Superset AI Insights on LocalAI.
-    # These match the gallery IDs from https://models.localai.io
-    # Users can override via LOCALAI_MODELS env var or AI Management UI.
     {
         "id": LOCALAI_DEFAULT_MODEL_ID,
-        "label": "AI Insights Model 26.04",
-        "group": "Custom",
-        "description": "Purpose-built model for Superset analytics copilot workflows. Optimized for professional chart and dashboard interpretation, SQL reasoning, structured outputs, reporting, and export-oriented narrative generation.",
-        "file_size": "4.6 GB",
+        "label": "Qwen 3.5 4B",
+        "group": "General",
+        "description": "CPU-friendly default for daily analytics chat, chart narration, and structured summaries.",
         "is_latest": True,
         "is_recommended": True,
-        "is_repo_managed": True,
-        "capabilities": LOCALAI_SUPERSET_CAPABILITIES,
-        "base_model_gguf": "hermes-3-llama-3.1-8b-lorablated.Q4_K_M.gguf",
-        "base_model_url": "https://huggingface.co/mlabonne/Hermes-3-Llama-3.1-8B-lorablated-GGUF/resolve/main/hermes-3-llama-3.1-8b-lorablated.Q4_K_M.gguf",
-    },
-    {
-        "id": "hermes-3-llama-3.1-8b-lorablated",
-        "label": "Hermes 3 LLaMA 3.1 8B",
-        "group": "General",
-        "description": "Best general-purpose model for chart and dashboard narrative insights. 4.6 GB.",
-        "file_size": "4.6 GB",
         "capabilities": [
-            "Narrative chart and dashboard summarization",
-            "General-purpose analytics chat",
-            "Executive-style insight writing",
+            "Fast daily analytics responses",
+            "Structured JSON outputs",
+            "Concise chart and dashboard summaries",
         ],
     },
     {
-        "id": "deepseek-r1-distill-qwen-7b",
+        "id": LOCALAI_SECONDARY_MODEL_ID,
         "label": "DeepSeek R1 Distill Qwen 7B",
         "group": "Reasoning",
-        "description": "Reasoning-optimised model for SQL generation and deep analytics. 4.7 GB.",
-        "file_size": "4.7 GB",
+        "description": "Slower secondary model for deeper reasoning, SQL generation, and harder analytical prompts.",
+        "is_recommended": False,
         "capabilities": [
+            "Step-by-step reasoning",
             "SQL generation and repair",
-            "Multi-step reasoning",
-            "Complex dashboard decomposition",
-        ],
-    },
-    {
-        "id": "qwen3-8b",
-        "label": "Qwen 3 8B",
-        "group": "General",
-        "description": "Strong multilingual model with excellent structured output and table formatting.",
-        "capabilities": [
-            "Structured JSON outputs",
-            "Table and report formatting",
-            "Multilingual analytics assistance",
-        ],
-    },
-    {
-        "id": "meta-llama-3.1-8b-instruct",
-        "label": "LLaMA 3.1 8B Instruct",
-        "group": "General",
-        "description": "Meta LLaMA 3.1 8B — reliable general-purpose local model.",
-        "capabilities": [
-            "General analytics chat",
-            "Chart narrative generation",
-            "Dataset and metric explanation",
-        ],
-    },
-    {
-        "id": "gemma-3-4b-it",
-        "label": "Gemma 3 4B IT",
-        "group": "Compact",
-        "description": "Google Gemma 3 4B — small but capable model for lightweight tasks. 2.3 GB.",
-        "file_size": "2.3 GB",
-        "capabilities": [
-            "Lightweight local analysis",
-            "Fast classification and summaries",
-            "Compact deployment footprint",
-        ],
-    },
-    {
-        "id": "qwen3.5-4b",
-        "label": "Qwen 3.5 4B",
-        "group": "Compact",
-        "description": "Compact Qwen model for fast, cost-free local insights.",
-        "capabilities": [
-            "Fast local summaries",
-            "Structured output generation",
-            "Low-resource analytics support",
-        ],
-    },
-    {
-        "id": "deepseek-r1-distill-qwen-14b",
-        "label": "DeepSeek R1 Distill Qwen 14B",
-        "group": "Reasoning",
-        "description": "Larger reasoning model for complex multi-chart dashboard analysis. 8.7 GB.",
-        "file_size": "8.7 GB",
-        "capabilities": [
-            "Advanced reasoning",
-            "Cross-chart anomaly analysis",
-            "Long-form investigative insights",
+            "Deeper analytical follow-up",
         ],
     },
 ]
@@ -797,7 +729,10 @@ def ensure_localai_environment(*, write_env_file: bool = True) -> dict[str, str]
         or env_file_values.get("LOCALAI_DEFAULT_MODEL")
         or LOCALAI_DEFAULT_MODEL_ID
     ).strip()
-    model_ids = ",".join(_catalog_models("localai_text") or [LOCALAI_DEFAULT_MODEL_ID])
+    model_ids = ",".join(
+        _catalog_models("localai_text")
+        or [LOCALAI_DEFAULT_MODEL_ID, LOCALAI_SECONDARY_MODEL_ID]
+    )
     models = (
         os.environ.get("LOCALAI_MODELS")
         or env_file_values.get("LOCALAI_MODELS")
@@ -808,6 +743,11 @@ def ensure_localai_environment(*, write_env_file: bool = True) -> dict[str, str]
         or env_file_values.get(LOCALAI_EXTERNAL_BACKENDS_ENV_VAR)
         or LOCALAI_DEFAULT_EXTERNAL_BACKENDS
     ).strip()
+
+    if default_model not in {LOCALAI_DEFAULT_MODEL_ID, LOCALAI_SECONDARY_MODEL_ID}:
+        default_model = LOCALAI_DEFAULT_MODEL_ID
+    if models != model_ids:
+        models = model_ids
 
     os.environ[LOCALAI_API_KEY_ENV_VAR] = api_key_env
     os.environ[api_key_env] = api_key
@@ -852,22 +792,20 @@ def apply_localai_recommended_defaults(config: dict[str, Any] | None) -> dict[st
     if existing_localai is None or "enabled" not in existing_localai:
         localai["enabled"] = True
 
-    models = [model for model in localai.get("models") or [] if model != LOCALAI_DEFAULT_MODEL_ID]
-    localai["models"] = [LOCALAI_DEFAULT_MODEL_ID, *models]
+    localai["models"] = [
+        LOCALAI_DEFAULT_MODEL_ID,
+        LOCALAI_SECONDARY_MODEL_ID,
+    ]
     localai["api_key_env"] = localai_env["api_key_env"]
     localai["base_url"] = str(localai.get("base_url") or localai_env["base_url"]).strip()
-
-    if not str(localai.get("default_model") or "").strip():
-        localai["default_model"] = LOCALAI_DEFAULT_MODEL_ID
+    localai["default_model"] = LOCALAI_DEFAULT_MODEL_ID
 
     providers["localai"] = localai
 
     if not str(normalized.get("default_provider") or "").strip():
         normalized["default_provider"] = "localai"
         normalized["default_model"] = LOCALAI_DEFAULT_MODEL_ID
-    elif normalized.get("default_provider") == "localai" and not str(
-        normalized.get("default_model") or ""
-    ).strip():
+    elif normalized.get("default_provider") == "localai":
         normalized["default_model"] = LOCALAI_DEFAULT_MODEL_ID
 
     return normalized

@@ -119,7 +119,7 @@ FEATURE_FLAGS = {
 _AI_INSIGHTS_PROVIDERS = {}
 
 # LocalAI Configuration
-localai_base_url = os.environ.get("LOCALAI_BASE_URL", "http://localhost:39671")
+localai_base_url = os.environ.get("LOCALAI_BASE_URL", "http://127.0.0.1:39671")
 _AI_INSIGHTS_PROVIDERS["localai"] = {
     "enabled": True,
     "type": "localai",
@@ -128,10 +128,13 @@ _AI_INSIGHTS_PROVIDERS["localai"] = {
     "api_key_env": "LOCALAI_API_KEY",  # Optional API key for security
     "models": [
         model.strip()
-        for model in os.environ.get("LOCALAI_MODELS", "tinyllama").split(",")
+        for model in os.environ.get(
+            "LOCALAI_MODELS",
+            "qwen3.5-4b,deepseek-r1-distill-qwen-7b",
+        ).split(",")
         if model.strip()
     ],
-    "default_model": os.environ.get("LOCALAI_DEFAULT_MODEL", "tinyllama"),
+    "default_model": os.environ.get("LOCALAI_DEFAULT_MODEL", "qwen3.5-4b"),
     "is_local": True,
 }
 

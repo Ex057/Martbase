@@ -314,7 +314,7 @@ cd /opt/martbase/martbase/scripts
 After starting LocalAI:
 1. Go to Settings → AI Insights in Martbase
 2. Select "LocalAI" as the provider
-3. Configure the endpoint (default: http://localhost:8080)
+3. Configure the endpoint (default: http://127.0.0.1:39671)
 
 ---
 
