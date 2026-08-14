@@ -49,6 +49,7 @@ from flask_appbuilder import expose
 from flask_appbuilder.api import BaseApi, safe
 from flask_appbuilder.security.decorators import permission_name, protect
 
+from superset import db
 from superset.dhis2 import staged_dataset_service as svc
 from superset.dhis2.staging_database_service import get_staging_database
 from superset.dhis2.staging_engine import DHIS2StagingEngine
@@ -2005,7 +2006,7 @@ class DHIS2StagedDatasetApi(BaseApi):
     @safe
     @permission_name("write")
     def cleanup_orphans(self) -> Response:
-        """Delete orphaned staged datasets and drop their DuckDB tables.
+        """Conservatively inspect orphaned staged datasets without deleting live records.
 
         Handles two classes of orphans:
 
@@ -2014,8 +2015,9 @@ class DHIS2StagedDatasetApi(BaseApi):
         2. ``DHIS2StagedDataset`` rows with no ``serving_superset_dataset_id``
            at all (never registered).
 
-        Drops the physical ``ds_*`` and ``sv_*`` DuckDB tables, then removes
-        the metadata row.  Idempotent — safe to call repeatedly.
+        This endpoint now keeps the durable staged-dataset metadata intact and
+        only reports candidates that need manual or targeted repair.  It does
+        not delete staged datasets automatically.
 
         ---
         post:
@@ -2026,7 +2028,6 @@ class DHIS2StagedDatasetApi(BaseApi):
         """
         from superset.connectors.sqla.models import SqlaTable
         from superset.dhis2.models import DHIS2StagedDataset as StagedDataset
-        from superset.dhis2.staged_dataset_service import delete_staged_dataset
 
         sqla_ids = {
             r.id
@@ -2041,19 +2042,11 @@ class DHIS2StagedDatasetApi(BaseApi):
             is_orphan = sid is not None and sid not in sqla_ids
             if not is_orphan:
                 continue
-            try:
-                delete_staged_dataset(ds.id)
-                deleted.append({"id": ds.id, "name": ds.name})
-                logger.info(
-                    "cleanup_orphans: deleted orphaned staged dataset id=%s '%s'",
-                    ds.id,
-                    ds.name,
-                )
-            except Exception as exc:  # pylint: disable=broad-except
-                logger.exception(
-                    "cleanup_orphans: failed to delete staged dataset id=%s", ds.id
-                )
-                errors.append({"id": ds.id, "name": ds.name, "error": str(exc)})
+            logger.info(
+                "cleanup_orphans: staged dataset id=%s '%s' is orphaned but will be preserved",
+                ds.id,
+                ds.name,
+            )
 
         return self.response(
             200,

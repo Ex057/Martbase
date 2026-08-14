@@ -967,6 +967,8 @@ def register_specialized_marts_as_superset_datasets(
 def cleanup_staged_dataset_superset_resources(
     dataset_id: int,
     serving_database_id: int | None = None,
+    *,
+    commit: bool = True,
 ) -> None:
     """Delete all Superset virtual datasets associated with a staged dataset.
 
@@ -993,7 +995,8 @@ def cleanup_staged_dataset_superset_resources(
         )
         db.session.delete(ds)
 
-    db.session.commit()
+    if commit:
+        db.session.commit()
 
 
 def repair_dhis2_chart_references() -> dict[str, int]:

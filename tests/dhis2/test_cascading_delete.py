@@ -45,6 +45,10 @@ def test_delete_staged_dataset_cascades_to_sqla_table():
     session.query = MagicMock()
     session.delete = MagicMock()
     session.commit = MagicMock()
+    session.connection = MagicMock()
+    session_connection = MagicMock()
+    session_connection.info = {}
+    session.connection.return_value = session_connection
 
     generic_dataset = MagicMock()
     staged_dataset = MagicMock()
@@ -94,33 +98,23 @@ def _listener_source_table(staged_id: int = 11):
     )
 
 
-def test_after_sqla_table_delete_removes_staged_when_last_table():
-    """When no other SqlaTable references the staged dataset, deleting this one
-    tears it down (the intended cleanup on a genuine dataset delete)."""
+def test_after_sqla_table_delete_keeps_staged_when_last_table_without_explicit_delete():
+    """Deleting the last linked SqlaTable must not remove the durable staged dataset.
+
+    The explicit dataset delete service is now responsible for tearing the staged
+    dataset down. Ordinary SqlaTable churn should keep the dataset record alive.
+    """
     from superset.dhis2.listeners import _after_sqla_table_delete
 
     connection = MagicMock()
+    connection.info = {}
     count_result = MagicMock()
     count_result.scalar.return_value = 0  # no other tables link
-    staged_result = MagicMock()
-    staged_result.mappings.return_value.first.return_value = {
-        "id": 11,
-        "database_id": 10,
-        "generic_dataset_id": 9,
-        "name": "Test Staged",
-    }
-    connection.execute.side_effect = [
-        count_result,
-        staged_result,
-        MagicMock(),
-        MagicMock(),
-    ]
+    connection.execute.side_effect = [count_result]
 
-    with patch("superset.dhis2.listeners._get_engine", return_value=MagicMock()):
-        _after_sqla_table_delete(None, connection, _listener_source_table())
+    _after_sqla_table_delete(None, connection, _listener_source_table())
 
-    executed = [str(c.args[0]) for c in connection.execute.call_args_list]
-    assert any("DELETE FROM dhis2_staged_datasets" in s for s in executed)
+    assert connection.execute.call_count == 0
 
 
 def test_after_sqla_table_delete_keeps_staged_when_other_tables_link():
@@ -131,16 +125,15 @@ def test_after_sqla_table_delete_keeps_staged_when_other_tables_link():
     from superset.dhis2.listeners import _after_sqla_table_delete
 
     connection = MagicMock()
+    connection.info = {}
     count_result = MagicMock()
     count_result.scalar.return_value = 2  # mart + wrapper still link
     connection.execute.side_effect = [count_result]
 
     _after_sqla_table_delete(None, connection, _listener_source_table())
 
-    # Only the "any other links?" count ran; no staged-dataset teardown.
-    assert connection.execute.call_count == 1
-    executed = [str(c.args[0]) for c in connection.execute.call_args_list]
-    assert not any("DELETE FROM dhis2_staged_datasets" in s for s in executed)
+    # The conservative path returns before issuing any teardown SQL.
+    assert connection.execute.call_count == 0
 
 
 def test_before_dhis2_staged_dataset_delete_listener():

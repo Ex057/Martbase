@@ -43,6 +43,10 @@ from superset.dhis2.analytical_serving import (
     build_serving_manifest,
     dataset_columns_payload,
 )
+from superset.dhis2_delete_context import (
+    clear_explicit_staged_dataset_delete,
+    mark_explicit_staged_dataset_delete,
+)
 from superset.dhis2.models import (
     DHIS2DatasetVariable,
     DHIS2Instance,
@@ -1404,6 +1408,8 @@ def delete_staged_dataset(dataset_id: int) -> bool:
         return False
 
     engine = _get_engine(dataset.database_id)
+    connection = db.session.connection()
+    mark_explicit_staged_dataset_delete(connection)
 
     try:
         # Drop physical tables first; these are auto-committed inside the engine.
@@ -1421,10 +1427,17 @@ def delete_staged_dataset(dataset_id: int) -> bool:
     try:
         if dataset.generic_dataset is not None:
             db.session.delete(dataset.generic_dataset)
-        
+
         # Delete all associated Superset virtual datasets (main + _mart)
-        from superset.dhis2.superset_dataset_service import cleanup_staged_dataset_superset_resources
-        cleanup_staged_dataset_superset_resources(dataset_id, dataset.database_id)
+        from superset.dhis2.superset_dataset_service import (
+            cleanup_staged_dataset_superset_resources,
+        )
+
+        cleanup_staged_dataset_superset_resources(
+            dataset_id,
+            dataset.database_id,
+            commit=False,
+        )
 
         db.session.delete(dataset)
         db.session.commit()
@@ -1434,6 +1447,8 @@ def delete_staged_dataset(dataset_id: int) -> bool:
         db.session.rollback()
         logger.exception("Failed to delete DHIS2StagedDataset id=%s", dataset_id)
         raise
+    finally:
+        clear_explicit_staged_dataset_delete(connection)
 
 
 def clear_staged_dataset_data(dataset_id: int) -> dict[str, Any]:

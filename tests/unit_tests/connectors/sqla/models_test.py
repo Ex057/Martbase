@@ -1810,7 +1810,7 @@ def test_query_repairs_staged_local_dataset_before_generating_sql(
     serving_database.get_df.assert_called_once()
 
 
-def test_cleanup_linked_dhis2_staged_dataset_removes_local_tables_and_metadata(
+def test_cleanup_linked_dhis2_staged_dataset_keeps_local_tables_and_metadata(
     mocker: MockerFixture,
 ) -> None:
     database = Database(
@@ -1827,39 +1827,11 @@ def test_cleanup_linked_dhis2_staged_dataset_removes_local_tables_and_metadata(
         database_id=2,
     )
     connection = mocker.MagicMock()
-    select_result = mocker.MagicMock()
-    select_result.mappings.return_value.first.return_value = {
-        "id": 4,
-        "database_id": 2,
-        "name": "ANC Coverage",
-        "staging_table_name": "ds_4_anc_coverage",
-        "generic_dataset_id": 9,
-    }
-    duckdb_engine = mocker.MagicMock()
-    mocker.patch(
-        "superset.local_staging.engine_factory.get_active_staging_engine",
-        return_value=duckdb_engine,
-    )
-    count_result = mocker.MagicMock()
-    count_result.scalar.return_value = 0  # no OTHER SqlaTables link to it
-    connection.execute.side_effect = [
-        count_result,
-        select_result,
-        mocker.MagicMock(),
-        mocker.MagicMock(),
-    ]
+    connection.info = {}
 
     sqla_table.cleanup_linked_dhis2_staged_dataset(connection)
 
-    executed_sql = [call.args[0].text for call in connection.execute.call_args_list]
-    assert any("FROM dhis2_staged_datasets" in sql for sql in executed_sql)
-    duckdb_engine.drop_staging_table.assert_called_once()
-    staging_dataset_ref = duckdb_engine.drop_staging_table.call_args.args[0]
-    assert staging_dataset_ref.id == 4
-    assert staging_dataset_ref.name == "ANC Coverage"
-    assert staging_dataset_ref.staging_table_name == "ds_4_anc_coverage"
-    assert any("DELETE FROM staged_datasets" in sql for sql in executed_sql)
-    assert any("DELETE FROM dhis2_staged_datasets" in sql for sql in executed_sql)
+    assert connection.execute.call_count == 0
 
 
 def test_cleanup_linked_dhis2_staged_dataset_kept_when_other_tables_still_link(
@@ -1889,11 +1861,8 @@ def test_cleanup_linked_dhis2_staged_dataset_kept_when_other_tables_still_link(
 
     sqla_table.cleanup_linked_dhis2_staged_dataset(connection)
 
-    executed_sql = [call.args[0].text for call in connection.execute.call_args_list]
-    # Only the "any other links?" count query ran; NO teardown happened.
-    assert len(connection.execute.call_args_list) == 1
-    assert not any("DELETE FROM dhis2_staged_datasets" in sql for sql in executed_sql)
-    assert not any("DELETE FROM staged_datasets" in sql for sql in executed_sql)
+    # The conservative path returns before issuing any destructive SQL.
+    assert connection.execute.call_count == 0
 
 
 def test_permissions_without_catalog() -> None:

@@ -25,6 +25,7 @@ from sqlalchemy.orm import Mapper
 from superset.connectors.sqla.models import SqlaTable
 from superset.dhis2.models import DHIS2StagedDataset
 from superset.dhis2.staged_dataset_service import _get_engine
+from superset.dhis2_delete_context import is_explicit_staged_dataset_delete
 from superset.staging.models import StagedDataset as GenericStagedDataset
 
 logger = logging.getLogger(__name__)
@@ -44,12 +45,7 @@ def setup_listeners() -> None:
 
 
 def _after_sqla_table_delete(mapper: Mapper, connection: Any, target: Any) -> None:
-    """Clean up DHIS2 staged dataset when the PRIMARY Superset virtual dataset is deleted.
-
-    Only skips cascade cleanup for internal MART records. User-facing SERVING
-    datasets and raw DHIS2 source registrations both represent the same staged
-    dataset lifecycle and their deletion should still cascade.
-    """
+    """Skip destructive DHIS2 cleanup for incidental SqlaTable deletes."""
     try:
         from superset.datasets.policy import DatasetRole
 
@@ -77,88 +73,16 @@ def _after_sqla_table_delete(mapper: Mapper, connection: Any, target: Any) -> No
             )
             return
 
-        # Do NOT cascade-delete the shared staged dataset while OTHER SqlaTables
-        # still reference it. A staged dataset owns source/mart/wrapper tables;
-        # re-registration deletes+recreates one of them, and without this guard
-        # that delete destroys the staged dataset and orphans the rest — the
-        # dataset "disappears", the map shows "Empty query?", and editing throws
-        # "Failed to load dataset configuration for editing". This mirrors the
-        # guard in SqlaTable.cleanup_linked_dhis2_staged_dataset; BOTH
-        # after_delete handlers must agree or one silently overrides the other.
-        # target.id is excluded — it is the row currently being deleted.
-        remaining_links = connection.execute(
-            sa.text(
-                """
-                SELECT COUNT(*)
-                FROM tables
-                WHERE id != :self_id
-                  AND (extra LIKE :pat_spaced OR extra LIKE :pat_tight)
-                """
-            ),
-            {
-                "self_id": target.id,
-                "pat_spaced": f'%"dhis2_staged_dataset_id": {staged_dataset_id}%',
-                "pat_tight": f'%"dhis2_staged_dataset_id":{staged_dataset_id}%',
-            },
-        ).scalar()
-        if remaining_links and int(remaining_links) > 0:
+        if not is_explicit_staged_dataset_delete(connection):
             logger.info(
-                "DHIS2 listener: %s other SqlaTable(s) still reference staged "
-                "dataset id=%s — keeping it (only SqlaTable id=%s removed)",
-                int(remaining_links),
+                "DHIS2 listener: keeping staged dataset id=%s after SqlaTable id=%s delete outside explicit delete flow",
                 staged_dataset_id,
                 target.id,
             )
             return
-
-        logger.info(
-            "DHIS2 listener: SqlaTable id=%s ('%s') deleted; cleaning up DHIS2StagedDataset id=%s",
-            target.id,
-            target.table_name,
+        logger.debug(
+            "DHIS2 listener: explicit delete flow already handles staged dataset id=%s; SqlaTable cleanup remains conservative",
             staged_dataset_id,
-        )
-
-        staged_row = connection.execute(
-            sa.select(
-                DHIS2StagedDataset.__table__.c.id,
-                DHIS2StagedDataset.__table__.c.database_id,
-                DHIS2StagedDataset.__table__.c.generic_dataset_id,
-                DHIS2StagedDataset.__table__.c.name,
-            ).where(DHIS2StagedDataset.__table__.c.id == staged_dataset_id)
-        ).mappings().first()
-        if not staged_row:
-            return
-
-        try:
-            engine = _get_engine(staged_row["database_id"])
-            lightweight_target = type(
-                "ListenerDatasetTarget",
-                (),
-                {
-                    "id": staged_row["id"],
-                    "name": staged_row["name"],
-                    "database_id": staged_row["database_id"],
-                },
-            )()
-            engine.drop_staging_table(lightweight_target)
-            engine.drop_serving_table(lightweight_target)
-        except Exception:
-            logger.exception(
-                "DHIS2 listener: failed dropping physical tables after SqlaTable delete for staged dataset id=%s",
-                staged_dataset_id,
-            )
-
-        generic_dataset_id = staged_row["generic_dataset_id"]
-        if generic_dataset_id:
-            connection.execute(
-                GenericStagedDataset.__table__.delete().where(
-                    GenericStagedDataset.__table__.c.id == generic_dataset_id
-                )
-            )
-        connection.execute(
-            DHIS2StagedDataset.__table__.delete().where(
-                DHIS2StagedDataset.__table__.c.id == staged_dataset_id
-            )
         )
     except Exception:
         logger.exception("DHIS2 listener: failed to clean up staged dataset after SqlaTable delete")

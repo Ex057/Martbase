@@ -796,3 +796,37 @@ def test_cleanup_dataset_returns_success_response():
     cleanup_mock.assert_called_once_with(11)
     assert response.status_code == 200
     assert response.get_json()["result"]["dataset_id"] == 11
+
+
+def test_cleanup_orphans_keeps_live_staged_dataset_records(mocker):
+    from superset.dhis2.staged_dataset_api import DHIS2StagedDatasetApi
+
+    app = _make_test_app()
+
+    sqla_ids_query = mocker.MagicMock()
+    sqla_ids_query.all.return_value = [SimpleNamespace(id=77)]
+    staged_query = mocker.MagicMock()
+    staged_query.all.return_value = [
+        SimpleNamespace(
+            id=11,
+            name="mal_preg_dataset",
+            serving_superset_dataset_id=999,
+        )
+    ]
+    query_mock = mocker.patch(
+        "superset.dhis2.staged_dataset_api.db.session.query",
+        side_effect=[sqla_ids_query, staged_query],
+    )
+
+    with patch("superset.dhis2.staged_dataset_api.svc.delete_staged_dataset") as delete_mock:
+        with app.test_request_context(
+            "/api/v1/dhis2/staged-datasets/cleanup-orphans",
+            method="POST",
+        ):
+            response = DHIS2StagedDatasetApi().cleanup_orphans()
+
+    assert query_mock.call_count == 2
+    delete_mock.assert_not_called()
+    payload = response.get_json()["result"]
+    assert payload["deleted"] == []
+    assert response.status_code == 200

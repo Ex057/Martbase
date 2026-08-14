@@ -25,7 +25,6 @@ from collections import defaultdict
 from collections.abc import Hashable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from types import SimpleNamespace
 from typing import Any, Callable, cast, Optional, Union
 
 import pandas as pd
@@ -73,6 +72,7 @@ from sqlalchemy.types import JSON
 from superset import db, is_feature_enabled, security_manager
 from superset.commands.dataset.exceptions import DatasetNotFoundError
 from superset.common.db_query_status import QueryStatus
+from superset.dhis2_delete_context import is_explicit_staged_dataset_delete
 from superset.connectors.sqla.utils import (
     get_columns_description,
     get_physical_table_metadata,
@@ -2718,113 +2718,29 @@ class SqlaTable(
         return None
 
     def cleanup_linked_dhis2_staged_dataset(self, connection: Connection) -> None:
-        """Delete the DHIS2StagedDataset and drop its DuckDB tables when this
-        SqlaTable is deleted.
+        """Conservatively skip DHIS2 teardown from incidental SqlaTable deletes.
 
-        The ``connection`` argument is the SQLAlchemy connection to the Superset
-        *metadata* database (SQLite/Postgres).  DuckDB DDL must be executed via
-        the staging engine's own connection — never via ``connection``.
+        The durable DHIS2 staged-dataset record is owned by the explicit delete
+        flow in ``delete_staged_dataset()``. Wrapper churn and re-registration
+        deletes must not destroy that canonical metadata record.
         """
         staged_dataset_id = self._get_linked_dhis2_staged_dataset_id()
         if staged_dataset_id is None:
             return
 
-        # A DHIS2 staged dataset has MULTIPLE linked SqlaTables (source, mart,
-        # and the user-facing metadata wrapper).  Deleting or replacing any ONE
-        # of them (e.g. when a wrapper is re-registered) must NOT nuke the
-        # shared staged dataset — doing so orphans the remaining tables, leaving
-        # a wrapper whose staged dataset is gone ("Empty query", empty data
-        # filter, "Failed to load dataset configuration for editing").  Only
-        # tear the staged dataset down when this is the LAST table referencing
-        # it.  self.id is already flushed for delete but still queryable, so we
-        # exclude it explicitly.
-        remaining_links = connection.execute(
-            sa.text(
-                """
-                SELECT COUNT(*)
-                FROM tables
-                WHERE id != :self_id
-                  AND (extra LIKE :pat_spaced OR extra LIKE :pat_tight)
-                """
-            ),
-            {
-                "self_id": self.id,
-                "pat_spaced": f'%"dhis2_staged_dataset_id": {staged_dataset_id}%',
-                "pat_tight": f'%"dhis2_staged_dataset_id":{staged_dataset_id}%',
-            },
-        ).scalar()
-        if remaining_links and int(remaining_links) > 0:
+        if not is_explicit_staged_dataset_delete(connection):
             logger.info(
-                "cleanup_linked_dhis2_staged_dataset: %s other SqlaTable(s) still "
-                "reference staged dataset id=%s — keeping it (only SqlaTable "
-                "id=%s removed)",
-                int(remaining_links),
+                "cleanup_linked_dhis2_staged_dataset: keeping staged dataset id=%s "
+                "after SqlaTable id=%s delete outside explicit delete flow",
                 staged_dataset_id,
                 self.id,
             )
             return
-
-        result = connection.execute(
-            sa.text(
-                """
-                SELECT
-                    id,
-                    database_id,
-                    name,
-                    staging_table_name,
-                    generic_dataset_id
-                FROM dhis2_staged_datasets
-                WHERE id = :dataset_id
-                """
-            ),
-            {"dataset_id": staged_dataset_id},
-        )
-        staged_dataset = result.mappings().first()
-        if staged_dataset is None:
-            return
-
         logger.info(
-            "cleanup_linked_dhis2_staged_dataset: dropping DuckDB tables for "
-            "staged dataset id=%s (SqlaTable id=%s deleted)",
+            "cleanup_linked_dhis2_staged_dataset: explicit delete flow is handling "
+            "staged dataset id=%s; SqlaTable id=%s delete does not remove it",
             staged_dataset_id,
             self.id,
-        )
-
-        # Drop the physical DuckDB tables through the staging engine so that
-        # the DDL runs on the DuckDB connection, not the SQLite metadata conn.
-        staging_dataset_ref = SimpleNamespace(
-            id=staged_dataset["id"],
-            name=staged_dataset["name"],
-            staging_table_name=staged_dataset["staging_table_name"],
-        )
-        try:
-            from superset.local_staging.engine_factory import get_active_staging_engine
-            duckdb_engine = get_active_staging_engine(int(staged_dataset["database_id"]))
-            duckdb_engine.drop_staging_table(staging_dataset_ref)
-        except Exception:  # pylint: disable=broad-except
-            logger.exception(
-                "cleanup_linked_dhis2_staged_dataset: failed to drop DuckDB "
-                "tables for staged dataset id=%s — proceeding with metadata "
-                "cleanup anyway",
-                staged_dataset_id,
-            )
-
-        # Remove metadata rows from the Superset metadata DB (SQLite).
-        generic_dataset_id = staged_dataset.get("generic_dataset_id")
-        if isinstance(generic_dataset_id, int):
-            connection.execute(
-                sa.text("DELETE FROM staged_datasets WHERE id = :dataset_id"),
-                {"dataset_id": generic_dataset_id},
-            )
-
-        connection.execute(
-            sa.text("DELETE FROM dhis2_staged_datasets WHERE id = :dataset_id"),
-            {"dataset_id": staged_dataset_id},
-        )
-        logger.info(
-            "cleanup_linked_dhis2_staged_dataset: removed staged dataset id=%s "
-            "and its DuckDB tables",
-            staged_dataset_id,
         )
 
     def load_database(self: SqlaTable) -> None:
