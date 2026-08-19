@@ -187,7 +187,7 @@ def inject_chart_dhis2_identity(
     elif not isinstance(params, dict):
         params = {}
     params.update(identity)
-    config["params"] = params
+    config["params"] = json.dumps(params)
 
     query_context = config.get("query_context")
     if query_context is None:
@@ -201,7 +201,7 @@ def inject_chart_dhis2_identity(
         query_context = {}
 
     _update_query_context_dhis2_identity(query_context, identity)
-    config["query_context"] = query_context
+    config["query_context"] = json.dumps(query_context)
     return config
 
 
