@@ -178,6 +178,38 @@ def _refresh_variable_dimension_availability(variable: DHIS2DatasetVariable) -> 
     variable.set_dimension_availability(availability)
 
 
+def register_serving_table_as_superset_dataset(*args: Any, **kwargs: Any) -> Any:
+    from superset.dhis2.superset_dataset_service import (
+        register_serving_table_as_superset_dataset as _impl,
+    )
+
+    return _impl(*args, **kwargs)
+
+
+def register_specialized_marts_as_superset_datasets(*args: Any, **kwargs: Any) -> Any:
+    from superset.dhis2.superset_dataset_service import (
+        register_specialized_marts_as_superset_datasets as _impl,
+    )
+
+    return _impl(*args, **kwargs)
+
+
+def register_metadata_dataset_as_superset_dataset(*args: Any, **kwargs: Any) -> Any:
+    from superset.dhis2.superset_dataset_service import (
+        register_metadata_dataset_as_superset_dataset as _impl,
+    )
+
+    return _impl(*args, **kwargs)
+
+
+def repair_charts_for_dhis2_staged_dataset(*args: Any, **kwargs: Any) -> Any:
+    from superset.dhis2.superset_dataset_service import (
+        repair_charts_for_dhis2_staged_dataset as _impl,
+    )
+
+    return _impl(*args, **kwargs)
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -1779,7 +1811,7 @@ def get_local_filter_options(
     # DHIS2 sync stay on the sync/refresh path, not here.
     serving_columns: list[dict[str, Any]]
     try:
-        if engine.serving_table_exists(dataset):
+        if engine.serving_table_exists(dataset) is True:
             serving_columns = get_serving_columns(dataset.id)
         else:
             _serving_table_ref, serving_columns = ensure_serving_table(dataset.id)
@@ -1802,12 +1834,14 @@ def get_local_filter_options(
         except Exception:  # pylint: disable=broad-except
             serving_columns = []
 
-    return engine.get_serving_filter_options(
-        dataset,
-        columns=serving_columns,
-        filters=filters,
-        only_columns=only_columns,
-    )
+    kwargs: dict[str, Any] = {
+        "columns": serving_columns,
+        "filters": filters,
+    }
+    if only_columns is not None:
+        kwargs["only_columns"] = only_columns
+
+    return engine.get_serving_filter_options(dataset, **kwargs)
 
 
 def export_serving_data_csv(
@@ -1970,7 +2004,7 @@ def _serving_table_needs_rebuild(
     if not expected_columns:
         return False
 
-    if not engine.serving_table_exists(dataset):
+    if engine.serving_table_exists(dataset) is not True:
         return True
 
     try:
@@ -2116,12 +2150,7 @@ def ensure_serving_table(
 
     # Auto-register the serving table as a Superset virtual dataset
     try:
-        from superset.dhis2.superset_dataset_service import (
-            register_metadata_dataset_as_superset_dataset,
-            register_serving_table_as_superset_dataset,
-            repair_charts_for_dhis2_staged_dataset,
-            register_specialized_marts_as_superset_datasets,
-        )
+        from superset.connectors.sqla.models import SqlaTable
         from superset.datasets.policy import DatasetRole
         from superset import db as _db
 
@@ -2137,13 +2166,23 @@ def ensure_serving_table(
             # Collect source instance IDs from dataset variables so the
             # DHIS2Map can route geo/metadata requests to the right instances.
             from superset.dhis2.models import DHIS2DatasetVariable as _DSVar
-            _instance_ids = list(dict.fromkeys(
-                v.instance_id
-                for v in _db.session.query(_DSVar)
-                    .filter_by(staged_dataset_id=dataset.id)
-                    .all()
-                if v.instance_id is not None
-            ))
+            _instance_ids = []
+            try:
+                _instance_ids = list(
+                    dict.fromkeys(
+                        v.instance_id
+                        for v in _db.session.query(_DSVar)
+                        .filter_by(staged_dataset_id=dataset.id)
+                        .all()
+                        if v.instance_id is not None
+                    )
+                )
+            except Exception:  # pylint: disable=broad-except
+                logger.warning(
+                    "ensure_serving_table: failed to collect source instance ids for dataset id=%s",
+                    dataset.id,
+                    exc_info=True,
+                )
             register_serving_table_as_superset_dataset(
                 dataset_id=dataset.id,
                 dataset_name=dataset.name,
@@ -2154,10 +2193,18 @@ def ensure_serving_table(
                 source_instance_ids=_instance_ids,
                 dataset_role=DatasetRole.SOURCE.value,
             )
-            repair_charts_for_dhis2_staged_dataset(
-                dataset.id,
-                DatasetRole.SOURCE.value,
-            )
+            try:
+                repair_charts_for_dhis2_staged_dataset(
+                    dataset.id,
+                    DatasetRole.SOURCE.value,
+                )
+            except Exception:  # pylint: disable=broad-except
+                logger.warning(
+                    "ensure_serving_table: chart repair failed for dataset id=%s role=%s",
+                    dataset.id,
+                    DatasetRole.SOURCE.value,
+                    exc_info=True,
+                )
             
             # Register consolidated mart — only if ClickHouse _mart table exists
             register_specialized_marts_as_superset_datasets(
@@ -2171,10 +2218,18 @@ def ensure_serving_table(
                 engine=engine,
                 dataset=dataset,
             )
-            repair_charts_for_dhis2_staged_dataset(
-                dataset.id,
-                DatasetRole.MART.value,
-            )
+            try:
+                repair_charts_for_dhis2_staged_dataset(
+                    dataset.id,
+                    DatasetRole.MART.value,
+                )
+            except Exception:  # pylint: disable=broad-except
+                logger.warning(
+                    "ensure_serving_table: chart repair failed for dataset id=%s role=%s",
+                    dataset.id,
+                    DatasetRole.MART.value,
+                    exc_info=True,
+                )
 
             metadata_sqla_id = register_metadata_dataset_as_superset_dataset(
                 dataset_id=dataset.id,
@@ -2185,14 +2240,43 @@ def ensure_serving_table(
                 serving_database_id=serving_db_id,
                 source_instance_ids=_instance_ids,
             )
-            repair_charts_for_dhis2_staged_dataset(
-                dataset.id,
-                DatasetRole.METADATA.value,
-            )
+            try:
+                repair_charts_for_dhis2_staged_dataset(
+                    dataset.id,
+                    DatasetRole.METADATA.value,
+                )
+            except Exception:  # pylint: disable=broad-except
+                logger.warning(
+                    "ensure_serving_table: chart repair failed for dataset id=%s role=%s",
+                    dataset.id,
+                    DatasetRole.METADATA.value,
+                    exc_info=True,
+                )
+
+            metadata_sqla = _db.session.get(SqlaTable, metadata_sqla_id)
+            if metadata_sqla is None or getattr(metadata_sqla, "dataset_role", None) != DatasetRole.METADATA.value:
+                raise RuntimeError(
+                    "Failed to verify DHIS2 metadata dataset registration for "
+                    f"staged dataset id={dataset.id}"
+                )
 
             if dataset.serving_superset_dataset_id != metadata_sqla_id:
                 dataset.serving_superset_dataset_id = metadata_sqla_id
                 _db.session.commit()
+    except RuntimeError as exc:
+        if "Failed to verify DHIS2 metadata dataset registration" in str(exc):
+            raise
+        logger.exception(
+            "ensure_serving_table: auto-register as Superset dataset failed for dataset_id=%s",
+            dataset_id,
+        )
+        # Roll back any partial transaction so the session stays usable for
+        # subsequent callers in the same worker thread.
+        try:
+            from superset import db as _db
+            _db.session.rollback()
+        except Exception:  # pylint: disable=broad-except
+            pass
     except Exception:  # pylint: disable=broad-except
         logger.exception(
             "ensure_serving_table: auto-register as Superset dataset failed for dataset_id=%s",

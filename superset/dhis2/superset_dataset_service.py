@@ -117,6 +117,7 @@ def _get_dhis2_sqla_table(
     dataset_id: int,
     dataset_role: str | None = None,
 ) -> Any | None:
+    from superset import db
     from superset.connectors.sqla.models import SqlaTable
 
     query = db.session.query(SqlaTable).filter(
