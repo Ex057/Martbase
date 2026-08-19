@@ -113,6 +113,148 @@ def _get_staged_local_candidates(dataset_id: int, database_id: int | None = None
     return query.all()
 
 
+def _get_dhis2_sqla_table(
+    dataset_id: int,
+    dataset_role: str | None = None,
+) -> Any | None:
+    from superset.connectors.sqla.models import SqlaTable
+
+    query = db.session.query(SqlaTable).filter(
+        SqlaTable.extra.like(f'%"dhis2_staged_dataset_id": {dataset_id}%')
+        | SqlaTable.extra.like(f'%"dhis2_staged_dataset_id":{dataset_id}%')
+    )
+    if dataset_role:
+        query = query.filter(SqlaTable.dataset_role == dataset_role)
+
+    candidates = query.all()
+    if not candidates:
+        return None
+
+    def _candidate_score(candidate: Any) -> tuple[int, int, int]:
+        try:
+            extra = json.loads(getattr(candidate, "extra", None) or "{}")
+        except Exception:  # pylint: disable=broad-except
+            extra = {}
+        candidate_role = str(getattr(candidate, "dataset_role", "") or "").strip()
+        role_score = 0 if dataset_role and candidate_role == dataset_role else 1
+        ref_score = 0 if str(extra.get("dhis2_serving_table_ref") or "").strip() else 1
+        return role_score, ref_score, int(getattr(candidate, "id", 0) or 0)
+
+    candidates.sort(key=_candidate_score)
+    return candidates[0]
+
+
+def repair_charts_for_dhis2_staged_dataset(
+    dataset_id: int,
+    dataset_role: str | None = None,
+) -> int:
+    """Repair chart metadata for a re-registered DHIS2 staged dataset."""
+    from superset import db
+    from superset.models.slice import Slice
+
+    datasource = _get_dhis2_sqla_table(dataset_id, dataset_role)
+    if datasource is None:
+        return 0
+
+    staged_patterns = [
+        f'%"dhis2_staged_dataset_id": {dataset_id}%',
+        f'%"dhis2_staged_dataset_id":{dataset_id}%',
+    ]
+    query = db.session.query(Slice).filter(
+        Slice.params.like(staged_patterns[0])
+        | Slice.params.like(staged_patterns[1])
+        | Slice.query_context.like(staged_patterns[0])
+        | Slice.query_context.like(staged_patterns[1])
+    )
+    if dataset_role:
+        role_patterns = [
+            f'%"dhis2_dataset_role": "{dataset_role}"%',
+            f'%"dhis2_dataset_role":"{dataset_role}"%',
+        ]
+        query = query.filter(
+            Slice.params.like(role_patterns[0])
+            | Slice.params.like(role_patterns[1])
+            | Slice.query_context.like(role_patterns[0])
+            | Slice.query_context.like(role_patterns[1])
+        )
+
+    repaired = 0
+    for chart in query.all():
+        changed = False
+        identity = {"dhis2_staged_dataset_id": dataset_id}
+        if dataset_role:
+            identity["dhis2_dataset_role"] = dataset_role
+
+        try:
+            params = json.loads(chart.params or "{}")
+        except Exception:  # pylint: disable=broad-except
+            params = {}
+        if isinstance(params, dict):
+            params.update(identity)
+            params["datasource"] = f"{datasource.id}__{datasource.datasource_type}"
+            chart.params = json.dumps(params)
+            changed = True
+
+        try:
+            query_context = json.loads(chart.query_context or "{}")
+        except Exception:  # pylint: disable=broad-except
+            query_context = {}
+        if isinstance(query_context, dict):
+            form_data = query_context.get("form_data")
+            if not isinstance(form_data, dict):
+                form_data = {}
+            form_data.update(identity)
+            form_data["datasource"] = f"{datasource.id}__{datasource.datasource_type}"
+            query_context["form_data"] = form_data
+
+            query_context_datasource = query_context.get("datasource")
+            if not isinstance(query_context_datasource, dict):
+                query_context_datasource = {}
+            query_context_datasource.update(identity)
+            query_context_datasource["id"] = datasource.id
+            query_context_datasource["type"] = datasource.datasource_type
+            query_context["datasource"] = query_context_datasource
+
+            queries = query_context.get("queries")
+            if isinstance(queries, list):
+                for query_item in queries:
+                    if not isinstance(query_item, dict):
+                        continue
+                    query_datasource = query_item.get("datasource")
+                    if not isinstance(query_datasource, dict):
+                        query_datasource = {}
+                    query_datasource.update(identity)
+                    query_datasource["id"] = datasource.id
+                    query_datasource["type"] = datasource.datasource_type
+                    query_item["datasource"] = query_datasource
+
+            chart.query_context = json.dumps(query_context)
+            changed = True
+
+        if chart.datasource_id != datasource.id:
+            chart.datasource_id = datasource.id
+            changed = True
+        if chart.datasource_type != datasource.datasource_type:
+            chart.datasource_type = datasource.datasource_type
+            changed = True
+        if getattr(chart, "datasource_name", None) != getattr(datasource, "name", None):
+            chart.datasource_name = getattr(datasource, "name", None)
+            changed = True
+
+        if changed:
+            repaired += 1
+
+    if repaired:
+        db.session.commit()
+        logger.info(
+            "repair_charts_for_dhis2_staged_dataset: repaired %s charts for dataset id=%s role=%s",
+            repaired,
+            dataset_id,
+            dataset_role,
+        )
+    return repaired
+
+
 def register_metadata_dataset_as_superset_dataset(
     dataset_id: int,
     dataset_name: str,

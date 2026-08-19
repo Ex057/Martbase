@@ -29,6 +29,7 @@ from superset.commands.database.importers.v1.utils import import_database
 from superset.commands.dataset.importers.v1.utils import import_dataset
 from superset.commands.importers.v1 import ImportModelsCommand
 from superset.commands.importers.v1.utils import import_tag
+from superset.commands.utils import get_dhis2_chart_identity
 from superset.commands.utils import update_chart_config_dataset
 from superset.connectors.sqla.models import SqlaTable
 from superset.daos.chart import ChartDAO
@@ -97,10 +98,12 @@ class ImportChartsCommand(ImportModelsCommand):
 
                 # update datasource id, type, and name
                 dataset = datasets[config["dataset_uuid"]]
+                identity = get_dhis2_chart_identity(dataset)
                 dataset_dict = {
                     "datasource_id": dataset.id,
                     "datasource_type": "table",
                     "datasource_name": dataset.table_name,
+                    **identity,
                 }
                 config = update_chart_config_dataset(config, dataset_dict)
                 chart = import_chart(config, overwrite=overwrite)

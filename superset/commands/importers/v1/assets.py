@@ -40,6 +40,7 @@ from superset.commands.importers.v1.utils import (
     validate_metadata_type,
 )
 from superset.commands.query.importers.v1.utils import import_saved_query
+from superset.commands.utils import get_dhis2_chart_identity
 from superset.commands.utils import update_chart_config_dataset
 from superset.connectors.sqla.models import SqlaTable
 from superset.dashboards.schemas import ImportV1DashboardSchema
@@ -124,6 +125,7 @@ class ImportAssetsCommand(BaseCommand):
                     "datasource_id": dataset.id,
                     "datasource_type": dataset.datasource_type,
                     "datasource_name": dataset.table_name,
+                    **get_dhis2_chart_identity(dataset),
                 }
 
         # import charts

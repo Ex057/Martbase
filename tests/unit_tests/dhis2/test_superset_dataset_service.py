@@ -7,6 +7,7 @@ from superset.dhis2.superset_dataset_service import (
     _build_metadata_wrapper_sql,
     _ensure_dhis2_extra,
     _is_metadata_wrapper_candidate,
+    repair_charts_for_dhis2_staged_dataset,
     register_serving_table_as_superset_dataset,
 )
 
@@ -179,3 +180,70 @@ def test_register_serving_table_updates_source_row_not_mart_row() -> None:
     assert source_row.dataset_role == "DHIS2_SOURCE_DATASET"
     assert mart_row.table_name == "sv_7_mal_routine_ehmis_indicators_mart"
     assert mart_row.dataset_role == "MART"
+
+
+def test_repair_charts_for_dhis2_staged_dataset_updates_saved_chart_json() -> None:
+    class _FakeQuery:
+        def __init__(self, *, all_result=None):
+            self._all_result = list(all_result or [])
+
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def all(self):
+            return list(self._all_result)
+
+    chart = SimpleNamespace(
+        id=99,
+        params=json.dumps(
+            {
+                "dhis2_staged_dataset_id": 7,
+                "dhis2_dataset_role": "SOURCE",
+                "datasource": "12__table",
+            }
+        ),
+        query_context=json.dumps(
+            {
+                "form_data": {
+                    "datasource": "12__table",
+                    "dhis2_staged_dataset_id": 7,
+                    "dhis2_dataset_role": "SOURCE",
+                },
+                "datasource": {"id": 12, "type": "table"},
+                "queries": [{"datasource": {"id": 12, "type": "table"}}],
+            }
+        ),
+        datasource_id=12,
+        datasource_type="table",
+        datasource_name="old name",
+    )
+    datasource = SimpleNamespace(
+        id=23,
+        datasource_type="table",
+        name="new name",
+    )
+    session = SimpleNamespace(
+        query=MagicMock(return_value=_FakeQuery(all_result=[chart])),
+        commit=MagicMock(),
+    )
+
+    with patch("superset.db.session", session), patch(
+        "superset.dhis2.superset_dataset_service._get_dhis2_sqla_table",
+        return_value=datasource,
+    ):
+        repaired = repair_charts_for_dhis2_staged_dataset(7, "SOURCE")
+
+    assert repaired == 1
+    assert chart.datasource_id == 23
+    assert chart.datasource_type == "table"
+    assert chart.datasource_name == "new name"
+
+    params = json.loads(chart.params)
+    assert params["datasource"] == "23__table"
+    assert params["dhis2_staged_dataset_id"] == 7
+    assert params["dhis2_dataset_role"] == "SOURCE"
+
+    query_context = json.loads(chart.query_context)
+    assert query_context["datasource"]["id"] == 23
+    assert query_context["datasource"]["dhis2_staged_dataset_id"] == 7
+    assert query_context["form_data"]["datasource"] == "23__table"

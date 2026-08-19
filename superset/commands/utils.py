@@ -110,6 +110,101 @@ def get_datasource_by_id(datasource_id: int, datasource_type: str) -> BaseDataso
         raise DatasourceNotFoundValidationError() from ex
 
 
+def get_dhis2_chart_identity(datasource: Any) -> dict[str, Any]:
+    """Extract stable DHIS2 identity metadata from a datasource object."""
+    extra: dict[str, Any] = {}
+    if hasattr(datasource, "get_extra_dict"):
+        try:
+            extra = datasource.get_extra_dict() or {}
+        except Exception:  # pylint: disable=broad-except
+            extra = {}
+    elif hasattr(datasource, "extra_dict"):
+        try:
+            extra = datasource.extra_dict or {}
+        except Exception:  # pylint: disable=broad-except
+            extra = {}
+
+    identity: dict[str, Any] = {}
+
+    staged_dataset_id = extra.get("dhis2_staged_dataset_id")
+    try:
+        staged_dataset_id = int(staged_dataset_id)
+    except (TypeError, ValueError):
+        staged_dataset_id = None
+    if staged_dataset_id is not None:
+        identity["dhis2_staged_dataset_id"] = staged_dataset_id
+
+    dataset_role = getattr(datasource, "dataset_role", None)
+    if isinstance(dataset_role, str) and dataset_role.strip():
+        identity["dhis2_dataset_role"] = dataset_role.strip()
+
+    return identity
+
+
+def _update_query_context_dhis2_identity(
+    query_context: dict[str, Any],
+    identity: dict[str, Any],
+) -> None:
+    if not identity:
+        return
+
+    form_data = query_context.get("form_data")
+    if not isinstance(form_data, dict):
+        form_data = {}
+    form_data.update(identity)
+    query_context["form_data"] = form_data
+
+    datasource = query_context.get("datasource")
+    if isinstance(datasource, dict):
+        datasource.update(identity)
+
+    queries = query_context.get("queries")
+    if isinstance(queries, list):
+        for query in queries:
+            if isinstance(query, dict):
+                query_datasource = query.get("datasource")
+                if isinstance(query_datasource, dict):
+                    query_datasource.update(identity)
+
+
+def inject_chart_dhis2_identity(
+    config: dict[str, Any],
+    datasource: Any,
+) -> dict[str, Any]:
+    """Inject stable DHIS2 dataset identity into chart save/import payloads."""
+    identity = get_dhis2_chart_identity(datasource)
+    if not identity:
+        return config
+
+    params = config.get("params")
+    if params is None:
+        params = {}
+    elif isinstance(params, str):
+        try:
+            params = json.loads(params)
+        except (TypeError, json.JSONDecodeError):
+            params = {}
+    elif not isinstance(params, dict):
+        params = {}
+    params.update(identity)
+    config["params"] = params
+
+    query_context = config.get("query_context")
+    if query_context is None:
+        return config
+    if isinstance(query_context, str):
+        try:
+            query_context = json.loads(query_context)
+        except (TypeError, json.JSONDecodeError):
+            query_context = {}
+    elif not isinstance(query_context, dict):
+        query_context = {}
+
+    _update_query_context_dhis2_identity(query_context, identity)
+    config["query_context"] = query_context
+    return config
+
+
 def validate_tags(
     object_type: ObjectType,
     current_tags: list[Tag],
@@ -204,6 +299,14 @@ def update_chart_config_dataset(
     dataset_uid = f"{dataset_info['datasource_id']}__{dataset_info['datasource_type']}"
     config["params"].update({"datasource": dataset_uid})
 
+    identity = {
+        key: value
+        for key, value in dataset_info.items()
+        if key in {"dhis2_staged_dataset_id", "dhis2_dataset_role"} and value is not None
+    }
+    if identity:
+        config["params"].update(identity)
+
     if "query_context" in config and config["query_context"] is not None:
         try:
             query_context = json.loads(config["query_context"])
@@ -215,6 +318,9 @@ def update_chart_config_dataset(
 
             if "form_data" in query_context:
                 query_context["form_data"]["datasource"] = dataset_uid
+                query_context["form_data"].update(identity)
+
+            query_context["datasource"].update(identity)
 
             if "queries" in query_context:
                 for query in query_context["queries"]:

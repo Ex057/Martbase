@@ -2119,6 +2119,7 @@ def ensure_serving_table(
         from superset.dhis2.superset_dataset_service import (
             register_metadata_dataset_as_superset_dataset,
             register_serving_table_as_superset_dataset,
+            repair_charts_for_dhis2_staged_dataset,
             register_specialized_marts_as_superset_datasets,
         )
         from superset.datasets.policy import DatasetRole
@@ -2153,6 +2154,10 @@ def ensure_serving_table(
                 source_instance_ids=_instance_ids,
                 dataset_role=DatasetRole.SOURCE.value,
             )
+            repair_charts_for_dhis2_staged_dataset(
+                dataset.id,
+                DatasetRole.SOURCE.value,
+            )
             
             # Register consolidated mart — only if ClickHouse _mart table exists
             register_specialized_marts_as_superset_datasets(
@@ -2166,6 +2171,10 @@ def ensure_serving_table(
                 engine=engine,
                 dataset=dataset,
             )
+            repair_charts_for_dhis2_staged_dataset(
+                dataset.id,
+                DatasetRole.MART.value,
+            )
 
             metadata_sqla_id = register_metadata_dataset_as_superset_dataset(
                 dataset_id=dataset.id,
@@ -2175,6 +2184,10 @@ def ensure_serving_table(
                 source_database_id=dataset.database_id,
                 serving_database_id=serving_db_id,
                 source_instance_ids=_instance_ids,
+            )
+            repair_charts_for_dhis2_staged_dataset(
+                dataset.id,
+                DatasetRole.METADATA.value,
             )
 
             if dataset.serving_superset_dataset_id != metadata_sqla_id:

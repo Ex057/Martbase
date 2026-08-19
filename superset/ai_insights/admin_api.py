@@ -718,10 +718,7 @@ class AIManagementRestApi(BaseSupersetApi):
         providers = payload.setdefault("providers", {})
         localai = _ensure_provider_defaults("localai", providers.get("localai") or {})
         localai["enabled"] = True
-        localai["models"] = [
-            LOCALAI_DEFAULT_MODEL_ID,
-            *[model for model in localai.get("models") or [] if model != LOCALAI_DEFAULT_MODEL_ID],
-        ]
+        localai["models"] = [LOCALAI_DEFAULT_MODEL_ID]
         localai["default_model"] = LOCALAI_DEFAULT_MODEL_ID
         providers["localai"] = localai
 
@@ -1100,31 +1097,6 @@ class AIManagementRestApi(BaseSupersetApi):
                 "model_ready": dep_check.get("ready", True),
                 "missing_dependencies": dep_check.get("missing", []),
             })
-
-        # Also add any installed models not in the curated catalog
-        catalog_ids = {e["id"] for e in LOCALAI_TEXT_MODEL_CATALOG}
-        for mid in installed_ids:
-            if mid not in catalog_ids:
-                catalog.append({
-                    "id": mid,
-                    "label": mid,
-                    "group": "Installed",
-                    "description": "Model installed on LocalAI.",
-                    "capabilities": [],
-                    "is_recommended": False,
-                    "file_size": "",
-                    "installed": True,
-                    "is_default_model": mid == localai_provider.get("default_model"),
-                    "is_repo_managed": False,
-                    "asset_file_size": "",
-                    "base_model": "",
-                    "base_model_file_size": "",
-                    "lora_adapter": "",
-                    "lora_adapter_file_size": "",
-                    "backend": "",
-                    "backend_ready": True,
-                    "backend_error": "",
-                })
 
         return self.response(
             200,

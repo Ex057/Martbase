@@ -344,8 +344,7 @@ DEEPSEEK_TEXT_MODEL_CATALOG: list[dict[str, Any]] = [
     },
 ]
 
-LOCALAI_DEFAULT_MODEL_ID = "qwen3.5-4b-dflash"
-LOCALAI_SECONDARY_MODEL_ID = "deepseek-r1-distill-qwen-7b"
+LOCALAI_DEFAULT_MODEL_ID = "deepseek-r1-distill-qwen-7b"
 
 LOCALAI_SUPERSET_CAPABILITIES: list[str] = [
     "Natural-language analytics chat",
@@ -365,27 +364,16 @@ LOCALAI_SUPERSET_CAPABILITIES: list[str] = [
 LOCALAI_TEXT_MODEL_CATALOG: list[dict[str, Any]] = [
     {
         "id": LOCALAI_DEFAULT_MODEL_ID,
-        "label": "Qwen 3.5 4B",
-        "group": "General",
-        "description": "CPU-friendly default for daily analytics chat, chart narration, and structured summaries.",
+        "label": "DeepSeek R1 Distill Qwen 7B",
+        "group": "Reasoning",
+        "description": "Primary LocalAI model for analytical chat, SQL generation, and structured summaries.",
         "is_latest": True,
         "is_recommended": True,
         "capabilities": [
-            "Fast daily analytics responses",
+            "Reasoning-heavy analytics responses",
             "Structured JSON outputs",
             "Concise chart and dashboard summaries",
-        ],
-    },
-    {
-        "id": LOCALAI_SECONDARY_MODEL_ID,
-        "label": "DeepSeek R1 Distill Qwen 7B",
-        "group": "Reasoning",
-        "description": "Slower secondary model for deeper reasoning, SQL generation, and harder analytical prompts.",
-        "is_recommended": False,
-        "capabilities": [
-            "Step-by-step reasoning",
             "SQL generation and repair",
-            "Deeper analytical follow-up",
         ],
     },
 ]
@@ -729,10 +717,7 @@ def ensure_localai_environment(*, write_env_file: bool = True) -> dict[str, str]
         or env_file_values.get("LOCALAI_DEFAULT_MODEL")
         or LOCALAI_DEFAULT_MODEL_ID
     ).strip()
-    model_ids = ",".join(
-        _catalog_models("localai_text")
-        or [LOCALAI_DEFAULT_MODEL_ID, LOCALAI_SECONDARY_MODEL_ID]
-    )
+    model_ids = ",".join(_catalog_models("localai_text") or [LOCALAI_DEFAULT_MODEL_ID])
     models = (
         os.environ.get("LOCALAI_MODELS")
         or env_file_values.get("LOCALAI_MODELS")
@@ -744,7 +729,7 @@ def ensure_localai_environment(*, write_env_file: bool = True) -> dict[str, str]
         or LOCALAI_DEFAULT_EXTERNAL_BACKENDS
     ).strip()
 
-    if default_model not in {LOCALAI_DEFAULT_MODEL_ID, LOCALAI_SECONDARY_MODEL_ID}:
+    if default_model != LOCALAI_DEFAULT_MODEL_ID:
         default_model = LOCALAI_DEFAULT_MODEL_ID
     if models != model_ids:
         models = model_ids
@@ -792,10 +777,7 @@ def apply_localai_recommended_defaults(config: dict[str, Any] | None) -> dict[st
     if existing_localai is None or "enabled" not in existing_localai:
         localai["enabled"] = True
 
-    localai["models"] = [
-        LOCALAI_DEFAULT_MODEL_ID,
-        LOCALAI_SECONDARY_MODEL_ID,
-    ]
+    localai["models"] = [LOCALAI_DEFAULT_MODEL_ID]
     localai["api_key_env"] = localai_env["api_key_env"]
     localai["base_url"] = str(localai.get("base_url") or localai_env["base_url"]).strip()
     localai["default_model"] = LOCALAI_DEFAULT_MODEL_ID

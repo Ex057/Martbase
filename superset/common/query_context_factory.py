@@ -26,6 +26,9 @@ from superset.common.query_object import QueryObject
 from superset.common.query_object_factory import QueryObjectFactory
 from superset.daos.chart import ChartDAO
 from superset.daos.datasource import DatasourceDAO
+from superset.dhis2.superset_dataset_service import (
+    _get_dhis2_sqla_table,
+)
 from superset.models.slice import Slice
 from superset.superset_typing import Column
 from superset.utils.core import DatasourceDict, DatasourceType, is_adhoc_column
@@ -57,7 +60,10 @@ class QueryContextFactory:  # pylint: disable=too-few-public-methods
     ) -> QueryContext:
         datasource_model_instance = None
         if datasource:
-            datasource_model_instance = self._convert_to_model(datasource)
+            datasource_model_instance = self._convert_to_model(
+                datasource,
+                form_data=form_data,
+            )
 
         slice_ = None
         if form_data and form_data.get("slice_id") is not None:
@@ -104,11 +110,55 @@ class QueryContextFactory:  # pylint: disable=too-few-public-methods
             cache_values=cache_values,
         )
 
-    def _convert_to_model(self, datasource: DatasourceDict) -> BaseDatasource:
-        return DatasourceDAO.get_datasource(
-            datasource_type=DatasourceType(datasource["type"]),
-            database_id_or_uuid=datasource["id"],
+    def _convert_to_model(
+        self,
+        datasource: DatasourceDict,
+        *,
+        form_data: dict[str, Any] | None = None,
+    ) -> BaseDatasource:
+        datasource_type = DatasourceType(datasource["type"])
+        lookup_error: Exception | None = None
+        try:
+            return DatasourceDAO.get_datasource(
+                datasource_type=datasource_type,
+                database_id_or_uuid=datasource["id"],
+            )
+        except Exception as ex:
+            lookup_error = ex
+            if datasource_type != DatasourceType.TABLE:
+                raise
+
+        staged_dataset_id = None
+        dataset_role = None
+        if isinstance(form_data, dict):
+            try:
+                staged_dataset_id = int(
+                    form_data.get("dhis2_staged_dataset_id") or 0
+                )
+            except (TypeError, ValueError):
+                staged_dataset_id = None
+            if staged_dataset_id is not None and staged_dataset_id <= 0:
+                staged_dataset_id = None
+            dataset_role = form_data.get("dhis2_dataset_role")
+            if not isinstance(dataset_role, str) or not dataset_role.strip():
+                dataset_role = None
+            else:
+                dataset_role = dataset_role.strip()
+
+        if staged_dataset_id is None:
+            if lookup_error is not None:
+                raise lookup_error
+            raise LookupError("Unable to resolve chart datasource")
+
+        datasource_model_instance = _get_dhis2_sqla_table(
+            staged_dataset_id,
+            dataset_role,
         )
+        if datasource_model_instance is None:
+            if lookup_error is not None:
+                raise lookup_error
+            raise LookupError("Unable to resolve chart datasource")
+        return datasource_model_instance
 
     def _get_slice(self, slice_id: Any) -> Slice | None:
         return ChartDAO.find_by_id(slice_id)

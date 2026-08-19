@@ -34,6 +34,7 @@ from superset.commands.chart.exceptions import (
     DatasourceTypeUpdateRequiredValidationError,
 )
 from superset.commands.utils import get_datasource_by_id, update_tags, validate_tags
+from superset.commands.utils import inject_chart_dhis2_identity
 from superset.daos.chart import ChartDAO
 from superset.daos.dashboard import DashboardDAO
 from superset.exceptions import SupersetSecurityException
@@ -177,6 +178,10 @@ class UpdateChartCommand(UpdateMixin, BaseCommand):
                             exceptions.append(ChartInvalidDatasetRoleError(role))
                     except ValueError:
                         pass
+
+                self._properties = inject_chart_dhis2_identity(
+                    self._properties, datasource
+                )
             except ValidationError as ex:
                 exceptions.append(ex)
 

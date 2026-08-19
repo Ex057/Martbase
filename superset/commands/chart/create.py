@@ -33,6 +33,7 @@ from superset.commands.chart.exceptions import (
     DashboardsNotFoundValidationError,
 )
 from superset.commands.utils import get_datasource_by_id
+from superset.commands.utils import inject_chart_dhis2_identity
 from superset.daos.chart import ChartDAO
 from superset.daos.dashboard import DashboardDAO
 from superset.datasets.policy import DatasetContext, DatasetEligibilityPolicy, DatasetRole
@@ -96,6 +97,10 @@ class CreateChartCommand(CreateMixin, BaseCommand):
                         exceptions.append(ChartInvalidDatasetRoleError(role))
                 except ValueError:
                     pass  # Ignore invalid role strings, handled elsewhere or treated as permissible
+
+            self._properties = inject_chart_dhis2_identity(
+                self._properties, datasource
+            )
 
         except ValidationError as ex:
             exceptions.append(ex)

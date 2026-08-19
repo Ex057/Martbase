@@ -11,13 +11,12 @@
 #   bash scripts/setup_localai.sh stop         # stop service
 #   bash scripts/setup_localai.sh status       # check health
 #   bash scripts/setup_localai.sh models       # list available models
-#   bash scripts/setup_localai.sh download-model  # install the two gallery models
+#   bash scripts/setup_localai.sh download-model  # install the gallery model
 #
 # Port: 39671 (configurable via LOCALAI_PORT env var)
 #
-# Recommended models for Superset analytics:
-#   1. qwen3.5-4b-dflash                 — daily CPU-friendly default
-#   2. deepseek-r1-distill-qwen-7b       — slower secondary reasoning model
+# Recommended model for Superset analytics:
+#   1. deepseek-r1-distill-qwen-7b       — reasoning / SQL generation
 # =============================================================================
 
 set -euo pipefail
@@ -41,7 +40,6 @@ LOCALAI_API_KEY_ENV="${LOCALAI_API_KEY_ENV:-LOCALAI_API_KEY}"
 LOCALAI_API_KEY_VALUE="${!LOCALAI_API_KEY_ENV:-${LOCALAI_API_KEY:-}}"
 
 GALLERY_MODELS=(
-    "qwen3.5-4b-dflash"
     "deepseek-r1-distill-qwen-7b"
 )
 

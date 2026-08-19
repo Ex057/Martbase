@@ -36,6 +36,7 @@ from superset.commands.dataset.importers.v1 import ImportDatasetsCommand
 from superset.commands.dataset.importers.v1.utils import import_dataset
 from superset.commands.exceptions import CommandException
 from superset.commands.importers.v1 import ImportModelsCommand
+from superset.commands.utils import get_dhis2_chart_identity
 from superset.daos.base import BaseDAO
 from superset.dashboards.schemas import ImportV1DashboardSchema
 from superset.databases.schemas import ImportV1DatabaseSchema
@@ -146,6 +147,7 @@ class ImportExamplesCommand(ImportModelsCommand):
                     "datasource_id": dataset.id,
                     "datasource_type": "table",
                     "datasource_name": dataset.table_name,
+                    **get_dhis2_chart_identity(dataset),
                 }
 
         # import charts

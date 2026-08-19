@@ -238,12 +238,53 @@ class TestQueryContextFactory:
             mock_get_existing.return_value = set()
 
             self.factory._add_tooltip_columns(query_object, form_data)
-
             mock_extract.assert_called_once_with(form_data)
             mock_get_existing.assert_called_once_with(query_object.columns)
             mock_append.assert_called_once_with(
                 query_object, ["tooltip_col1", "tooltip_col2"], set()
             )
+
+    @patch("superset.common.query_context_factory._get_dhis2_sqla_table")
+    @patch("superset.common.query_context_factory.DatasourceDAO")
+    def test_convert_to_model_falls_back_to_staged_dataset_identity(
+        self,
+        mock_datasource_dao,
+        mock_get_dhis2_sqla_table,
+    ):
+        from superset.daos.exceptions import DatasourceNotFound
+
+        mock_datasource_dao.get_datasource.side_effect = DatasourceNotFound()
+        sentinel = Mock()
+        mock_get_dhis2_sqla_table.return_value = sentinel
+
+        result = self.factory._convert_to_model(
+            {"id": 123, "type": "table"},
+            form_data={
+                "dhis2_staged_dataset_id": 7,
+                "dhis2_dataset_role": "SOURCE",
+            },
+        )
+
+        assert result is sentinel
+        mock_get_dhis2_sqla_table.assert_called_once_with(7, "SOURCE")
+
+    @patch("superset.common.query_context_factory._get_dhis2_sqla_table")
+    @patch("superset.common.query_context_factory.DatasourceDAO")
+    def test_convert_to_model_raises_when_staged_dataset_identity_missing(
+        self,
+        mock_datasource_dao,
+        mock_get_dhis2_sqla_table,
+    ):
+        mock_datasource_dao.get_datasource.side_effect = Exception("missing")
+
+        try:
+            self.factory._convert_to_model({"id": 123, "type": "table"}, form_data={})
+            raised = False
+        except Exception:
+            raised = True
+
+        assert raised is True
+        mock_get_dhis2_sqla_table.assert_not_called()
 
     @patch("superset.common.query_context_factory.DatasourceDAO")
     def test_convert_to_model(self, mock_dao):
