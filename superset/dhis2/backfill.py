@@ -1155,6 +1155,151 @@ def repair_dhis2_dataset_roles() -> int:
     return repaired
 
 
+def repair_dhis2_chart_metadata_backfill() -> dict[str, int]:
+    """One-time rescue for legacy DHIS2 charts with stale dataset bindings.
+
+    The strict repair path handles charts that already saved the durable
+    DHIS2 staged dataset id. This backfill also rescues older charts that only
+    preserve the friendly dataset name after their original SqlaTable row was
+    deleted and re-registered.
+    """
+    from superset import db  # pylint: disable=import-outside-toplevel
+    from superset.connectors.sqla.models import SqlaTable  # pylint: disable=import-outside-toplevel
+    from superset.dhis2.models import DHIS2StagedDataset  # pylint: disable=import-outside-toplevel
+    from superset.dhis2.superset_dataset_service import (  # pylint: disable=import-outside-toplevel
+        _get_dhis2_sqla_table,
+        repair_charts_for_dhis2_staged_dataset,
+    )
+    from superset.models.slice import Slice  # pylint: disable=import-outside-toplevel
+
+    staged_datasets = db.session.query(DHIS2StagedDataset).all()
+    if not staged_datasets:
+        return {"strict_repaired_charts": 0, "legacy_repaired_charts": 0}
+
+    strict_repaired = 0
+    for staged_dataset in staged_datasets:
+        for role in (
+            "SOURCE",
+            "MART",
+            "METADATA",
+        ):
+            target = _get_dhis2_sqla_table(staged_dataset.id, role)
+            if target is None:
+                continue
+            repaired = repair_charts_for_dhis2_staged_dataset(
+                staged_dataset.id,
+                role,
+            )
+            strict_repaired += int(repaired or 0)
+
+    legacy_repaired = 0
+    current_datasets = (
+        db.session.query(SqlaTable)
+        .filter(SqlaTable.extra.like('%"dhis2_staged_dataset_id":%'))
+        .all()
+    )
+    target_by_name: dict[str, SqlaTable] = {}
+    for dataset in current_datasets:
+        name = str(getattr(dataset, "table_name", "") or "").strip()
+        if not name:
+            continue
+        key = name.casefold()
+        existing = target_by_name.get(key)
+        if existing is None or int(getattr(dataset, "id", 0) or 0) < int(
+            getattr(existing, "id", 0) or 0
+        ):
+            target_by_name[key] = dataset
+
+    charts = db.session.query(Slice).filter(Slice.datasource_type == "table").all()
+    for chart in charts:
+        if chart.datasource_id is not None:
+            continue
+        chart_name = str(getattr(chart, "datasource_name", "") or "").strip()
+        if not chart_name:
+            continue
+        target = target_by_name.get(chart_name.casefold())
+        if target is None:
+            continue
+
+        try:
+            target_extra = json.loads(getattr(target, "extra", None) or "{}")
+        except Exception:  # pylint: disable=broad-except
+            target_extra = {}
+        staged_dataset_id = target_extra.get("dhis2_staged_dataset_id")
+        if not isinstance(staged_dataset_id, int):
+            continue
+
+        identity: dict[str, Any] = {"dhis2_staged_dataset_id": staged_dataset_id}
+        role = getattr(target, "dataset_role", None)
+        if isinstance(role, str) and role.strip():
+            identity["dhis2_dataset_role"] = role.strip()
+
+        try:
+            params = json.loads(chart.params or "{}")
+        except Exception:  # pylint: disable=broad-except
+            params = {}
+        if not isinstance(params, dict):
+            params = {}
+        params.update(identity)
+        params["datasource"] = f"{target.id}__table"
+        chart.params = json.dumps(params)
+
+        try:
+            query_context = json.loads(chart.query_context or "{}")
+        except Exception:  # pylint: disable=broad-except
+            query_context = {}
+        if not isinstance(query_context, dict):
+            query_context = {}
+
+        form_data = query_context.get("form_data")
+        if not isinstance(form_data, dict):
+            form_data = {}
+        form_data.update(identity)
+        form_data["datasource"] = f"{target.id}__table"
+        query_context["form_data"] = form_data
+        query_context["datasource"] = {
+            "id": target.id,
+            "type": "table",
+            **identity,
+        }
+
+        queries = query_context.get("queries")
+        if isinstance(queries, list):
+            for query in queries:
+                if not isinstance(query, dict):
+                    continue
+                query_datasource = query.get("datasource")
+                if not isinstance(query_datasource, dict):
+                    query_datasource = {}
+                query_datasource.update(identity)
+                query_datasource["id"] = target.id
+                query_datasource["type"] = "table"
+                query["datasource"] = query_datasource
+
+        chart.query_context = json.dumps(query_context)
+        chart.datasource_id = target.id
+        chart.datasource_type = "table"
+        chart.datasource_name = str(
+            getattr(target, "table_name", None)
+            or getattr(target, "name", None)
+            or ""
+        )
+        legacy_repaired += 1
+
+    if strict_repaired or legacy_repaired:
+        db.session.commit()
+        logger.info(
+            "compat_backfill: repaired chart metadata (strict=%d legacy=%d)",
+            strict_repaired,
+            legacy_repaired,
+        )
+
+    return {
+        "strict_repaired_charts": strict_repaired,
+        "legacy_repaired_charts": legacy_repaired,
+    }
+
+
 def run_compatibility_backfill() -> None:
     """Entry point called once at application startup.
 
@@ -1192,6 +1337,7 @@ def run_compatibility_backfill() -> None:
             pass
 
         recover_missing_staged_datasets_from_sqla_tables()
+        repair_dhis2_chart_metadata_backfill()
         datasets = db.session.query(DHIS2StagedDataset).all()
     except (_SAOperationalError, _SAProgrammingError) as _oe:
         # ORM model references columns not yet added by a pending migration
