@@ -32,6 +32,11 @@ from sqlalchemy.exc import IntegrityError
 
 logger = logging.getLogger(__name__)
 
+_SIMPLE_METRIC_SQL_RE = re.compile(
+    r"^\s*(?P<func>[A-Za-z_][A-Za-z0-9_]*)\s*\(\s*`?(?P<column>[A-Za-z0-9_]+)`?\s*\)\s*$"
+)
+_DIRECT_COLUMN_SQL_RE = re.compile(r"^\s*`?(?P<column>[A-Za-z0-9_]+)`?\s*$")
+
 
 def _normalized_dataset_name(value: Any) -> str:
     return str(value or "").strip().casefold()
@@ -116,6 +121,22 @@ def _rewrite_dhis2_chart_ref(value: Any, rewrite_map: dict[str, str]) -> Any:
     candidate = rewrite_map.get(value.casefold()) or rewrite_map.get(normalized)
     if candidate:
         return candidate
+    metric_match = _SIMPLE_METRIC_SQL_RE.match(value)
+    if metric_match:
+        column = metric_match.group("column")
+        replacement = rewrite_map.get(column.casefold()) or rewrite_map.get(
+            _normalized_column_ref(column)
+        )
+        if replacement:
+            return f"{metric_match.group('func')}({replacement})"
+    direct_match = _DIRECT_COLUMN_SQL_RE.match(value)
+    if direct_match:
+        column = direct_match.group("column")
+        replacement = rewrite_map.get(column.casefold()) or rewrite_map.get(
+            _normalized_column_ref(column)
+        )
+        if replacement:
+            return replacement
     return value
 
 
@@ -139,6 +160,8 @@ def _rewrite_dhis2_chart_structure(
         "x_axis",
         "y_axis",
         "dimension",
+        "sqlExpression",
+        "metric_name",
     }
     list_keys = {
         "columns",
@@ -224,27 +247,207 @@ def _rewrite_dhis2_chart_structure(
 
 
 def _repair_chart_query_content(chart: Any, datasource: Any) -> bool:
-    rewrite_map = _build_dhis2_column_rewrite_map(datasource)
-    if not rewrite_map:
-        return False
+    params, query_context, _, changed = normalize_dhis2_chart_payload(
+        getattr(chart, "params", None),
+        getattr(chart, "query_context", None),
+        datasource,
+    )
+    if params is not None:
+        setattr(chart, "params", params)
+    if query_context is not None:
+        setattr(chart, "query_context", query_context)
+    return changed
 
-    changed = False
-    for attr in ("params", "query_context"):
-        raw_value = getattr(chart, attr, None)
+
+def _extract_invalid_metric_ref(value: str, valid_columns: set[str]) -> str | None:
+    metric_match = _SIMPLE_METRIC_SQL_RE.match(value)
+    if metric_match:
+        column = metric_match.group("column")
+        return column if column not in valid_columns else None
+    direct_match = _DIRECT_COLUMN_SQL_RE.match(value)
+    if direct_match:
+        column = direct_match.group("column")
+        return column if column not in valid_columns else None
+    return None
+
+
+def _collect_invalid_refs_from_structure(
+    value: Any,
+    valid_columns: set[str],
+    invalid_refs: set[str],
+    *,
+    parent_key: str | None = None,
+) -> None:
+    scalar_keys = {
+        "col",
+        "column",
+        "column_name",
+        "granularity_sqla",
+        "metric",
+        "secondary_metric",
+        "timeseries_limit_metric",
+        "org_unit_column",
+        "staged_legend_column",
+        "filter_null_ou_column",
+        "x_axis",
+        "y_axis",
+        "dimension",
+        "sqlExpression",
+        "metric_name",
+    }
+    list_keys = {
+        "columns",
+        "groupby",
+        "metrics",
+        "dhis2_hierarchy_columns",
+        "matrixify_dimension_columns",
+        "matrixify_topn_value_columns",
+        "matrixify_topn_order_columns",
+        "matrixify_dimension_rows",
+        "matrixify_topn_value_rows",
+        "matrixify_topn_order_rows",
+        "chart_auto_subtitle_metrics",
+    }
+
+    if isinstance(value, dict):
+        for key, item in value.items():
+            _collect_invalid_refs_from_structure(
+                item,
+                valid_columns,
+                invalid_refs,
+                parent_key=key,
+            )
+        return
+
+    if isinstance(value, list):
+        next_parent = parent_key if parent_key in list_keys else None
+        for item in value:
+            _collect_invalid_refs_from_structure(
+                item,
+                valid_columns,
+                invalid_refs,
+                parent_key=next_parent,
+            )
+        return
+
+    if parent_key in scalar_keys or parent_key in list_keys:
+        invalid_ref = _extract_invalid_metric_ref(str(value), valid_columns)
+        if invalid_ref:
+            invalid_refs.add(invalid_ref)
+
+
+def collect_dhis2_chart_unresolved_refs(
+    params: Any,
+    query_context: Any,
+    datasource: Any,
+) -> dict[str, list[str]]:
+    valid_columns = {
+        str(column_name).strip()
+        for column_name in (getattr(datasource, "column_names", []) or [])
+        if str(column_name).strip()
+    }
+    unresolved: dict[str, list[str]] = {}
+    for attr, raw_value in (("params", params), ("query_context", query_context)):
         if not raw_value:
             continue
-        try:
-            parsed = json.loads(raw_value)
-        except Exception:  # pylint: disable=broad-except
-            continue
+        parsed = raw_value
+        if isinstance(parsed, str):
+            try:
+                parsed = json.loads(parsed)
+            except Exception:  # pylint: disable=broad-except
+                continue
         if not isinstance(parsed, dict):
             continue
-        rewritten = _rewrite_dhis2_chart_structure(parsed, rewrite_map)
-        if rewritten != parsed:
-            setattr(chart, attr, json.dumps(rewritten))
-            changed = True
+        invalid_refs: set[str] = set()
+        _collect_invalid_refs_from_structure(parsed, valid_columns, invalid_refs)
+        if invalid_refs:
+            unresolved[attr] = sorted(invalid_refs)
+    return unresolved
 
-    return changed
+
+def normalize_dhis2_chart_payload(
+    params: Any,
+    query_context: Any,
+    datasource: Any,
+    *,
+    identity: dict[str, Any] | None = None,
+) -> tuple[str | None, str | None, dict[str, list[str]], bool]:
+    rewrite_map = _build_dhis2_column_rewrite_map(datasource)
+    changed = False
+    normalized_params: str | None = params
+    normalized_query_context: str | None = query_context
+    datasource_key = f"{datasource.id}__{datasource.datasource_type}"
+
+    parsed_params = None
+    if params:
+        try:
+            parsed_params = json.loads(params) if isinstance(params, str) else params
+        except Exception:  # pylint: disable=broad-except
+            parsed_params = None
+        if isinstance(parsed_params, dict):
+            if identity:
+                parsed_params.update(identity)
+            parsed_params["datasource"] = datasource_key
+            rewritten = _rewrite_dhis2_chart_structure(parsed_params, rewrite_map)
+            normalized_params = json.dumps(rewritten)
+            changed = changed or rewritten != parsed_params or normalized_params != params
+            parsed_params = rewritten
+
+    parsed_query_context = None
+    if query_context:
+        try:
+            parsed_query_context = (
+                json.loads(query_context)
+                if isinstance(query_context, str)
+                else query_context
+            )
+        except Exception:  # pylint: disable=broad-except
+            parsed_query_context = None
+        if isinstance(parsed_query_context, dict):
+            form_data = parsed_query_context.get("form_data")
+            if not isinstance(form_data, dict):
+                form_data = {}
+            if identity:
+                form_data.update(identity)
+            form_data["datasource"] = datasource_key
+            parsed_query_context["form_data"] = form_data
+
+            query_context_datasource = parsed_query_context.get("datasource")
+            if not isinstance(query_context_datasource, dict):
+                query_context_datasource = {}
+            if identity:
+                query_context_datasource.update(identity)
+            query_context_datasource["id"] = datasource.id
+            query_context_datasource["type"] = datasource.datasource_type
+            parsed_query_context["datasource"] = query_context_datasource
+
+            queries = parsed_query_context.get("queries")
+            if isinstance(queries, list):
+                for query_item in queries:
+                    if not isinstance(query_item, dict):
+                        continue
+                    query_datasource = query_item.get("datasource")
+                    if not isinstance(query_datasource, dict):
+                        query_datasource = {}
+                    if identity:
+                        query_datasource.update(identity)
+                    query_datasource["id"] = datasource.id
+                    query_datasource["type"] = datasource.datasource_type
+                    query_item["datasource"] = query_datasource
+
+            rewritten = _rewrite_dhis2_chart_structure(parsed_query_context, rewrite_map)
+            normalized_query_context = json.dumps(rewritten)
+            changed = changed or rewritten != parsed_query_context or normalized_query_context != query_context
+            parsed_query_context = rewritten
+
+    unresolved = collect_dhis2_chart_unresolved_refs(
+        parsed_params if isinstance(parsed_params, dict) else normalized_params,
+        parsed_query_context
+        if isinstance(parsed_query_context, dict)
+        else normalized_query_context,
+        datasource,
+    )
+    return normalized_params, normalized_query_context, unresolved, changed
 
 
 def _is_metadata_wrapper_candidate(
@@ -393,54 +596,17 @@ def repair_charts_for_dhis2_staged_dataset(
         if dataset_role:
             identity["dhis2_dataset_role"] = dataset_role
 
-        try:
-            params = json.loads(chart.params or "{}")
-        except Exception:  # pylint: disable=broad-except
-            params = {}
-        if isinstance(params, dict):
-            params.update(identity)
-            params["datasource"] = f"{datasource.id}__{datasource.datasource_type}"
-            chart.params = json.dumps(params)
-            changed = True
-
-        try:
-            query_context = json.loads(chart.query_context or "{}")
-        except Exception:  # pylint: disable=broad-except
-            query_context = {}
-        if isinstance(query_context, dict):
-            form_data = query_context.get("form_data")
-            if not isinstance(form_data, dict):
-                form_data = {}
-            form_data.update(identity)
-            form_data["datasource"] = f"{datasource.id}__{datasource.datasource_type}"
-            query_context["form_data"] = form_data
-
-            query_context_datasource = query_context.get("datasource")
-            if not isinstance(query_context_datasource, dict):
-                query_context_datasource = {}
-            query_context_datasource.update(identity)
-            query_context_datasource["id"] = datasource.id
-            query_context_datasource["type"] = datasource.datasource_type
-            query_context["datasource"] = query_context_datasource
-
-            queries = query_context.get("queries")
-            if isinstance(queries, list):
-                for query_item in queries:
-                    if not isinstance(query_item, dict):
-                        continue
-                    query_datasource = query_item.get("datasource")
-                    if not isinstance(query_datasource, dict):
-                        query_datasource = {}
-                    query_datasource.update(identity)
-                    query_datasource["id"] = datasource.id
-                    query_datasource["type"] = datasource.datasource_type
-                    query_item["datasource"] = query_datasource
-
-            chart.query_context = json.dumps(query_context)
-            changed = True
-
-        if _repair_chart_query_content(chart, datasource):
-            changed = True
+        params, query_context, unresolved_refs, payload_changed = (
+            normalize_dhis2_chart_payload(
+                chart.params,
+                chart.query_context,
+                datasource,
+                identity=identity,
+            )
+        )
+        chart.params = params
+        chart.query_context = query_context
+        changed = changed or payload_changed
 
         if chart.datasource_id != datasource.id:
             chart.datasource_id = datasource.id
@@ -451,6 +617,15 @@ def repair_charts_for_dhis2_staged_dataset(
         if getattr(chart, "datasource_name", None) != getattr(datasource, "name", None):
             chart.datasource_name = getattr(datasource, "name", None)
             changed = True
+
+        if unresolved_refs:
+            logger.warning(
+                "repair_charts_for_dhis2_staged_dataset: unresolved refs remain for chart id=%s dataset id=%s role=%s refs=%s",
+                getattr(chart, "id", None),
+                dataset_id,
+                dataset_role,
+                unresolved_refs,
+            )
 
         if changed:
             repaired += 1

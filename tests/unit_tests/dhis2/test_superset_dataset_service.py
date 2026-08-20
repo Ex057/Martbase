@@ -8,6 +8,8 @@ from superset.dhis2.superset_dataset_service import (
     _get_dhis2_sqla_table,
     _ensure_dhis2_extra,
     _is_metadata_wrapper_candidate,
+    collect_dhis2_chart_unresolved_refs,
+    normalize_dhis2_chart_payload,
     repair_charts_for_dhis2_staged_dataset,
     register_serving_table_as_superset_dataset,
 )
@@ -327,6 +329,79 @@ def test_repair_charts_for_dhis2_staged_dataset_rewrites_stale_query_columns() -
     assert query_context["form_data"]["adhoc_filters"][0]["col"] == "new_column_name"
     assert query_context["queries"][0]["columns"] == ["new_column_name"]
     assert query_context["queries"][0]["filters"][0]["col"] == "new_column_name"
+
+
+def test_normalize_dhis2_chart_payload_rewrites_metric_sql_and_reports_unresolved() -> None:
+    datasource = SimpleNamespace(
+        id=23,
+        datasource_type="table",
+        columns=[
+            SimpleNamespace(
+                column_name="new_indicator_rate",
+                verbose_name="Pregnant women diagnosed with malaria (%)",
+                extra=json.dumps(
+                    {"alias": "mal_proportion_of_pregnant_women_diagnosed_with_malaria"}
+                ),
+            )
+        ],
+        column_names=["new_indicator_rate", "period"],
+    )
+
+    params, query_context, unresolved, changed = normalize_dhis2_chart_payload(
+        json.dumps(
+            {
+                "datasource": "12__table",
+                "metrics": [
+                    "AVG(mal_proportion_of_pregnant_women_diagnosed_with_malaria)",
+                    "SUM(c_108_ep01a2_malaria_total_deaths)",
+                ],
+            }
+        ),
+        json.dumps(
+            {
+                "form_data": {
+                    "datasource": "12__table",
+                    "metrics": [
+                        "AVG(mal_proportion_of_pregnant_women_diagnosed_with_malaria)"
+                    ],
+                },
+                "datasource": {"id": 12, "type": "table"},
+                "queries": [
+                    {
+                        "datasource": {"id": 12, "type": "table"},
+                        "metrics": [
+                            "AVG(mal_proportion_of_pregnant_women_diagnosed_with_malaria)"
+                        ],
+                    }
+                ],
+            }
+        ),
+        datasource,
+        identity={"dhis2_staged_dataset_id": 7, "dhis2_dataset_role": "MART"},
+    )
+
+    assert changed is True
+    assert unresolved == {"params": ["c_108_ep01a2_malaria_total_deaths"]}
+
+    json_params = json.loads(params or "{}")
+    assert json_params["datasource"] == "23__table"
+    assert json_params["metrics"][0] == "AVG(new_indicator_rate)"
+
+    json_query_context = json.loads(query_context or "{}")
+    assert json_query_context["form_data"]["datasource"] == "23__table"
+    assert json_query_context["queries"][0]["metrics"][0] == "AVG(new_indicator_rate)"
+
+
+def test_collect_dhis2_chart_unresolved_refs_detects_simple_metric_strings() -> None:
+    datasource = SimpleNamespace(column_names=["period", "new_indicator_rate"])
+
+    unresolved = collect_dhis2_chart_unresolved_refs(
+        {"metrics": ["SUM(c_105_oa02_re_attendance)"]},
+        {"form_data": {"metrics": ["AVG(new_indicator_rate)"]}},
+        datasource,
+    )
+
+    assert unresolved == {"params": ["c_105_oa02_re_attendance"]}
 
 
 def test_get_dhis2_sqla_table_uses_db_session_lookup() -> None:

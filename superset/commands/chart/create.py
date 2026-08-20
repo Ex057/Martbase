@@ -26,6 +26,7 @@ from marshmallow import ValidationError
 from superset import security_manager
 from superset.commands.base import BaseCommand, CreateMixin
 from superset.commands.chart.exceptions import (
+    ChartDhis2UnresolvedReferencesValidationError,
     ChartCreateFailedError,
     ChartInvalidDatasetRoleError,
     ChartInvalidError,
@@ -33,7 +34,7 @@ from superset.commands.chart.exceptions import (
     DashboardsNotFoundValidationError,
 )
 from superset.commands.utils import get_datasource_by_id
-from superset.commands.utils import inject_chart_dhis2_identity
+from superset.commands.utils import normalize_chart_dhis2_payload
 from superset.daos.chart import ChartDAO
 from superset.daos.dashboard import DashboardDAO
 from superset.datasets.policy import DatasetContext, DatasetEligibilityPolicy, DatasetRole
@@ -98,9 +99,14 @@ class CreateChartCommand(CreateMixin, BaseCommand):
                 except ValueError:
                     pass  # Ignore invalid role strings, handled elsewhere or treated as permissible
 
-            self._properties = inject_chart_dhis2_identity(
-                self._properties, datasource
+            self._properties, unresolved_refs = normalize_chart_dhis2_payload(
+                self._properties,
+                datasource,
             )
+            if unresolved_refs:
+                exceptions.append(
+                    ChartDhis2UnresolvedReferencesValidationError(unresolved_refs)
+                )
 
         except ValidationError as ex:
             exceptions.append(ex)

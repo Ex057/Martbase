@@ -26,6 +26,7 @@ from marshmallow import ValidationError
 from superset import security_manager
 from superset.commands.base import BaseCommand, UpdateMixin
 from superset.commands.chart.exceptions import (
+    ChartDhis2UnresolvedReferencesValidationError,
     ChartForbiddenError,
     ChartInvalidError,
     ChartNotFoundError,
@@ -33,8 +34,12 @@ from superset.commands.chart.exceptions import (
     DashboardsNotFoundValidationError,
     DatasourceTypeUpdateRequiredValidationError,
 )
-from superset.commands.utils import get_datasource_by_id, update_tags, validate_tags
-from superset.commands.utils import inject_chart_dhis2_identity
+from superset.commands.utils import (
+    get_datasource_by_id,
+    normalize_chart_dhis2_payload,
+    update_tags,
+    validate_tags,
+)
 from superset.daos.chart import ChartDAO
 from superset.daos.dashboard import DashboardDAO
 from superset.exceptions import SupersetSecurityException
@@ -136,6 +141,8 @@ class UpdateChartCommand(UpdateMixin, BaseCommand):
         if not self._model:
             raise ChartNotFoundError()
 
+        datasource = self._model.datasource
+
         # Check and update ownership; when only updating query context we ignore
         # ownership so the update can be performed by report workers
         if not is_query_context_update(self._properties):
@@ -179,11 +186,30 @@ class UpdateChartCommand(UpdateMixin, BaseCommand):
                     except ValueError:
                         pass
 
-                self._properties = inject_chart_dhis2_identity(
-                    self._properties, datasource
+                self._properties, unresolved_refs = normalize_chart_dhis2_payload(
+                    self._properties,
+                    datasource,
                 )
+                if unresolved_refs:
+                    exceptions.append(
+                        ChartDhis2UnresolvedReferencesValidationError(
+                            unresolved_refs
+                        )
+                    )
             except ValidationError as ex:
                 exceptions.append(ex)
+        elif is_query_context_update(self._properties) and datasource is not None:
+            self._properties["datasource_name"] = _resolve_chart_datasource_name(
+                datasource
+            )
+            self._properties, unresolved_refs = normalize_chart_dhis2_payload(
+                self._properties,
+                datasource,
+            )
+            if unresolved_refs:
+                exceptions.append(
+                    ChartDhis2UnresolvedReferencesValidationError(unresolved_refs)
+                )
 
         # Validate/Populate dashboards only if it's a list
         if dashboard_ids is not None:

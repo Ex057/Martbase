@@ -177,3 +177,23 @@ class ChartInvalidDatasetRoleError(ValidationError):
             ),
             field_name="datasource_id",
         )
+
+
+class ChartDhis2UnresolvedReferencesValidationError(ValidationError):
+    """
+    Marshmallow validation error for unresolved DHIS2 chart references.
+    """
+
+    def __init__(self, unresolved_refs: dict[str, list[str]]) -> None:
+        locations = ", ".join(
+            f"{location}: {', '.join(refs)}"
+            for location, refs in sorted(unresolved_refs.items())
+            if refs
+        )
+        super().__init__(
+            _(
+                "Chart contains unresolved DHIS2 references and cannot be saved: %(locations)s",
+                locations=locations,
+            ),
+            field_name="query_context",
+        )

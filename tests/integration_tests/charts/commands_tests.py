@@ -364,6 +364,54 @@ class TestChartsCreateCommand(SupersetTestCase):
         db.session.delete(chart)
         db.session.commit()
 
+    @patch("superset.utils.core.g")
+    @patch("superset.commands.chart.create.g")
+    @patch("superset.security.manager.g")
+    @patch("superset.commands.chart.create.get_datasource_by_id")
+    @pytest.mark.usefixtures("load_energy_table_with_slice")
+    def test_create_rejects_unresolved_dhis2_refs(
+        self,
+        mock_get_datasource,
+        mock_sm_g,
+        mock_c_g,
+        mock_u_g,
+    ):
+        from superset.commands.chart.exceptions import ChartInvalidError
+
+        user = security_manager.find_user(username="admin")
+        mock_u_g.user = mock_c_g.user = mock_sm_g.user = user
+        mock_get_datasource.return_value = MagicMock(
+            id=1,
+            name="MAL - IRS Campaign Data",
+            datasource_type="table",
+            dataset_role="MART",
+            columns=[],
+            column_names=["period"],
+            get_extra_dict=MagicMock(return_value={"dhis2_staged_dataset_id": 7}),
+        )
+        chart_data = {
+            "slice_name": "broken dhis2 chart",
+            "description": "new description",
+            "owners": [user.id],
+            "viz_type": "line",
+            "params": json.dumps(
+                {"metrics": ["SUM(mal_ipt2_coverage)"], "datasource": "1__table"}
+            ),
+            "query_context": json.dumps(
+                {
+                    "form_data": {
+                        "metrics": ["SUM(mal_ipt2_coverage)"],
+                        "datasource": "1__table",
+                    }
+                }
+            ),
+            "datasource_id": 1,
+            "datasource_type": "table",
+        }
+
+        with self.assertRaises(ChartInvalidError):  # noqa: PT027
+            CreateChartCommand(chart_data).run()
+
 
 class TestChartsUpdateCommand(SupersetTestCase):
     @patch("superset.commands.chart.update.g")
@@ -387,6 +435,40 @@ class TestChartsUpdateCommand(SupersetTestCase):
         chart = db.session.query(Slice).get(pk)
         assert chart.last_saved_at != last_saved_before
         assert chart.last_saved_by == user
+
+    @patch("superset.utils.core.g")
+    @patch("superset.security.manager.g")
+    @patch("superset.commands.chart.update.normalize_chart_dhis2_payload")
+    @pytest.mark.usefixtures("load_energy_table_with_slice")
+    def test_query_context_generation_rejects_unresolved_dhis2_refs(
+        self,
+        mock_normalize,
+        mock_sm_g,
+        mock_g,
+    ):
+        from superset.commands.chart.exceptions import ChartInvalidError
+
+        chart = db.session.query(Slice).all()[0]
+        pk = chart.id
+        admin = security_manager.find_user(username="admin")
+        chart.owners = [admin]
+        db.session.commit()
+
+        user = security_manager.find_user(username="alpha")
+        mock_g.user = mock_sm_g.user = user
+        query_context = json.dumps({"foo": "bar"})
+        mock_normalize.return_value = (
+            {"query_context": query_context, "query_context_generation": True},
+            {"query_context": ["mal_ipt2_coverage"]},
+        )
+
+        json_obj = {
+            "query_context_generation": True,
+            "query_context": query_context,
+        }
+
+        with self.assertRaises(ChartInvalidError):  # noqa: PT027
+            UpdateChartCommand(pk, json_obj).run()
 
     @patch("superset.utils.core.g")
     @patch("superset.security.manager.g")

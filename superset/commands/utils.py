@@ -205,6 +205,30 @@ def inject_chart_dhis2_identity(
     return config
 
 
+def normalize_chart_dhis2_payload(
+    config: dict[str, Any],
+    datasource: Any,
+) -> tuple[dict[str, Any], dict[str, list[str]]]:
+    identity = get_dhis2_chart_identity(datasource)
+    if not identity:
+        return config, {}
+
+    from superset.dhis2.superset_dataset_service import normalize_dhis2_chart_payload
+
+    normalized = config.copy()
+    params, query_context, unresolved, _changed = normalize_dhis2_chart_payload(
+        normalized.get("params"),
+        normalized.get("query_context"),
+        datasource,
+        identity=identity,
+    )
+    if params is not None:
+        normalized["params"] = params
+    if query_context is not None:
+        normalized["query_context"] = query_context
+    return normalized, unresolved
+
+
 def validate_tags(
     object_type: ObjectType,
     current_tags: list[Tag],

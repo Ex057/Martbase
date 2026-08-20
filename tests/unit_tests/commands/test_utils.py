@@ -24,6 +24,7 @@ from superset.commands.exceptions import TagForbiddenError, TagNotFoundValidatio
 from superset.commands.utils import (
     compute_owner_list,
     inject_chart_dhis2_identity,
+    normalize_chart_dhis2_payload,
     populate_owner_list,
     Tag,
     TagType,
@@ -490,6 +491,41 @@ def test_inject_chart_dhis2_identity_serializes_payload_and_preserves_identity()
     assert query_context["datasource"]["dhis2_dataset_role"] == "SOURCE"
     assert query_context["queries"][0]["datasource"]["dhis2_staged_dataset_id"] == 7
     assert query_context["queries"][0]["datasource"]["dhis2_dataset_role"] == "SOURCE"
+
+
+def test_normalize_chart_dhis2_payload_rewrites_dhis2_metric_strings():
+    datasource = MagicMock()
+    datasource.id = 11
+    datasource.datasource_type = "table"
+    datasource.dataset_role = "MART"
+    datasource.get_extra_dict.return_value = {"dhis2_staged_dataset_id": 7}
+    datasource.columns = [
+        MagicMock(
+            column_name="new_indicator_rate",
+            verbose_name="Indicator Rate",
+            extra=json.dumps({"alias": "mal_ipt2_coverage"}),
+        )
+    ]
+    datasource.column_names = ["new_indicator_rate"]
+
+    config = {
+        "params": json.dumps({"metrics": ["SUM(mal_ipt2_coverage)"]}),
+        "query_context": json.dumps(
+            {
+                "form_data": {"metrics": ["SUM(mal_ipt2_coverage)"]},
+                "datasource": {"id": 9, "type": "table"},
+                "queries": [{"metrics": ["SUM(mal_ipt2_coverage)"]}],
+            }
+        ),
+    }
+
+    updated, unresolved = normalize_chart_dhis2_payload(config, datasource)
+
+    assert unresolved == {}
+    assert json.loads(updated["params"])["metrics"] == ["SUM(new_indicator_rate)"]
+    query_context = json.loads(updated["query_context"])
+    assert query_context["form_data"]["datasource"] == "11__table"
+    assert query_context["queries"][0]["metrics"] == ["SUM(new_indicator_rate)"]
 
 
 @pytest.mark.parametrize("object_type", OBJECT_TYPES)
