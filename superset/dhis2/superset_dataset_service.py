@@ -278,14 +278,36 @@ def _extract_invalid_metric_ref(value: str, valid_columns: set[str]) -> str | No
     return None
 
 
+def _extract_invalid_metric_slot_ref(value: str, valid_columns: set[str]) -> str | None:
+    if value in {"__metric__", DTTM_ALIAS}:
+        return None
+    metric_match = _SIMPLE_METRIC_SQL_RE.match(value)
+    if metric_match:
+        column = metric_match.group("column")
+        return column if column not in valid_columns else None
+    return None
+
+
+def _extract_invalid_column_ref(value: str, valid_columns: set[str]) -> str | None:
+    if value == DTTM_ALIAS:
+        return None
+    direct_match = _DIRECT_COLUMN_SQL_RE.match(value)
+    if direct_match:
+        column = direct_match.group("column")
+        return column if column not in valid_columns else None
+    return None
+
+
 def _add_invalid_ref_from_value(
     invalid_refs: set[str],
     value: Any,
     valid_columns: set[str],
+    *,
+    extractor: Any = _extract_invalid_metric_ref,
 ) -> None:
     if value in (None, ""):
         return
-    invalid_ref = _extract_invalid_metric_ref(str(value), valid_columns)
+    invalid_ref = extractor(str(value), valid_columns)
     if invalid_ref:
         invalid_refs.add(invalid_ref)
 
@@ -311,9 +333,6 @@ def _collect_invalid_refs_from_query_dict(
             invalid_refs.add(metric_column)
 
     for key in (
-        "metric",
-        "secondary_metric",
-        "timeseries_limit_metric",
         "granularity_sqla",
         "x_axis",
         "y_axis",
@@ -323,7 +342,21 @@ def _collect_invalid_refs_from_query_dict(
         "filter_null_ou_column",
     ):
         if key in query_dict:
-            _add_invalid_ref_from_value(invalid_refs, query_dict.get(key), valid_columns)
+            _add_invalid_ref_from_value(
+                invalid_refs,
+                query_dict.get(key),
+                valid_columns,
+                extractor=_extract_invalid_column_ref,
+            )
+
+    for key in ("metric", "secondary_metric", "timeseries_limit_metric"):
+        if key in query_dict:
+            _add_invalid_ref_from_value(
+                invalid_refs,
+                query_dict.get(key),
+                valid_columns,
+                extractor=_extract_invalid_metric_slot_ref,
+            )
 
     for metric in metrics:
         if isinstance(metric, str):
