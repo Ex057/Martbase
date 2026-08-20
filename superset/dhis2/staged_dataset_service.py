@@ -210,6 +210,14 @@ def repair_charts_for_dhis2_staged_dataset(*args: Any, **kwargs: Any) -> Any:
     return _impl(*args, **kwargs)
 
 
+def repair_chart_bindings_for_dhis2_staged_dataset(*args: Any, **kwargs: Any) -> Any:
+    from superset.dhis2.superset_dataset_service import (
+        repair_chart_bindings_for_dhis2_staged_dataset as _impl,
+    )
+
+    return _impl(*args, **kwargs)
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -2193,19 +2201,6 @@ def ensure_serving_table(
                 source_instance_ids=_instance_ids,
                 dataset_role=DatasetRole.SOURCE.value,
             )
-            try:
-                repair_charts_for_dhis2_staged_dataset(
-                    dataset.id,
-                    DatasetRole.SOURCE.value,
-                )
-            except Exception:  # pylint: disable=broad-except
-                logger.warning(
-                    "ensure_serving_table: chart repair failed for dataset id=%s role=%s",
-                    dataset.id,
-                    DatasetRole.SOURCE.value,
-                    exc_info=True,
-                )
-            
             # Register consolidated mart — only if ClickHouse _mart table exists
             register_specialized_marts_as_superset_datasets(
                 dataset_id=dataset.id,
@@ -2218,19 +2213,6 @@ def ensure_serving_table(
                 engine=engine,
                 dataset=dataset,
             )
-            try:
-                repair_charts_for_dhis2_staged_dataset(
-                    dataset.id,
-                    DatasetRole.MART.value,
-                )
-            except Exception:  # pylint: disable=broad-except
-                logger.warning(
-                    "ensure_serving_table: chart repair failed for dataset id=%s role=%s",
-                    dataset.id,
-                    DatasetRole.MART.value,
-                    exc_info=True,
-                )
-
             metadata_sqla_id = register_metadata_dataset_as_superset_dataset(
                 dataset_id=dataset.id,
                 dataset_name=dataset.name,
@@ -2240,19 +2222,6 @@ def ensure_serving_table(
                 serving_database_id=serving_db_id,
                 source_instance_ids=_instance_ids,
             )
-            try:
-                repair_charts_for_dhis2_staged_dataset(
-                    dataset.id,
-                    DatasetRole.METADATA.value,
-                )
-            except Exception:  # pylint: disable=broad-except
-                logger.warning(
-                    "ensure_serving_table: chart repair failed for dataset id=%s role=%s",
-                    dataset.id,
-                    DatasetRole.METADATA.value,
-                    exc_info=True,
-                )
-
             metadata_sqla = _db.session.get(SqlaTable, metadata_sqla_id)
             if metadata_sqla is None or getattr(metadata_sqla, "dataset_role", None) != DatasetRole.METADATA.value:
                 raise RuntimeError(
@@ -2263,6 +2232,15 @@ def ensure_serving_table(
             if dataset.serving_superset_dataset_id != metadata_sqla_id:
                 dataset.serving_superset_dataset_id = metadata_sqla_id
                 _db.session.commit()
+
+            try:
+                repair_chart_bindings_for_dhis2_staged_dataset(dataset.id)
+            except Exception:  # pylint: disable=broad-except
+                logger.warning(
+                    "ensure_serving_table: chart binding repair failed for dataset id=%s",
+                    dataset.id,
+                    exc_info=True,
+                )
     except RuntimeError as exc:
         if "Failed to verify DHIS2 metadata dataset registration" in str(exc):
             raise

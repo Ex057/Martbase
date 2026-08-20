@@ -632,6 +632,30 @@ def _get_dhis2_sqla_table(
     return candidates[0]
 
 
+def _get_dhis2_staged_dataset_id_from_extra(datasource: Any) -> int | None:
+    try:
+        extra = json.loads(getattr(datasource, "extra", None) or "{}")
+    except Exception:  # pylint: disable=broad-except
+        extra = {}
+    staged_dataset_id = extra.get("dhis2_staged_dataset_id")
+    return staged_dataset_id if isinstance(staged_dataset_id, int) else None
+
+
+def _get_chart_repair_identity(dataset_id: int, dataset_role: str | None) -> dict[str, Any]:
+    identity: dict[str, Any] = {"dhis2_staged_dataset_id": dataset_id}
+    if dataset_role:
+        identity["dhis2_dataset_role"] = dataset_role
+    return identity
+
+
+def _get_chart_name_for_logging(chart: Any) -> str:
+    return str(
+        getattr(chart, "slice_name", None)
+        or getattr(chart, "name", None)
+        or ""
+    ).strip()
+
+
 def repair_charts_for_dhis2_staged_dataset(
     dataset_id: int,
     dataset_role: str | None = None,
@@ -669,9 +693,7 @@ def repair_charts_for_dhis2_staged_dataset(
     repaired = 0
     for chart in query.all():
         changed = False
-        identity = {"dhis2_staged_dataset_id": dataset_id}
-        if dataset_role:
-            identity["dhis2_dataset_role"] = dataset_role
+        identity = _get_chart_repair_identity(dataset_id, dataset_role)
 
         params, query_context, unresolved_refs, payload_changed = (
             normalize_dhis2_chart_payload(
@@ -714,6 +736,129 @@ def repair_charts_for_dhis2_staged_dataset(
             repaired,
             dataset_id,
             dataset_role,
+        )
+    return repaired
+
+
+def repair_chart_bindings_for_dhis2_staged_dataset(dataset_id: int) -> int:
+    """Repair staged-dataset charts without rebinding valid MART/METADATA charts.
+
+    Preserve the chart's current eligible role when possible. Only charts
+    bound to a missing/ineligible datasource are rebound, preferring MART and
+    then falling back to METADATA.
+    """
+    from superset import db
+    from superset.connectors.sqla.models import SqlaTable
+    from superset.datasets.policy import DatasetRole
+    from superset.models.slice import Slice
+
+    eligible_targets = {
+        DatasetRole.MART.value: _get_dhis2_sqla_table(dataset_id, DatasetRole.MART.value),
+        DatasetRole.METADATA.value: _get_dhis2_sqla_table(
+            dataset_id,
+            DatasetRole.METADATA.value,
+        ),
+    }
+    eligible_targets = {
+        role: datasource
+        for role, datasource in eligible_targets.items()
+        if datasource is not None
+    }
+    if not eligible_targets:
+        return 0
+
+    staged_patterns = [
+        f'%"dhis2_staged_dataset_id": {dataset_id}%',
+        f'%"dhis2_staged_dataset_id":{dataset_id}%',
+    ]
+    query = db.session.query(Slice).filter(
+        Slice.params.like(staged_patterns[0])
+        | Slice.params.like(staged_patterns[1])
+        | Slice.query_context.like(staged_patterns[0])
+        | Slice.query_context.like(staged_patterns[1])
+    )
+
+    repaired = 0
+    for chart in query.all():
+        changed = False
+        previous_datasource_id = getattr(chart, "datasource_id", None)
+        previous_role = None
+        current_datasource = None
+        if previous_datasource_id is not None:
+            current_datasource = db.session.get(SqlaTable, previous_datasource_id)
+        if (
+            current_datasource is not None
+            and _get_dhis2_staged_dataset_id_from_extra(current_datasource) == dataset_id
+        ):
+            current_role = str(getattr(current_datasource, "dataset_role", "") or "").strip()
+            if current_role in eligible_targets:
+                previous_role = current_role
+
+        target_role = previous_role or next(
+            (
+                role
+                for role in (DatasetRole.MART.value, DatasetRole.METADATA.value)
+                if role in eligible_targets
+            ),
+            None,
+        )
+        if target_role is None:
+            continue
+        datasource = eligible_targets[target_role]
+        identity = _get_chart_repair_identity(dataset_id, target_role)
+
+        params, query_context, unresolved_refs, payload_changed = (
+            normalize_dhis2_chart_payload(
+                chart.params,
+                chart.query_context,
+                datasource,
+                identity=identity,
+            )
+        )
+        chart.params = params
+        chart.query_context = query_context
+        changed = changed or payload_changed
+
+        if chart.datasource_id != datasource.id:
+            chart.datasource_id = datasource.id
+            changed = True
+        if chart.datasource_type != datasource.datasource_type:
+            chart.datasource_type = datasource.datasource_type
+            changed = True
+        if getattr(chart, "datasource_name", None) != getattr(datasource, "name", None):
+            chart.datasource_name = getattr(datasource, "name", None)
+            changed = True
+
+        if unresolved_refs:
+            logger.warning(
+                "repair_chart_bindings_for_dhis2_staged_dataset: unresolved refs remain for chart id=%s name=%s dataset id=%s old_role=%s new_role=%s refs=%s",
+                getattr(chart, "id", None),
+                _get_chart_name_for_logging(chart),
+                dataset_id,
+                previous_role,
+                target_role,
+                unresolved_refs,
+            )
+
+        if changed:
+            repaired += 1
+            logger.info(
+                "repair_chart_bindings_for_dhis2_staged_dataset: repaired chart id=%s name=%s dataset id=%s old_datasource_id=%s old_role=%s new_datasource_id=%s new_role=%s",
+                getattr(chart, "id", None),
+                _get_chart_name_for_logging(chart),
+                dataset_id,
+                previous_datasource_id,
+                previous_role,
+                getattr(datasource, "id", None),
+                target_role,
+            )
+
+    if repaired:
+        db.session.commit()
+        logger.info(
+            "repair_chart_bindings_for_dhis2_staged_dataset: repaired %s charts for dataset id=%s",
+            repaired,
+            dataset_id,
         )
     return repaired
 

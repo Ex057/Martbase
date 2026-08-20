@@ -1169,7 +1169,7 @@ def repair_dhis2_chart_metadata_backfill() -> dict[str, int]:
     from superset.dhis2.superset_dataset_service import (  # pylint: disable=import-outside-toplevel
         _get_dhis2_sqla_table,
         _repair_chart_query_content,
-        repair_charts_for_dhis2_staged_dataset,
+        repair_chart_bindings_for_dhis2_staged_dataset,
     )
     from superset.models.slice import Slice  # pylint: disable=import-outside-toplevel
 
@@ -1179,17 +1179,12 @@ def repair_dhis2_chart_metadata_backfill() -> dict[str, int]:
 
     strict_repaired = 0
     for staged_dataset in staged_datasets:
-        for role in (
-            "SOURCE",
-            "MART",
-            "METADATA",
+        if any(
+            _get_dhis2_sqla_table(staged_dataset.id, role) is not None
+            for role in ("MART", "METADATA")
         ):
-            target = _get_dhis2_sqla_table(staged_dataset.id, role)
-            if target is None:
-                continue
-            repaired = repair_charts_for_dhis2_staged_dataset(
+            repaired = repair_chart_bindings_for_dhis2_staged_dataset(
                 staged_dataset.id,
-                role,
             )
             strict_repaired += int(repaired or 0)
 

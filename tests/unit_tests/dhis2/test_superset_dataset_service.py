@@ -10,6 +10,7 @@ from superset.dhis2.superset_dataset_service import (
     _is_metadata_wrapper_candidate,
     collect_dhis2_chart_unresolved_refs,
     normalize_dhis2_chart_payload,
+    repair_chart_bindings_for_dhis2_staged_dataset,
     repair_charts_for_dhis2_staged_dataset,
     register_serving_table_as_superset_dataset,
 )
@@ -329,6 +330,234 @@ def test_repair_charts_for_dhis2_staged_dataset_rewrites_stale_query_columns() -
     assert query_context["form_data"]["adhoc_filters"][0]["col"] == "new_column_name"
     assert query_context["queries"][0]["columns"] == ["new_column_name"]
     assert query_context["queries"][0]["filters"][0]["col"] == "new_column_name"
+
+
+def test_repair_chart_bindings_for_dhis2_staged_dataset_preserves_mart_binding() -> None:
+    class _FakeQuery:
+        def __init__(self, *, all_result=None):
+            self._all_result = list(all_result or [])
+
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def all(self):
+            return list(self._all_result)
+
+    mart = SimpleNamespace(
+        id=23,
+        datasource_type="table",
+        name="mart dataset",
+        dataset_role="MART",
+        extra=json.dumps({"dhis2_staged_dataset_id": 7}),
+    )
+    metadata = SimpleNamespace(
+        id=24,
+        datasource_type="table",
+        name="metadata dataset",
+        dataset_role="METADATA",
+        extra=json.dumps({"dhis2_staged_dataset_id": 7}),
+    )
+    chart = SimpleNamespace(
+        id=102,
+        slice_name="Pregnant women diagnosed with malaria",
+        params=json.dumps(
+            {
+                "dhis2_staged_dataset_id": 7,
+                "dhis2_dataset_role": "MART",
+                "datasource": "23__table",
+            }
+        ),
+        query_context=json.dumps(
+            {
+                "form_data": {
+                    "dhis2_staged_dataset_id": 7,
+                    "dhis2_dataset_role": "MART",
+                    "datasource": "23__table",
+                },
+                "datasource": {"id": 23, "type": "table"},
+            }
+        ),
+        datasource_id=23,
+        datasource_type="table",
+        datasource_name="mart dataset",
+    )
+    session = SimpleNamespace(
+        query=MagicMock(return_value=_FakeQuery(all_result=[chart])),
+        get=MagicMock(side_effect=lambda model, pk: {23: mart}.get(pk)),
+        commit=MagicMock(),
+    )
+
+    with patch("superset.db.session", session), patch(
+        "superset.dhis2.superset_dataset_service._get_dhis2_sqla_table",
+        side_effect=lambda dataset_id, role=None: {
+            "MART": mart,
+            "METADATA": metadata,
+        }.get(role),
+    ):
+        repaired = repair_chart_bindings_for_dhis2_staged_dataset(7)
+
+    assert repaired == 1
+    assert chart.datasource_id == 23
+    assert chart.datasource_name == "mart dataset"
+    assert json.loads(chart.params)["dhis2_dataset_role"] == "MART"
+    assert (
+        json.loads(chart.query_context)["form_data"]["dhis2_dataset_role"]
+        == "MART"
+    )
+    session.commit.assert_called_once()
+
+
+def test_repair_chart_bindings_for_dhis2_staged_dataset_rebinds_source_to_mart() -> None:
+    class _FakeQuery:
+        def __init__(self, *, all_result=None):
+            self._all_result = list(all_result or [])
+
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def all(self):
+            return list(self._all_result)
+
+    source = SimpleNamespace(
+        id=12,
+        datasource_type="table",
+        name="source dataset",
+        dataset_role="DHIS2_SOURCE_DATASET",
+        extra=json.dumps({"dhis2_staged_dataset_id": 7}),
+    )
+    mart = SimpleNamespace(
+        id=23,
+        datasource_type="table",
+        name="mart dataset",
+        dataset_role="MART",
+        extra=json.dumps({"dhis2_staged_dataset_id": 7}),
+    )
+    metadata = SimpleNamespace(
+        id=24,
+        datasource_type="table",
+        name="metadata dataset",
+        dataset_role="METADATA",
+        extra=json.dumps({"dhis2_staged_dataset_id": 7}),
+    )
+    chart = SimpleNamespace(
+        id=103,
+        slice_name="Pregnant women diagnosed with malaria",
+        params=json.dumps(
+            {
+                "dhis2_staged_dataset_id": 7,
+                "dhis2_dataset_role": "DHIS2_SOURCE_DATASET",
+                "datasource": "12__table",
+            }
+        ),
+        query_context=json.dumps(
+            {
+                "form_data": {
+                    "dhis2_staged_dataset_id": 7,
+                    "dhis2_dataset_role": "DHIS2_SOURCE_DATASET",
+                    "datasource": "12__table",
+                },
+                "datasource": {"id": 12, "type": "table"},
+            }
+        ),
+        datasource_id=12,
+        datasource_type="table",
+        datasource_name="source dataset",
+    )
+    session = SimpleNamespace(
+        query=MagicMock(return_value=_FakeQuery(all_result=[chart])),
+        get=MagicMock(side_effect=lambda model, pk: {12: source}.get(pk)),
+        commit=MagicMock(),
+    )
+
+    with patch("superset.db.session", session), patch(
+        "superset.dhis2.superset_dataset_service._get_dhis2_sqla_table",
+        side_effect=lambda dataset_id, role=None: {
+            "MART": mart,
+            "METADATA": metadata,
+        }.get(role),
+    ):
+        repaired = repair_chart_bindings_for_dhis2_staged_dataset(7)
+
+    assert repaired == 1
+    assert chart.datasource_id == 23
+    assert chart.datasource_name == "mart dataset"
+    assert json.loads(chart.params)["dhis2_dataset_role"] == "MART"
+    assert (
+        json.loads(chart.query_context)["form_data"]["dhis2_dataset_role"]
+        == "MART"
+    )
+    session.commit.assert_called_once()
+
+
+def test_repair_chart_bindings_for_dhis2_staged_dataset_falls_back_to_metadata() -> None:
+    class _FakeQuery:
+        def __init__(self, *, all_result=None):
+            self._all_result = list(all_result or [])
+
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def all(self):
+            return list(self._all_result)
+
+    source = SimpleNamespace(
+        id=12,
+        datasource_type="table",
+        name="source dataset",
+        dataset_role="DHIS2_SOURCE_DATASET",
+        extra=json.dumps({"dhis2_staged_dataset_id": 7}),
+    )
+    metadata = SimpleNamespace(
+        id=24,
+        datasource_type="table",
+        name="metadata dataset",
+        dataset_role="METADATA",
+        extra=json.dumps({"dhis2_staged_dataset_id": 7}),
+    )
+    chart = SimpleNamespace(
+        id=104,
+        slice_name="Pregnant women diagnosed with malaria",
+        params=json.dumps(
+            {
+                "dhis2_staged_dataset_id": 7,
+                "dhis2_dataset_role": "DHIS2_SOURCE_DATASET",
+                "datasource": "12__table",
+            }
+        ),
+        query_context=json.dumps(
+            {
+                "form_data": {
+                    "dhis2_staged_dataset_id": 7,
+                    "dhis2_dataset_role": "DHIS2_SOURCE_DATASET",
+                    "datasource": "12__table",
+                },
+                "datasource": {"id": 12, "type": "table"},
+            }
+        ),
+        datasource_id=12,
+        datasource_type="table",
+        datasource_name="source dataset",
+    )
+    session = SimpleNamespace(
+        query=MagicMock(return_value=_FakeQuery(all_result=[chart])),
+        get=MagicMock(side_effect=lambda model, pk: {12: source}.get(pk)),
+        commit=MagicMock(),
+    )
+
+    with patch("superset.db.session", session), patch(
+        "superset.dhis2.superset_dataset_service._get_dhis2_sqla_table",
+        side_effect=lambda dataset_id, role=None: {
+            "MART": None,
+            "METADATA": metadata,
+        }.get(role),
+    ):
+        repaired = repair_chart_bindings_for_dhis2_staged_dataset(7)
+
+    assert repaired == 1
+    assert chart.datasource_id == 24
+    assert chart.datasource_name == "metadata dataset"
+    assert json.loads(chart.params)["dhis2_dataset_role"] == "METADATA"
+    session.commit.assert_called_once()
 
 
 def test_normalize_dhis2_chart_payload_rewrites_metric_sql_and_reports_unresolved() -> None:
