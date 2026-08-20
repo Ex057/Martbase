@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from superset.dhis2.superset_dataset_service import (
     _build_metadata_wrapper_sql,
+    _get_dhis2_sqla_table,
     _ensure_dhis2_extra,
     _is_metadata_wrapper_candidate,
     repair_charts_for_dhis2_staged_dataset,
@@ -247,3 +248,111 @@ def test_repair_charts_for_dhis2_staged_dataset_updates_saved_chart_json() -> No
     assert query_context["datasource"]["id"] == 23
     assert query_context["datasource"]["dhis2_staged_dataset_id"] == 7
     assert query_context["form_data"]["datasource"] == "23__table"
+
+
+def test_repair_charts_for_dhis2_staged_dataset_rewrites_stale_query_columns() -> None:
+    class _FakeQuery:
+        def __init__(self, *, all_result=None):
+            self._all_result = list(all_result or [])
+
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def all(self):
+            return list(self._all_result)
+
+    chart = SimpleNamespace(
+        id=101,
+        params=json.dumps(
+            {
+                "dhis2_staged_dataset_id": 7,
+                "dhis2_dataset_role": "SOURCE",
+                "datasource": "12__table",
+                "groupby": ["Old label"],
+            }
+        ),
+        query_context=json.dumps(
+            {
+                "form_data": {
+                    "datasource": "12__table",
+                    "columns": ["Old label"],
+                    "adhoc_filters": [{"col": "Old label", "op": "==", "val": "x"}],
+                    "dhis2_staged_dataset_id": 7,
+                    "dhis2_dataset_role": "SOURCE",
+                },
+                "datasource": {"id": 12, "type": "table"},
+                "queries": [
+                    {
+                        "datasource": {"id": 12, "type": "table"},
+                        "columns": ["Old label"],
+                        "filters": [{"col": "Old label", "op": "==", "val": "x"}],
+                    }
+                ],
+            }
+        ),
+        datasource_id=12,
+        datasource_type="table",
+        datasource_name="old name",
+    )
+    datasource = SimpleNamespace(
+        id=23,
+        datasource_type="table",
+        name="new name",
+        columns=[
+            SimpleNamespace(
+                column_name="new_column_name",
+                verbose_name="Old label",
+                extra=json.dumps({"dhis2_variable_id": "legacy_1"}),
+            )
+        ],
+    )
+    session = SimpleNamespace(
+        query=MagicMock(return_value=_FakeQuery(all_result=[chart])),
+        commit=MagicMock(),
+    )
+
+    with patch("superset.db.session", session), patch(
+        "superset.dhis2.superset_dataset_service._get_dhis2_sqla_table",
+        return_value=datasource,
+    ):
+        repaired = repair_charts_for_dhis2_staged_dataset(7, "SOURCE")
+
+    assert repaired == 1
+
+    params = json.loads(chart.params)
+    query_context = json.loads(chart.query_context)
+
+    assert params["groupby"] == ["new_column_name"]
+    assert query_context["form_data"]["columns"] == ["new_column_name"]
+    assert query_context["form_data"]["adhoc_filters"][0]["col"] == "new_column_name"
+    assert query_context["queries"][0]["columns"] == ["new_column_name"]
+    assert query_context["queries"][0]["filters"][0]["col"] == "new_column_name"
+
+
+def test_get_dhis2_sqla_table_uses_db_session_lookup() -> None:
+    class _FakeQuery:
+        def __init__(self, *, all_result=None):
+            self._all_result = list(all_result or [])
+
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def all(self):
+            return list(self._all_result)
+
+    candidate = SimpleNamespace(
+        id=41,
+        table_name="test_dataset",
+        database_id=2,
+        schema=None,
+        extra=json.dumps({"dhis2_staged_dataset_id": 35}),
+        dataset_role="SOURCE",
+    )
+    session = SimpleNamespace(
+        query=MagicMock(return_value=_FakeQuery(all_result=[candidate])),
+    )
+
+    with patch("superset.db.session", session):
+        resolved = _get_dhis2_sqla_table(35, "SOURCE")
+
+    assert resolved is candidate

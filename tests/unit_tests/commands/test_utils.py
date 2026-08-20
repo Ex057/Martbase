@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-
+import json
 from unittest.mock import call, MagicMock, patch
 
 import pytest
@@ -23,6 +23,7 @@ import pytest
 from superset.commands.exceptions import TagForbiddenError, TagNotFoundValidationError
 from superset.commands.utils import (
     compute_owner_list,
+    inject_chart_dhis2_identity,
     populate_owner_list,
     Tag,
     TagType,
@@ -455,6 +456,40 @@ def test_update_tags_removing_all_tags(mock_tag_dao, object_type):
         ]
     )
     mock_tag_dao.create_custom_tagged_objects.assert_not_called()
+
+
+def test_inject_chart_dhis2_identity_serializes_payload_and_preserves_identity():
+    datasource = MagicMock()
+    datasource.dataset_role = "SOURCE"
+    datasource.get_extra_dict.return_value = {"dhis2_staged_dataset_id": 7}
+
+    config = {
+        "params": json.dumps({"datasource": "9__table"}),
+        "query_context": json.dumps(
+            {
+                "form_data": {"datasource": "9__table"},
+                "datasource": {"id": 9, "type": "table"},
+                "queries": [{"datasource": {"id": 9, "type": "table"}}],
+            }
+        ),
+    }
+
+    updated = inject_chart_dhis2_identity(config, datasource)
+
+    assert isinstance(updated["params"], str)
+    assert isinstance(updated["query_context"], str)
+
+    params = json.loads(updated["params"])
+    query_context = json.loads(updated["query_context"])
+
+    assert params["dhis2_staged_dataset_id"] == 7
+    assert params["dhis2_dataset_role"] == "SOURCE"
+    assert query_context["form_data"]["dhis2_staged_dataset_id"] == 7
+    assert query_context["form_data"]["dhis2_dataset_role"] == "SOURCE"
+    assert query_context["datasource"]["dhis2_staged_dataset_id"] == 7
+    assert query_context["datasource"]["dhis2_dataset_role"] == "SOURCE"
+    assert query_context["queries"][0]["datasource"]["dhis2_staged_dataset_id"] == 7
+    assert query_context["queries"][0]["datasource"]["dhis2_dataset_role"] == "SOURCE"
 
 
 @pytest.mark.parametrize("object_type", OBJECT_TYPES)

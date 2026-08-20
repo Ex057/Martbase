@@ -229,6 +229,98 @@ def test_ensure_staging_table_persists_computed_table_name():
     superset.db.session.commit.assert_called_once()
 
 
+def test_ensure_serving_table_verifies_metadata_dataset_registration():
+    from superset.dhis2 import staged_dataset_service as svc
+
+    dataset = _dataset(id=35, database_id=5, name="test_dataset")
+    engine = MagicMock()
+    engine.get_serving_sql_table_ref.return_value = "`dhis2_serving`.`sv_35_test_dataset`"
+    engine.get_or_create_superset_database.return_value = SimpleNamespace(id=2)
+
+    fake_metadata_row = SimpleNamespace(id=340, dataset_role="METADATA")
+
+    with patch(
+        "superset.dhis2.staged_dataset_service.get_staged_dataset",
+        return_value=dataset,
+    ), patch(
+        "superset.dhis2.staged_dataset_service._get_engine",
+        return_value=engine,
+    ), patch(
+        "superset.dhis2.staged_dataset_service.build_serving_manifest",
+        return_value={"columns": []},
+    ), patch(
+        "superset.dhis2.staged_dataset_service.get_serving_columns",
+        return_value=[],
+    ), patch(
+        "superset.dhis2.staged_dataset_service.build_serving_table",
+        return_value=SimpleNamespace(
+            serving_columns=[],
+            diagnostics={"source_row_count": 0, "live_serving_row_count": 0},
+        ),
+    ), patch(
+        "superset.dhis2.staged_dataset_service.register_serving_table_as_superset_dataset",
+        return_value=339,
+    ), patch(
+        "superset.dhis2.staged_dataset_service.register_specialized_marts_as_superset_datasets",
+        return_value=0,
+    ), patch(
+        "superset.dhis2.staged_dataset_service.register_metadata_dataset_as_superset_dataset",
+        return_value=340,
+    ), patch(
+        "superset.dhis2.staged_dataset_service.repair_charts_for_dhis2_staged_dataset",
+    ), patch(
+        "superset.db.session.get",
+        return_value=fake_metadata_row,
+    ):
+        table_ref, serving_columns = svc.ensure_serving_table(dataset.id, force_rebuild=True)
+
+    assert table_ref == "`dhis2_serving`.`sv_35_test_dataset`"
+    assert serving_columns == []
+
+
+def test_ensure_serving_table_raises_when_metadata_dataset_missing():
+    from superset.dhis2 import staged_dataset_service as svc
+
+    dataset = _dataset(id=35, database_id=5, name="test_dataset")
+    engine = MagicMock()
+    engine.get_serving_sql_table_ref.return_value = "`dhis2_serving`.`sv_35_test_dataset`"
+    engine.get_or_create_superset_database.return_value = SimpleNamespace(id=2)
+
+    with patch(
+        "superset.dhis2.staged_dataset_service.get_staged_dataset",
+        return_value=dataset,
+    ), patch(
+        "superset.dhis2.staged_dataset_service._get_engine",
+        return_value=engine,
+    ), patch(
+        "superset.dhis2.staged_dataset_service.build_serving_manifest",
+        return_value={"columns": []},
+    ), patch(
+        "superset.dhis2.staged_dataset_service.get_serving_columns",
+        return_value=[],
+    ), patch(
+        "superset.dhis2.staged_dataset_service.build_serving_table",
+        return_value=SimpleNamespace(
+            serving_columns=[],
+            diagnostics={"source_row_count": 0, "live_serving_row_count": 0},
+        ),
+    ), patch(
+        "superset.dhis2.staged_dataset_service.register_serving_table_as_superset_dataset",
+        return_value=339,
+    ), patch(
+        "superset.dhis2.staged_dataset_service.register_specialized_marts_as_superset_datasets",
+        return_value=0,
+    ), patch(
+        "superset.dhis2.staged_dataset_service.register_metadata_dataset_as_superset_dataset",
+        return_value=340,
+    ), patch(
+        "superset.db.session.get",
+        return_value=None,
+    ):
+        with pytest.raises(RuntimeError, match="Failed to verify DHIS2 metadata dataset registration"):
+            svc.ensure_serving_table(dataset.id, force_rebuild=True)
+
+
 def test_repair_staged_dataset_definition_restores_missing_legacy_metadata():
     import superset
     from superset.dhis2 import staged_dataset_service as svc

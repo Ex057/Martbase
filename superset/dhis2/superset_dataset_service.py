@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
@@ -38,6 +39,212 @@ def _normalized_dataset_name(value: Any) -> str:
 
 def _normalized_sql(value: Any) -> str:
     return " ".join(str(value or "").strip().split()).casefold()
+
+
+def _normalized_column_ref(value: Any) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "_", str(value or "").strip().casefold())
+    return re.sub(r"_+", "_", normalized).strip("_")
+
+
+def _column_extra_dict(column: Any) -> dict[str, Any]:
+    extra: Any = getattr(column, "extra", None)
+    if isinstance(extra, dict):
+        return extra
+    if isinstance(extra, str):
+        try:
+            parsed = json.loads(extra)
+        except Exception:  # pylint: disable=broad-except
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _build_dhis2_column_rewrite_map(datasource: Any) -> dict[str, str]:
+    """Return a best-effort lookup from legacy refs to current column names.
+
+    DHIS2 charts can retain old column labels after a dataset re-registration.
+    The live datasource still knows the canonical column names plus stable
+    metadata like ``verbose_name`` and ``dhis2_variable_id``.  We use those
+    fields to map a stale chart ref to the current datasource column when the
+    mapping is unambiguous.
+    """
+
+    rewrite_map: dict[str, set[str]] = {}
+    current_columns = list(getattr(datasource, "columns", []) or [])
+    current_names = {
+        str(getattr(column, "column_name", "") or "").strip()
+        for column in current_columns
+        if str(getattr(column, "column_name", "") or "").strip()
+    }
+
+    for column in current_columns:
+        column_name = str(getattr(column, "column_name", "") or "").strip()
+        if not column_name:
+            continue
+        extra = _column_extra_dict(column)
+        candidates = [
+            column_name,
+            str(getattr(column, "verbose_name", "") or "").strip(),
+            str(extra.get("alias") or "").strip(),
+            str(extra.get("dhis2_variable_id") or "").strip(),
+        ]
+        for candidate in candidates:
+            if not candidate:
+                continue
+            normalized = _normalized_column_ref(candidate)
+            if normalized:
+                rewrite_map.setdefault(normalized, set()).add(column_name)
+            rewrite_map.setdefault(candidate.casefold(), set()).add(column_name)
+
+    resolved: dict[str, str] = {}
+    for ref, column_names in rewrite_map.items():
+        if len(column_names) == 1:
+            resolved[ref] = next(iter(column_names))
+
+    # Prefer exact current names if they are already valid.
+    for column_name in current_names:
+        resolved[column_name.casefold()] = column_name
+        resolved[_normalized_column_ref(column_name)] = column_name
+
+    return resolved
+
+
+def _rewrite_dhis2_chart_ref(value: Any, rewrite_map: dict[str, str]) -> Any:
+    if not isinstance(value, str):
+        return value
+    normalized = _normalized_column_ref(value)
+    candidate = rewrite_map.get(value.casefold()) or rewrite_map.get(normalized)
+    if candidate:
+        return candidate
+    return value
+
+
+def _rewrite_dhis2_chart_structure(
+    value: Any,
+    rewrite_map: dict[str, str],
+    *,
+    parent_key: str | None = None,
+) -> Any:
+    scalar_keys = {
+        "col",
+        "column",
+        "column_name",
+        "granularity_sqla",
+        "metric",
+        "secondary_metric",
+        "timeseries_limit_metric",
+        "org_unit_column",
+        "staged_legend_column",
+        "filter_null_ou_column",
+        "x_axis",
+        "y_axis",
+        "dimension",
+    }
+    list_keys = {
+        "columns",
+        "groupby",
+        "metrics",
+        "dhis2_hierarchy_columns",
+        "matrixify_dimension_columns",
+        "matrixify_topn_value_columns",
+        "matrixify_topn_order_columns",
+        "matrixify_dimension_rows",
+        "matrixify_topn_value_rows",
+        "matrixify_topn_order_rows",
+        "chart_auto_subtitle_metrics",
+    }
+
+    if isinstance(value, dict):
+        rewritten: dict[str, Any] = {}
+        for key, item in value.items():
+            if key == "adhoc_filters" and isinstance(item, list):
+                rewritten[key] = [
+                    _rewrite_dhis2_chart_structure(filter_item, rewrite_map, parent_key=key)
+                    for filter_item in item
+                ]
+                continue
+            if key == "filters" and isinstance(item, list):
+                rewritten[key] = [
+                    _rewrite_dhis2_chart_structure(filter_item, rewrite_map, parent_key=key)
+                    for filter_item in item
+                ]
+                continue
+            if key == "orderby" and isinstance(item, list):
+                normalized_orderby: list[Any] = []
+                for entry in item:
+                    if isinstance(entry, (list, tuple)) and entry:
+                        entry_list = list(entry)
+                        entry_list[0] = _rewrite_dhis2_chart_ref(
+                            entry_list[0], rewrite_map
+                        )
+                        normalized_orderby.append(entry_list)
+                    else:
+                        normalized_orderby.append(
+                            _rewrite_dhis2_chart_structure(
+                                entry, rewrite_map, parent_key="orderby"
+                            )
+                        )
+                rewritten[key] = normalized_orderby
+                continue
+            if key in scalar_keys:
+                rewritten[key] = _rewrite_dhis2_chart_ref(item, rewrite_map)
+                continue
+            if key in list_keys and isinstance(item, list):
+                rewritten[key] = [
+                    _rewrite_dhis2_chart_structure(
+                        element, rewrite_map, parent_key=key
+                    )
+                    if isinstance(element, (dict, list))
+                    else _rewrite_dhis2_chart_ref(element, rewrite_map)
+                    for element in item
+                ]
+                continue
+            rewritten[key] = _rewrite_dhis2_chart_structure(
+                item, rewrite_map, parent_key=key
+            )
+        return rewritten
+
+    if isinstance(value, list):
+        if parent_key in list_keys:
+            return [
+                _rewrite_dhis2_chart_structure(item, rewrite_map, parent_key=parent_key)
+                if isinstance(item, (dict, list))
+                else _rewrite_dhis2_chart_ref(item, rewrite_map)
+                for item in value
+            ]
+        return [
+            _rewrite_dhis2_chart_structure(item, rewrite_map, parent_key=parent_key)
+            for item in value
+        ]
+
+    if parent_key in scalar_keys:
+        return _rewrite_dhis2_chart_ref(value, rewrite_map)
+
+    return value
+
+
+def _repair_chart_query_content(chart: Any, datasource: Any) -> bool:
+    rewrite_map = _build_dhis2_column_rewrite_map(datasource)
+    if not rewrite_map:
+        return False
+
+    changed = False
+    for attr in ("params", "query_context"):
+        raw_value = getattr(chart, attr, None)
+        if not raw_value:
+            continue
+        try:
+            parsed = json.loads(raw_value)
+        except Exception:  # pylint: disable=broad-except
+            continue
+        if not isinstance(parsed, dict):
+            continue
+        rewritten = _rewrite_dhis2_chart_structure(parsed, rewrite_map)
+        if rewritten != parsed:
+            setattr(chart, attr, json.dumps(rewritten))
+            changed = True
+
+    return changed
 
 
 def _is_metadata_wrapper_candidate(
@@ -230,6 +437,9 @@ def repair_charts_for_dhis2_staged_dataset(
                     query_item["datasource"] = query_datasource
 
             chart.query_context = json.dumps(query_context)
+            changed = True
+
+        if _repair_chart_query_content(chart, datasource):
             changed = True
 
         if chart.datasource_id != datasource.id:

@@ -1168,6 +1168,7 @@ def repair_dhis2_chart_metadata_backfill() -> dict[str, int]:
     from superset.dhis2.models import DHIS2StagedDataset  # pylint: disable=import-outside-toplevel
     from superset.dhis2.superset_dataset_service import (  # pylint: disable=import-outside-toplevel
         _get_dhis2_sqla_table,
+        _repair_chart_query_content,
         repair_charts_for_dhis2_staged_dataset,
     )
     from superset.models.slice import Slice  # pylint: disable=import-outside-toplevel
@@ -1277,6 +1278,7 @@ def repair_dhis2_chart_metadata_backfill() -> dict[str, int]:
                 query["datasource"] = query_datasource
 
         chart.query_context = json.dumps(query_context)
+        _repair_chart_query_content(chart, target)
         chart.datasource_id = target.id
         chart.datasource_type = "table"
         chart.datasource_name = str(
