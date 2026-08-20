@@ -404,6 +404,33 @@ def test_collect_dhis2_chart_unresolved_refs_detects_simple_metric_strings() -> 
     assert unresolved == {"params": ["c_105_oa02_re_attendance"]}
 
 
+def test_collect_dhis2_chart_unresolved_refs_ignores_sort_and_boolean_noise() -> None:
+    datasource = SimpleNamespace(column_names=["period", "new_indicator_rate"])
+
+    unresolved = collect_dhis2_chart_unresolved_refs(
+        {
+            "metrics": ["SUM(new_indicator_rate)"],
+            "orderby": [["__metric__", False]],
+            "row_limit": 10,
+        },
+        {
+            "form_data": {
+                "metrics": ["SUM(new_indicator_rate)"],
+                "orderby": [["__metric__", False]],
+            },
+            "queries": [
+                {
+                    "metrics": ["SUM(new_indicator_rate)"],
+                    "orderby": [["__metric__", "desc"]],
+                }
+            ],
+        },
+        datasource,
+    )
+
+    assert unresolved == {}
+
+
 def test_get_dhis2_sqla_table_uses_db_session_lookup() -> None:
     class _FakeQuery:
         def __init__(self, *, all_result=None):

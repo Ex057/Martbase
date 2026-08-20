@@ -29,6 +29,11 @@ import re
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
+from superset.utils.core import (
+    DTTM_ALIAS,
+    get_column_names_from_columns,
+    get_column_names_from_metrics,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -260,6 +265,8 @@ def _repair_chart_query_content(chart: Any, datasource: Any) -> bool:
 
 
 def _extract_invalid_metric_ref(value: str, valid_columns: set[str]) -> str | None:
+    if value in {"__metric__", DTTM_ALIAS}:
+        return None
     metric_match = _SIMPLE_METRIC_SQL_RE.match(value)
     if metric_match:
         column = metric_match.group("column")
@@ -271,69 +278,90 @@ def _extract_invalid_metric_ref(value: str, valid_columns: set[str]) -> str | No
     return None
 
 
-def _collect_invalid_refs_from_structure(
+def _add_invalid_ref_from_value(
+    invalid_refs: set[str],
     value: Any,
     valid_columns: set[str],
-    invalid_refs: set[str],
-    *,
-    parent_key: str | None = None,
 ) -> None:
-    scalar_keys = {
-        "col",
-        "column",
-        "column_name",
-        "granularity_sqla",
+    if value in (None, ""):
+        return
+    invalid_ref = _extract_invalid_metric_ref(str(value), valid_columns)
+    if invalid_ref:
+        invalid_refs.add(invalid_ref)
+
+
+def _collect_invalid_refs_from_query_dict(
+    query_dict: dict[str, Any],
+    valid_columns: set[str],
+) -> list[str]:
+    invalid_refs: set[str] = set()
+
+    columns = query_dict.get("columns") or []
+    groupby = query_dict.get("groupby") or []
+    metrics = query_dict.get("metrics") or []
+
+    for column in get_column_names_from_columns(columns) + get_column_names_from_columns(
+        groupby
+    ):
+        if column not in valid_columns and column != DTTM_ALIAS:
+            invalid_refs.add(column)
+
+    for metric_column in get_column_names_from_metrics(metrics):
+        if metric_column not in valid_columns and metric_column != DTTM_ALIAS:
+            invalid_refs.add(metric_column)
+
+    for key in (
         "metric",
         "secondary_metric",
         "timeseries_limit_metric",
-        "org_unit_column",
-        "staged_legend_column",
-        "filter_null_ou_column",
+        "granularity_sqla",
         "x_axis",
         "y_axis",
         "dimension",
-        "sqlExpression",
-        "metric_name",
-    }
-    list_keys = {
-        "columns",
-        "groupby",
-        "metrics",
-        "dhis2_hierarchy_columns",
-        "matrixify_dimension_columns",
-        "matrixify_topn_value_columns",
-        "matrixify_topn_order_columns",
-        "matrixify_dimension_rows",
-        "matrixify_topn_value_rows",
-        "matrixify_topn_order_rows",
-        "chart_auto_subtitle_metrics",
-    }
+        "org_unit_column",
+        "staged_legend_column",
+        "filter_null_ou_column",
+    ):
+        if key in query_dict:
+            _add_invalid_ref_from_value(invalid_refs, query_dict.get(key), valid_columns)
 
-    if isinstance(value, dict):
-        for key, item in value.items():
-            _collect_invalid_refs_from_structure(
-                item,
-                valid_columns,
-                invalid_refs,
-                parent_key=key,
-            )
-        return
+    for metric in metrics:
+        if isinstance(metric, str):
+            _add_invalid_ref_from_value(invalid_refs, metric, valid_columns)
+        elif isinstance(metric, dict):
+            for key in ("sqlExpression", "metric_name"):
+                if key in metric:
+                    _add_invalid_ref_from_value(
+                        invalid_refs,
+                        metric.get(key),
+                        valid_columns,
+                    )
 
-    if isinstance(value, list):
-        next_parent = parent_key if parent_key in list_keys else None
-        for item in value:
-            _collect_invalid_refs_from_structure(
-                item,
-                valid_columns,
-                invalid_refs,
-                parent_key=next_parent,
-            )
-        return
+    for filter_key in ("filters", "adhoc_filters"):
+        for filter_item in query_dict.get(filter_key) or []:
+            if not isinstance(filter_item, dict):
+                continue
+            if "col" in filter_item:
+                _add_invalid_ref_from_value(
+                    invalid_refs,
+                    filter_item.get("col"),
+                    valid_columns,
+                )
+            if (
+                filter_item.get("expressionType") == "SIMPLE"
+                and "subject" in filter_item
+            ):
+                _add_invalid_ref_from_value(
+                    invalid_refs,
+                    filter_item.get("subject"),
+                    valid_columns,
+                )
 
-    if parent_key in scalar_keys or parent_key in list_keys:
-        invalid_ref = _extract_invalid_metric_ref(str(value), valid_columns)
-        if invalid_ref:
-            invalid_refs.add(invalid_ref)
+    for orderby_entry in query_dict.get("orderby") or []:
+        if isinstance(orderby_entry, (list, tuple)) and orderby_entry:
+            _add_invalid_ref_from_value(invalid_refs, orderby_entry[0], valid_columns)
+
+    return sorted(invalid_refs)
 
 
 def collect_dhis2_chart_unresolved_refs(
@@ -347,21 +375,37 @@ def collect_dhis2_chart_unresolved_refs(
         if str(column_name).strip()
     }
     unresolved: dict[str, list[str]] = {}
-    for attr, raw_value in (("params", params), ("query_context", query_context)):
-        if not raw_value:
-            continue
-        parsed = raw_value
-        if isinstance(parsed, str):
-            try:
-                parsed = json.loads(parsed)
-            except Exception:  # pylint: disable=broad-except
-                continue
-        if not isinstance(parsed, dict):
-            continue
-        invalid_refs: set[str] = set()
-        _collect_invalid_refs_from_structure(parsed, valid_columns, invalid_refs)
+    parsed_params = params
+    if isinstance(parsed_params, str):
+        try:
+            parsed_params = json.loads(parsed_params)
+        except Exception:  # pylint: disable=broad-except
+            parsed_params = None
+    if isinstance(parsed_params, dict):
+        invalid_refs = _collect_invalid_refs_from_query_dict(parsed_params, valid_columns)
         if invalid_refs:
-            unresolved[attr] = sorted(invalid_refs)
+            unresolved["params"] = invalid_refs
+
+    parsed_query_context = query_context
+    if isinstance(parsed_query_context, str):
+        try:
+            parsed_query_context = json.loads(parsed_query_context)
+        except Exception:  # pylint: disable=broad-except
+            parsed_query_context = None
+    if isinstance(parsed_query_context, dict):
+        query_context_refs: set[str] = set()
+        form_data = parsed_query_context.get("form_data")
+        if isinstance(form_data, dict):
+            query_context_refs.update(
+                _collect_invalid_refs_from_query_dict(form_data, valid_columns)
+            )
+        for query in parsed_query_context.get("queries") or []:
+            if isinstance(query, dict):
+                query_context_refs.update(
+                    _collect_invalid_refs_from_query_dict(query, valid_columns)
+                )
+        if query_context_refs:
+            unresolved["query_context"] = sorted(query_context_refs)
     return unresolved
 
 
