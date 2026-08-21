@@ -496,7 +496,7 @@ def test_recover_missing_staged_datasets_from_sqla_tables_recreates_parent_rows(
         id=31,
         table_name="MAL - Routine eHMIS Indicators",
         database_id=5,
-        schema=None,
+        schema="dhis2_serving",
         dataset_role="METADATA",
         extra=json.dumps(
             {

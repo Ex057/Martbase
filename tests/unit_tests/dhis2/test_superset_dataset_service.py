@@ -68,7 +68,7 @@ def test_ensure_dhis2_extra_updates_saved_dataset_display_name() -> None:
 def test_is_metadata_wrapper_candidate_matches_logical_virtual_wrapper() -> None:
     sqla_table = SimpleNamespace(
         database_id=5,
-        schema=None,
+        schema="dhis2_serving",
         sql="SELECT * FROM `dhis2_serving`.`sv_7_mal_routine_ehmis_indicators`",
         extra=json.dumps(
             {
@@ -181,6 +181,7 @@ def test_register_serving_table_updates_source_row_not_mart_row() -> None:
 
     assert sqla_id == 23
     assert source_row.table_name == "sv_7_mal_routine_ehmis_indicators"
+    assert source_row.schema == "dhis2_serving"
     assert source_row.dataset_role == "DHIS2_SOURCE_DATASET"
     assert mart_row.table_name == "sv_7_mal_routine_ehmis_indicators_mart"
     assert mart_row.dataset_role == "MART"
@@ -560,6 +561,86 @@ def test_repair_chart_bindings_for_dhis2_staged_dataset_falls_back_to_metadata()
     session.commit.assert_called_once()
 
 
+def test_repair_chart_bindings_aborts_when_target_has_unresolved_refs() -> None:
+    class _FakeQuery:
+        def __init__(self, *, all_result=None):
+            self._all_result = list(all_result or [])
+
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def all(self):
+            return list(self._all_result)
+
+    mart = SimpleNamespace(
+        id=23,
+        datasource_type="table",
+        name="mart dataset",
+        dataset_role="MART",
+        extra=json.dumps({"dhis2_staged_dataset_id": 7}),
+        column_names=["period"],
+        columns=[],
+    )
+    metadata = SimpleNamespace(
+        id=24,
+        datasource_type="table",
+        name="metadata dataset",
+        dataset_role="METADATA",
+        extra=json.dumps({"dhis2_staged_dataset_id": 7}),
+        column_names=["period"],
+        columns=[],
+    )
+    original_params = json.dumps(
+        {
+            "dhis2_staged_dataset_id": 7,
+            "dhis2_dataset_role": "MART",
+            "datasource": "23__table",
+            "metrics": ["SUM(c_105_oa02_re_attendance)"],
+        }
+    )
+    original_query_context = json.dumps(
+        {
+            "form_data": {
+                "dhis2_staged_dataset_id": 7,
+                "dhis2_dataset_role": "MART",
+                "datasource": "23__table",
+                "metrics": ["SUM(c_105_oa02_re_attendance)"],
+            },
+            "datasource": {"id": 23, "type": "table"},
+        }
+    )
+    chart = SimpleNamespace(
+        id=105,
+        slice_name="IPT2 coverage",
+        params=original_params,
+        query_context=original_query_context,
+        datasource_id=23,
+        datasource_type="table",
+        datasource_name="mart dataset",
+    )
+    session = SimpleNamespace(
+        query=MagicMock(return_value=_FakeQuery(all_result=[chart])),
+        get=MagicMock(side_effect=lambda _model, pk: {23: mart}.get(pk)),
+        commit=MagicMock(),
+    )
+
+    with patch("superset.db.session", session), patch(
+        "superset.dhis2.superset_dataset_service._get_dhis2_sqla_table",
+        side_effect=lambda _dataset_id, role=None: {
+            "MART": mart,
+            "METADATA": metadata,
+        }.get(role),
+    ):
+        repaired = repair_chart_bindings_for_dhis2_staged_dataset(7)
+
+    assert repaired == 0
+    assert chart.datasource_id == 23
+    assert chart.datasource_name == "mart dataset"
+    assert chart.params == original_params
+    assert chart.query_context == original_query_context
+    session.commit.assert_not_called()
+
+
 def test_normalize_dhis2_chart_payload_rewrites_metric_sql_and_reports_unresolved() -> None:
     datasource = SimpleNamespace(
         id=23,
@@ -703,7 +784,7 @@ def test_get_dhis2_sqla_table_uses_db_session_lookup() -> None:
         id=41,
         table_name="test_dataset",
         database_id=2,
-        schema=None,
+        schema="dhis2_serving",
         extra=json.dumps({"dhis2_staged_dataset_id": 35}),
         dataset_role="SOURCE",
     )
@@ -715,3 +796,39 @@ def test_get_dhis2_sqla_table_uses_db_session_lookup() -> None:
         resolved = _get_dhis2_sqla_table(35, "SOURCE")
 
     assert resolved is candidate
+
+
+def test_get_dhis2_sqla_table_can_explicitly_ensure_missing_registration() -> None:
+    class _FakeQuery:
+        def __init__(self, candidates):
+            self._candidates = candidates
+
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def all(self):
+            return list(self._candidates)
+
+    candidate = SimpleNamespace(
+        id=42,
+        schema="dhis2_serving",
+        extra=json.dumps({"dhis2_staged_dataset_id": 35}),
+        dataset_role="MART",
+    )
+    session = SimpleNamespace(
+        query=MagicMock(
+            side_effect=[_FakeQuery([]), _FakeQuery([candidate]), _FakeQuery([candidate])]
+        ),
+        get=MagicMock(return_value=SimpleNamespace(id=35)),
+    )
+
+    with patch("superset.db.session", session), patch(
+        "superset.dhis2.staged_dataset_service.ensure_serving_table"
+    ) as ensure_serving_table:
+        resolved = _get_dhis2_sqla_table(35, "MART", ensure_registered=True)
+        resolved_again = _get_dhis2_sqla_table(35, "MART", ensure_registered=True)
+
+    assert resolved is candidate
+    assert resolved_again is candidate
+    ensure_serving_table.assert_called_once_with(35)
+    assert candidate.schema == "dhis2_serving"

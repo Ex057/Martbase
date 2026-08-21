@@ -37,6 +37,13 @@ from superset.utils.core import (
 
 logger = logging.getLogger(__name__)
 
+
+# All DHIS2 staged datasets are served from the ClickHouse serving schema.
+# Keeping this explicit on every role (including the user-facing SQL wrapper)
+# makes the rows discoverable in Superset's dataset UI and avoids schema-less
+# records being treated as legacy logical datasets during a later sync.
+DHIS2_SERVING_SCHEMA = "dhis2_serving"
+
 _SIMPLE_METRIC_SQL_RE = re.compile(
     r"^\s*(?P<func>[A-Za-z_][A-Za-z0-9_]*)\s*\(\s*`?(?P<column>[A-Za-z0-9_]+)`?\s*\)\s*$"
 )
@@ -453,7 +460,8 @@ def normalize_dhis2_chart_payload(
     changed = False
     normalized_params: str | None = params
     normalized_query_context: str | None = query_context
-    datasource_key = f"{datasource.id}__{datasource.datasource_type}"
+    datasource_type = getattr(datasource, "datasource_type", "table")
+    datasource_key = f"{datasource.id}__{datasource_type}"
 
     parsed_params = None
     if params:
@@ -495,7 +503,7 @@ def normalize_dhis2_chart_payload(
             if identity:
                 query_context_datasource.update(identity)
             query_context_datasource["id"] = datasource.id
-            query_context_datasource["type"] = datasource.datasource_type
+            query_context_datasource["type"] = datasource_type
             parsed_query_context["datasource"] = query_context_datasource
 
             queries = parsed_query_context.get("queries")
@@ -509,7 +517,7 @@ def normalize_dhis2_chart_payload(
                     if identity:
                         query_datasource.update(identity)
                     query_datasource["id"] = datasource.id
-                    query_datasource["type"] = datasource.datasource_type
+                    query_datasource["type"] = datasource_type
                     query_item["datasource"] = query_datasource
 
             rewritten = _rewrite_dhis2_chart_structure(parsed_query_context, rewrite_map)
@@ -540,7 +548,7 @@ def _is_metadata_wrapper_candidate(
 
     if getattr(candidate, "database_id", None) != source_database_id:
         return False
-    if getattr(candidate, "schema", None) not in (None, ""):
+    if getattr(candidate, "schema", None) != DHIS2_SERVING_SCHEMA:
         return False
     if not getattr(candidate, "sql", None):
         return False
@@ -603,18 +611,36 @@ def _get_staged_local_candidates(dataset_id: int, database_id: int | None = None
 def _get_dhis2_sqla_table(
     dataset_id: int,
     dataset_role: str | None = None,
+    *,
+    ensure_registered: bool = False,
 ) -> Any | None:
+    """Resolve a DHIS2 SqlaTable, optionally repairing missing registrations.
+
+    The default remains a pure metadata lookup.  Callers that explicitly need
+    recovery can opt in once the durable staged dataset is known to exist;
+    this deliberately avoids triggering serving-table work from normal chart
+    reads and repair scans.
+    """
     from superset import db
     from superset.connectors.sqla.models import SqlaTable
 
-    query = db.session.query(SqlaTable).filter(
-        SqlaTable.extra.like(f'%"dhis2_staged_dataset_id": {dataset_id}%')
-        | SqlaTable.extra.like(f'%"dhis2_staged_dataset_id":{dataset_id}%')
-    )
-    if dataset_role:
-        query = query.filter(SqlaTable.dataset_role == dataset_role)
+    def _lookup() -> list[Any]:
+        query = db.session.query(SqlaTable).filter(
+            SqlaTable.extra.like(f'%"dhis2_staged_dataset_id": {dataset_id}%')
+            | SqlaTable.extra.like(f'%"dhis2_staged_dataset_id":{dataset_id}%')
+        )
+        if dataset_role:
+            query = query.filter(SqlaTable.dataset_role == dataset_role)
+        return query.all()
 
-    candidates = query.all()
+    candidates = _lookup()
+    if not candidates and ensure_registered:
+        from superset.dhis2.models import DHIS2StagedDataset
+        from superset.dhis2.staged_dataset_service import ensure_serving_table
+
+        if db.session.get(DHIS2StagedDataset, dataset_id) is not None:
+            ensure_serving_table(dataset_id)
+            candidates = _lookup()
     if not candidates:
         return None
 
@@ -703,6 +729,7 @@ def repair_charts_for_dhis2_staged_dataset(
                 identity=identity,
             )
         )
+
         chart.params = params
         chart.query_context = query_context
         changed = changed or payload_changed
@@ -815,6 +842,24 @@ def repair_chart_bindings_for_dhis2_staged_dataset(dataset_id: int) -> int:
                 identity=identity,
             )
         )
+
+        # A candidate datasource that cannot satisfy the chart's saved column
+        # references is not a safe repair target. Do not update either the
+        # serialized state or the datasource binding: doing so would turn a
+        # recoverable drifted chart into an unrelated chart during scheduled
+        # synchronization.
+        if unresolved_refs:
+            logger.warning(
+                "repair_chart_bindings_for_dhis2_staged_dataset: aborting chart repair for unresolved refs chart id=%s name=%s dataset id=%s old_role=%s proposed_role=%s refs=%s",
+                getattr(chart, "id", None),
+                _get_chart_name_for_logging(chart),
+                dataset_id,
+                previous_role,
+                target_role,
+                unresolved_refs,
+            )
+            continue
+
         chart.params = params
         chart.query_context = query_context
         changed = changed or payload_changed
@@ -828,17 +873,6 @@ def repair_chart_bindings_for_dhis2_staged_dataset(dataset_id: int) -> int:
         if getattr(chart, "datasource_name", None) != getattr(datasource, "name", None):
             chart.datasource_name = getattr(datasource, "name", None)
             changed = True
-
-        if unresolved_refs:
-            logger.warning(
-                "repair_chart_bindings_for_dhis2_staged_dataset: unresolved refs remain for chart id=%s name=%s dataset id=%s old_role=%s new_role=%s refs=%s",
-                getattr(chart, "id", None),
-                _get_chart_name_for_logging(chart),
-                dataset_id,
-                previous_role,
-                target_role,
-                unresolved_refs,
-            )
 
         if changed:
             repaired += 1
@@ -952,7 +986,7 @@ def register_metadata_dataset_as_superset_dataset(
             db.session.query(SqlaTable)
             .filter(
                 SqlaTable.database_id == effective_database_id,
-                SqlaTable.schema.is_(None),
+                SqlaTable.schema == DHIS2_SERVING_SCHEMA,
             )
             .all()
         )
@@ -989,8 +1023,8 @@ def register_metadata_dataset_as_superset_dataset(
         if existing.database_id != effective_database_id:
             existing.database_id = effective_database_id
             existing.database = effective_database
-        if existing.schema is not None:
-            existing.schema = None
+        if existing.schema != DHIS2_SERVING_SCHEMA:
+            existing.schema = DHIS2_SERVING_SCHEMA
         if existing.table_name != dataset_name:
             existing.table_name = dataset_name
         if existing.sql != metadata_sql:
@@ -1037,7 +1071,7 @@ def register_metadata_dataset_as_superset_dataset(
 
     sqla_table = SqlaTable(
         table_name=dataset_name,
-        schema=None,
+        schema=DHIS2_SERVING_SCHEMA,
         sql=metadata_sql,
         database_id=effective_database_id,
         database=effective_database,
@@ -1058,7 +1092,7 @@ def register_metadata_dataset_as_superset_dataset(
             normalized_target = _normalized_dataset_name(dataset_name)
             retry_candidates = (
                 db.session.query(SqlaTable)
-                .filter(SqlaTable.schema.is_(None))
+                .filter(SqlaTable.schema == DHIS2_SERVING_SCHEMA)
                 .all()
             )
             matching_candidates = [
@@ -1106,7 +1140,7 @@ def register_metadata_dataset_as_superset_dataset(
                     if stale.id != existing.id:
                         db.session.delete(stale)
                 existing.table_name = dataset_name
-                existing.schema = None
+                existing.schema = DHIS2_SERVING_SCHEMA
                 existing.sql = metadata_sql
                 existing.database_id = effective_database_id
                 existing.database = effective_database
@@ -1188,7 +1222,8 @@ def register_serving_table_as_superset_dataset(
     from superset.datasets.policy import DatasetRole
     from superset.models.core import Database
 
-    schema, table_name = _parse_table_ref(serving_table_ref)
+    _, table_name = _parse_table_ref(serving_table_ref)
+    schema = DHIS2_SERVING_SCHEMA
     effective_dataset_role = dataset_role or DatasetRole.SOURCE.value
 
     # Look up the serving database

@@ -732,8 +732,8 @@ def recover_missing_staged_datasets_from_sqla_tables(
             (
                 sqla_table
                 for sqla_table in related_tables
-                if _coerce_int(getattr(sqla_table, "database_id", None)) == source_database_id
-                and getattr(sqla_table, "schema", None) in (None, "")
+                if getattr(sqla_table, "dataset_role", None) == "METADATA"
+                and getattr(sqla_table, "schema", None) == "dhis2_serving"
             ),
             None,
         )
