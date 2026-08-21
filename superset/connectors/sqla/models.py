@@ -1399,21 +1399,23 @@ class SqlaTable(
         role = getattr(self, "dataset_role", None)
         staged_display_name = str(extra.get("dhis2_dataset_display_name") or "").strip()
 
-        # Preserve user-facing METADATA datasets on the logical DHIS2 database.
-        # Query execution is already routed through get_serving_database(), so
-        # mutating these rows into ClickHouse physical tables makes Dataset
-        # Management show the wrong database/schema and defeats the staged-local
-        # metadata layer entirely.
+        # METADATA is a friendly virtual wrapper, but its SQL and metadata
+        # introspection run against the ClickHouse serving database.  Keeping it
+        # on the logical DHIS2 connection (and clearing ``schema``) makes a
+        # chart-save validation probe a non-existent DHIS2 table instead of the
+        # serving MART/source table.  Preserve the friendly table name and SQL
+        # wrapper while keeping its database/schema aligned with the serving
+        # target, exactly like registration does.
         if role == "METADATA":
-            source_database_id = extra.get("dhis2_source_database_id")
-            if isinstance(source_database_id, int) and source_database_id != self.database_id:
-                source_database = db.session.get(Database, source_database_id)
-                if source_database is not None:
-                    self.database = source_database
-                    self.database_id = source_database_id
-                    changed = True
-            if self.schema is not None:
-                self.schema = None
+            serving_database = self.get_serving_database()
+            serving_database_id = getattr(serving_database, "id", None)
+            serving_database_name = getattr(serving_database, "database_name", None)
+            if (
+                isinstance(serving_database_id, int)
+                and serving_database_id != self.database_id
+            ):
+                self.database = serving_database
+                self.database_id = serving_database_id
                 changed = True
             if staged_display_name and self.table_name != staged_display_name:
                 self.table_name = staged_display_name
@@ -1422,10 +1424,31 @@ class SqlaTable(
                 ensure_exists=ensure_exists
             )
             if serving_table_ref:
-                metadata_sql = f"SELECT * FROM {serving_table_ref}"
+                schema_name, table_name = _parse_table_ref(serving_table_ref)
+                schema_name = schema_name or "dhis2_serving"
+                if self.schema != schema_name:
+                    self.schema = schema_name
+                    changed = True
+                metadata_sql = (
+                    f"SELECT * FROM `{schema_name}`.`{table_name}`"
+                )
                 if self.sql != metadata_sql:
                     self.sql = metadata_sql
                     changed = True
+                if extra.get("dhis2_serving_table_ref") != serving_table_ref:
+                    extra["dhis2_serving_table_ref"] = serving_table_ref
+                    changed = True
+            if (
+                isinstance(serving_database_id, int)
+                and extra.get("dhis2_serving_database_id") != serving_database_id
+            ):
+                extra["dhis2_serving_database_id"] = serving_database_id
+                changed = True
+            if isinstance(serving_database_name, str) and (
+                extra.get("dhis2_serving_database_name") != serving_database_name
+            ):
+                extra["dhis2_serving_database_name"] = serving_database_name
+                changed = True
             if extra.get("dhis2_staged_local") is not True:
                 extra["dhis2_staged_local"] = True
                 changed = True

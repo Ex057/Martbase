@@ -476,7 +476,7 @@ def test_staged_local_repair_updates_legacy_sql_to_serving_table(
     ensure_serving_table.assert_called_once_with(4)
 
 
-def test_staged_local_repair_preserves_metadata_wrapper_on_logical_database(
+def test_staged_local_repair_keeps_metadata_wrapper_on_serving_database(
     mocker: MockerFixture,
 ) -> None:
     source_database = Database(
@@ -492,14 +492,14 @@ def test_staged_local_repair_preserves_metadata_wrapper_on_logical_database(
 
     sqla_table = SqlaTable(
         table_name="Malaria Routine Monthly Datasets",
-        sql="SELECT * FROM `dhis2_serving`.`sv_4_malaria_routine_monthly_datasets`",
-        schema=None,
+        sql="SELECT * FROM `dhis2_serving`.`sv_4_malaria_routine_monthly_datasets_mart`",
+        schema="dhis2_serving",
         dataset_role="METADATA",
         extra=(
             '{"dhis2_staged_local": true, '
             '"dhis2_staged_dataset_id": 4, '
             '"dhis2_serving_database_id": 4, '
-            '"dhis2_serving_table_ref": "`dhis2_serving`.`sv_4_malaria_routine_monthly_datasets`"}'
+            '"dhis2_serving_table_ref": "`dhis2_serving`.`sv_4_malaria_routine_monthly_datasets_mart`"}'
         ),
         database=source_database,
         database_id=5,
@@ -513,14 +513,58 @@ def test_staged_local_repair_preserves_metadata_wrapper_on_logical_database(
 
     sqla_table.repair_staged_local_database_binding()
 
-    assert sqla_table.database_id == 5
-    assert sqla_table.database is source_database
-    assert sqla_table.schema is None
+    assert sqla_table.database_id == 4
+    assert sqla_table.database is serving_database
+    assert sqla_table.schema == "dhis2_serving"
     assert sqla_table.table_name == "Malaria Routine Monthly Datasets"
     assert (
         sqla_table.sql
-        == "SELECT * FROM `dhis2_serving`.`sv_4_malaria_routine_monthly_datasets`"
+        == "SELECT * FROM `dhis2_serving`.`sv_4_malaria_routine_monthly_datasets_mart`"
     )
+
+
+def test_external_metadata_introspects_metadata_wrapper_on_serving_database(
+    mocker: MockerFixture,
+) -> None:
+    source_database = Database(
+        id=5,
+        database_name="UG Malaria Repository",
+        sqlalchemy_uri="dhis2://",
+    )
+    serving_database = Database(
+        id=4,
+        database_name="DHIS2 Serving (ClickHouse)",
+        sqlalchemy_uri="clickhousedb://",
+    )
+    sqla_table = SqlaTable(
+        table_name="MAL Pregnancy",
+        schema="dhis2_serving",
+        sql="SELECT * FROM `dhis2_serving`.`sv_34_mal_preg_dataset_mart`",
+        dataset_role="METADATA",
+        extra=(
+            '{"dhis2_staged_local": true, '
+            '"dhis2_staged_dataset_id": 34, '
+            '"dhis2_serving_database_id": 4, '
+            '"dhis2_serving_table_ref": "dhis2_serving.sv_34_mal_preg_dataset_mart"}'
+        ),
+        database=source_database,
+        database_id=5,
+    )
+    mocker.patch.object(
+        sqla_table,
+        "get_serving_database",
+        return_value=serving_database,
+    )
+    get_virtual_table_metadata = mocker.patch(
+        "superset.connectors.sqla.models.get_virtual_table_metadata",
+        return_value=[{"column_name": "period", "type": "STRING"}],
+    )
+
+    assert sqla_table.external_metadata() == [{"column_name": "period", "type": "STRING"}]
+    assert sqla_table.database is serving_database
+    assert sqla_table.database_id == 4
+    assert sqla_table.schema == "dhis2_serving"
+    get_virtual_table_metadata.assert_called_once_with(dataset=sqla_table)
 
 
 def test_staged_local_serving_ref_preserves_mart_suffix_when_ensuring_table(
