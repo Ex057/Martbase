@@ -262,7 +262,11 @@ class PeriodHierarchyService:
                 "verbose_name": label,
                 "type": "STRING",
                 "sql_type": "TEXT",
-                "is_dttm": False,
+                # The primary DHIS2 period is physically a compact string
+                # (eg 202508 / 2025Q3), but SQLA converts it to a ClickHouse
+                # DateTime expression for time-series queries. Hierarchy
+                # helper fields remain categorical.
+                "is_dttm": key == "period",
                 "is_dimension": True,
                 "extra": extra,
             }

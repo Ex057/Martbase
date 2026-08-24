@@ -2063,7 +2063,11 @@ def _sync_columns(sqla_table: Any, serving_columns: list[dict[str, Any]]) -> Non
         verbose_name: str = col_spec.get("verbose_name") or col_name
 
         # Determine flags from column metadata
-        is_dttm = bool(col_spec.get("is_dttm") or extra_meta.get("is_dttm"))
+        is_dttm = bool(
+            col_spec.get("is_dttm")
+            or extra_meta.get("is_dttm")
+            or extra_meta.get("dhis2_is_period")
+        )
         is_period = bool(extra_meta.get("dhis2_is_period"))
         is_metric = col_type.upper() in ("FLOAT", "DOUBLE", "NUMERIC", "DECIMAL", "INTEGER", "BIGINT")
         is_dimension = not is_metric or is_period or bool(extra_meta.get("dhis2_is_ou_hierarchy"))

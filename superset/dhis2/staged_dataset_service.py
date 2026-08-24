@@ -446,7 +446,11 @@ def _get_registered_serving_columns(
             "column_name": column_name,
             "verbose_name": getattr(column, "verbose_name", None) or column_name,
             "type": getattr(column, "type", None),
-            "is_dttm": bool(getattr(column, "is_dttm", False)),
+            # Periods are compact strings in ClickHouse, but the SQLA column
+            # adapter turns the primary one into a DateTime for time-series
+            # queries. Keep this true even for legacy registrations.
+            "is_dttm": bool(getattr(column, "is_dttm", False))
+            or extra_dict.get("dhis2_is_period") is True,
             "filterable": getattr(column, "filterable", True) is not False,
             "groupby": getattr(column, "groupby", True) is not False,
             "is_active": getattr(column, "is_active", True) is not False,
