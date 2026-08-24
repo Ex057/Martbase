@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 
 from superset.connectors.sqla.models import TableColumn
+from superset.dhis2.period_hierarchy_service import PeriodHierarchyService
 
 from superset.dhis2.superset_dataset_service import (
     _build_metadata_wrapper_sql,
@@ -65,6 +66,14 @@ def test_dhis2_period_column_uses_clickhouse_calendar_expression() -> None:
     assert "^[0-9]{6}$" in expression
     assert "^[0-9]{4}Q[1-4]$" in expression
     assert "['01', '04', '07', '10']" in expression
+
+
+def test_period_variant_uses_human_readable_month_and_quarter_labels() -> None:
+    service = PeriodHierarchyService()
+
+    assert service.normalize_period("202508")["period_variant"] == "Aug 2025"
+    assert service.normalize_period("2025Q1")["period_variant"] == "2025 Q1"
+    assert service.normalize_period("2025")["period_variant"] == "2025"
 
 
 def test_resolve_clickhouse_serving_table_name_prefers_mart() -> None:

@@ -51,6 +51,20 @@ _EXPLICIT_PERIOD_KEY_CONFIG_KEYS = (
     "period_hierarchy_levels",
     "period_columns",
 )
+_MONTH_ABBREVIATIONS = (
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+)
 
 
 def sanitize_serving_identifier(value: str) -> str:
@@ -257,6 +271,10 @@ class PeriodHierarchyService:
                 "dhis2_period_key": key,
             }
             extra.update(extra_spec.get("extra") or {})
+            if key == "period_variant":
+                # A display-only label (eg "Aug 2025" / "2025 Q3"). The
+                # raw ``period`` remains the stable machine sorting key.
+                extra["dhis2_is_period_display"] = True
             column = {
                 "column_name": column_name,
                 "verbose_name": label,
@@ -313,6 +331,7 @@ class PeriodHierarchyService:
         if match := self._DAY_PATTERN.match(raw_value):
             year = match.group("year")
             month = match.group("month")
+            day = int(match.group("day"))
             normalized.update(
                 {
                     "period_level": "day",
@@ -321,6 +340,7 @@ class PeriodHierarchyService:
                     "period_quarter": self._quarter_from_month(year, int(month)),
                     "period_month": f"{year}{month}",
                     "period_half": self._half_from_month(year, int(month)),
+                    "period_variant": f"{day} {self._month_label(int(month))} {year}",
                 }
             )
             return normalized
@@ -346,6 +366,7 @@ class PeriodHierarchyService:
                     "period_parent": year,
                     "period_year": year,
                     "period_biweek": raw_value,
+                    "period_variant": raw_value,
                 }
             )
             return normalized
@@ -358,7 +379,7 @@ class PeriodHierarchyService:
                     "period_parent": year,
                     "period_year": year,
                     "period_biweek": raw_value,
-                    "period_variant": "four_week",
+                    "period_variant": f"{year} four-week {match.group('period')}",
                 }
             )
             return normalized
@@ -374,6 +395,7 @@ class PeriodHierarchyService:
                     "period_quarter": self._quarter_from_month(year, month),
                     "period_month": raw_value,
                     "period_half": self._half_from_month(year, month),
+                    "period_variant": f"{self._month_label(month)} {year}",
                 }
             )
             return normalized
@@ -389,6 +411,9 @@ class PeriodHierarchyService:
                     "period_quarter": self._quarter_from_month(year, month),
                     "period_half": self._half_from_month(year, month),
                     "period_bimonth": raw_value,
+                    "period_variant": (
+                        f"{self._month_label(month)}–{self._month_label(month + 1)} {year}"
+                    ),
                 }
             )
             return normalized
@@ -403,6 +428,7 @@ class PeriodHierarchyService:
                     "period_year": year,
                     "period_half": f"{year}S{1 if int(quarter) <= 2 else 2}",
                     "period_quarter": raw_value,
+                    "period_variant": f"{year} Q{quarter}",
                 }
             )
             return normalized
@@ -415,6 +441,7 @@ class PeriodHierarchyService:
                     "period_parent": year,
                     "period_year": year,
                     "period_half": raw_value,
+                    "period_variant": f"{year} S{match.group('half')}",
                 }
             )
             return normalized
@@ -449,6 +476,7 @@ class PeriodHierarchyService:
                 {
                     "period_level": "year",
                     "period_year": match.group("year"),
+                    "period_variant": match.group("year"),
                 }
             )
             return normalized
@@ -474,6 +502,12 @@ class PeriodHierarchyService:
     def _half_from_month(year: str, month: int) -> str:
         half = 1 if month <= 6 else 2
         return f"{year}S{half}"
+
+    @staticmethod
+    def _month_label(month: int) -> str:
+        if 1 <= month <= len(_MONTH_ABBREVIATIONS):
+            return _MONTH_ABBREVIATIONS[month - 1]
+        return str(month)
 
     @staticmethod
     def _week_variant(period_code: str) -> str:

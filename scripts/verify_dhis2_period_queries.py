@@ -80,12 +80,16 @@ def _verify(dataset_id: int, sample_limit: int) -> dict[str, Any]:
           count() AS total_rows,
           countIf(`period` != '') AS period_rows,
           countIf({period_expr} IS NOT NULL) AS parsed_rows,
-          countIf(`period` != '' AND {period_expr} IS NULL) AS unparsed_rows
+          countIf(`period` != '' AND {period_expr} IS NULL) AS unparsed_rows,
+          countIf(`period_variant` IS NOT NULL AND `period_variant` != '') AS display_rows
         FROM {table_ref}
     """
     stats = database.get_df(stats_sql).iloc[0].to_dict()
     samples_sql = f"""
-        SELECT `period` AS raw_period, {period_expr} AS parsed_period
+        SELECT
+          `period` AS raw_period,
+          {period_expr} AS parsed_period,
+          `period_variant` AS display_period
         FROM {table_ref}
         WHERE `period` != ''
         ORDER BY parsed_period ASC
@@ -102,6 +106,10 @@ def _verify(dataset_id: int, sample_limit: int) -> dict[str, Any]:
     if report["stats"]["period_rows"] and not report["stats"]["parsed_rows"]:
         raise RuntimeError(
             f"No non-null parsed periods returned for dataset id={dataset.id}"
+        )
+    if report["stats"]["period_rows"] and not report["stats"]["display_rows"]:
+        raise RuntimeError(
+            f"No human-readable period_variant values returned for dataset id={dataset.id}"
         )
     return report
 
