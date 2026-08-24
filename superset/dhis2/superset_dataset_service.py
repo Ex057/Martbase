@@ -47,6 +47,9 @@ DHIS2_SERVING_SCHEMA = "dhis2_serving"
 _SIMPLE_METRIC_SQL_RE = re.compile(
     r"^\s*(?P<func>[A-Za-z_][A-Za-z0-9_]*)\s*\(\s*`?(?P<column>[A-Za-z0-9_]+)`?\s*\)\s*$"
 )
+_DHIS2_CHART_PLACEHOLDER_REFS = frozenset(
+    {"__metric__", "true", "params", "query_context"}
+)
 
 
 def get_clickhouse_serving_database(
@@ -341,7 +344,7 @@ def _repair_chart_query_content(chart: Any, datasource: Any) -> bool:
 
 
 def _extract_invalid_metric_ref(value: str, valid_columns: set[str]) -> str | None:
-    if value in {"__metric__", DTTM_ALIAS}:
+    if _is_dhis2_chart_placeholder_ref(value) or value == DTTM_ALIAS:
         return None
     metric_match = _SIMPLE_METRIC_SQL_RE.match(value)
     if metric_match:
@@ -355,7 +358,7 @@ def _extract_invalid_metric_ref(value: str, valid_columns: set[str]) -> str | No
 
 
 def _extract_invalid_metric_slot_ref(value: str, valid_columns: set[str]) -> str | None:
-    if value in {"__metric__", DTTM_ALIAS}:
+    if _is_dhis2_chart_placeholder_ref(value) or value == DTTM_ALIAS:
         return None
     metric_match = _SIMPLE_METRIC_SQL_RE.match(value)
     if metric_match:
@@ -365,7 +368,7 @@ def _extract_invalid_metric_slot_ref(value: str, valid_columns: set[str]) -> str
 
 
 def _extract_invalid_column_ref(value: str, valid_columns: set[str]) -> str | None:
-    if value == DTTM_ALIAS:
+    if _is_dhis2_chart_placeholder_ref(value) or value == DTTM_ALIAS:
         return None
     direct_match = _DIRECT_COLUMN_SQL_RE.match(value)
     if direct_match:
@@ -381,11 +384,17 @@ def _add_invalid_ref_from_value(
     *,
     extractor: Any = _extract_invalid_metric_ref,
 ) -> None:
-    if value in (None, ""):
+    if value in (None, "") or isinstance(value, bool):
         return
     invalid_ref = extractor(str(value), valid_columns)
     if invalid_ref:
         invalid_refs.add(invalid_ref)
+
+
+def _is_dhis2_chart_placeholder_ref(value: Any) -> bool:
+    if isinstance(value, bool):
+        return True
+    return str(value).strip().lower() in _DHIS2_CHART_PLACEHOLDER_REFS
 
 
 def _collect_invalid_refs_from_query_dict(
@@ -401,11 +410,19 @@ def _collect_invalid_refs_from_query_dict(
     for column in get_column_names_from_columns(columns) + get_column_names_from_columns(
         groupby
     ):
-        if column not in valid_columns and column != DTTM_ALIAS:
+        if (
+            not _is_dhis2_chart_placeholder_ref(column)
+            and column not in valid_columns
+            and column != DTTM_ALIAS
+        ):
             invalid_refs.add(column)
 
     for metric_column in get_column_names_from_metrics(metrics):
-        if metric_column not in valid_columns and metric_column != DTTM_ALIAS:
+        if (
+            not _is_dhis2_chart_placeholder_ref(metric_column)
+            and metric_column not in valid_columns
+            and metric_column != DTTM_ALIAS
+        ):
             invalid_refs.add(metric_column)
 
     for key in (
@@ -470,7 +487,9 @@ def _collect_invalid_refs_from_query_dict(
         if isinstance(orderby_entry, (list, tuple)) and orderby_entry:
             _add_invalid_ref_from_value(invalid_refs, orderby_entry[0], valid_columns)
 
-    return sorted(invalid_refs)
+    return sorted(
+        ref for ref in invalid_refs if not _is_dhis2_chart_placeholder_ref(ref)
+    )
 
 
 def collect_dhis2_chart_unresolved_refs(

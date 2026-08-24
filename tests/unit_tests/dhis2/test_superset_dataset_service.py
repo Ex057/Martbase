@@ -793,6 +793,29 @@ def test_collect_dhis2_chart_unresolved_refs_ignores_sort_and_boolean_noise() ->
     assert unresolved == {}
 
 
+def test_collect_dhis2_chart_unresolved_refs_ignores_save_placeholders() -> None:
+    datasource = SimpleNamespace(column_names=["period", "new_indicator_rate"])
+
+    unresolved = collect_dhis2_chart_unresolved_refs(
+        {
+            "metrics": ["__metric__", True],
+            "metric": "__metric__",
+            "True": True,
+            "params": True,
+        },
+        {
+            "form_data": {
+                "metrics": ["__metric__", "True"],
+                "query_context": True,
+            },
+            "queries": [{"metrics": [True, "__metric__"]}],
+        },
+        datasource,
+    )
+
+    assert unresolved == {}
+
+
 def test_collect_dhis2_chart_unresolved_refs_ignores_named_metric_slots() -> None:
     datasource = SimpleNamespace(column_names=["period", "new_indicator_rate"])
 
