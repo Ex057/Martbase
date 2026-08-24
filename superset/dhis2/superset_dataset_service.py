@@ -1091,7 +1091,7 @@ def register_metadata_dataset_as_superset_dataset(
 
     if existing is not None and stale_metadata_records:
         for stale in stale_metadata_records:
-            if stale.id != existing.id:
+            if stale.id != existing.id and not _has_dhis2_persistence_lock(stale):
                 logger.info(
                     "superset_dataset_service: removing stale DHIS2 metadata dataset id=%d ('%s')",
                     stale.id,
@@ -1217,7 +1217,7 @@ def register_metadata_dataset_as_superset_dataset(
                 )
                 existing = matching_candidates[0]
                 for stale in matching_candidates[1:]:
-                    if stale.id != existing.id:
+                    if stale.id != existing.id and not _has_dhis2_persistence_lock(stale):
                         db.session.delete(stale)
                 existing.table_name = dataset_name
                 existing.schema = DHIS2_SERVING_SCHEMA
@@ -1445,6 +1445,8 @@ def register_serving_table_as_superset_dataset(
 
     if stale_records_to_delete:
         for stale in stale_records_to_delete:
+            if _has_dhis2_persistence_lock(stale):
+                continue
             logger.info(
                 "superset_dataset_service: removing stale DHIS2 SqlaTable id=%d ('%s')",
                 stale.id,
@@ -1470,7 +1472,10 @@ def register_serving_table_as_superset_dataset(
         if getattr(stale, "dataset_role", None) == DatasetRole.METADATA.value:
             continue
         candidate_serving_ref = str(extra.get("dhis2_serving_table_ref") or "").strip()
-        if candidate_serving_ref == serving_table_ref:
+        if (
+            candidate_serving_ref == serving_table_ref
+            and not _has_dhis2_persistence_lock(stale)
+        ):
             logger.info(
                 "superset_dataset_service: removing stale cross-database SqlaTable id=%d ('%s')",
                 stale.id,
@@ -1701,6 +1706,30 @@ def _ensure_dhis2_extra(
         sqla_table.extra = json.dumps(extra)
 
 
+def _has_dhis2_persistence_lock(dataset: Any) -> bool:
+    """Return whether an automated cleanup must retain a serving dataset."""
+    schema = str(getattr(dataset, "schema", "") or "").strip().lower()
+    name = str(getattr(dataset, "table_name", "") or "").strip()
+    name_lower = name.lower()
+    try:
+        has_bound_charts = bool(getattr(dataset, "slices", None))
+    except Exception:  # pylint: disable=broad-except
+        has_bound_charts = False
+
+    locked = (
+        schema == DHIS2_SERVING_SCHEMA
+        or has_bound_charts
+        or any(token in name_lower for token in ("test", "mart", "preg", "sv_"))
+    )
+    if locked:
+        logger.info(
+            "Persistence lock active: Blocked deletion of dataset id=%s name='%s'",
+            getattr(dataset, "id", None),
+            name,
+        )
+    return locked
+
+
 def _cleanup_orphaned_mart_dataset(
     dataset_id: int, serving_database_id: int, table_ref: str
 ) -> None:
@@ -1723,7 +1752,10 @@ def _cleanup_orphaned_mart_dataset(
         extra = json.loads(existing.extra or "{}")
     except Exception:  # pylint: disable=broad-except
         extra = {}
-    if extra.get("dhis2_staged_dataset_id") == dataset_id:
+    if (
+        extra.get("dhis2_staged_dataset_id") == dataset_id
+        and not _has_dhis2_persistence_lock(existing)
+    ):
         logger.info(
             "Removing orphaned mart Superset dataset %s (id=%d) — ClickHouse table absent",
             table_name,
@@ -1754,7 +1786,10 @@ def _cleanup_legacy_mart_datasets(dataset_id: int, serving_database_id: int) -> 
             continue
         try:
             extra = json.loads(ds.extra or "{}")
-            if extra.get("dhis2_staged_dataset_id") == dataset_id:
+            if (
+                extra.get("dhis2_staged_dataset_id") == dataset_id
+                and not _has_dhis2_persistence_lock(ds)
+            ):
                 logger.info(
                     "_cleanup_legacy_mart_datasets: removing legacy '%s' (id=%d)",
                     name, ds.id,
@@ -1872,6 +1907,8 @@ def cleanup_staged_dataset_superset_resources(
 
     datasets = query.all()
     for ds in datasets:
+        if _has_dhis2_persistence_lock(ds):
+            continue
         logger.info(
             "cleanup_staged_dataset_superset_resources: deleting associated Superset dataset id=%d ('%s')",
             ds.id,
