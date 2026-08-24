@@ -1138,6 +1138,10 @@ def register_metadata_dataset_as_superset_dataset(
     initial_extra: dict[str, Any] = {
         "dhis2_staged_dataset_id": dataset_id,
         "dhis2_staged_local": True,
+        "dhis2_role": _resolve_dhis2_swapper_role(
+            DatasetRole.METADATA.value, dataset_name
+        ),
+        "dhis2_serving": True,
         "dhis2_dataset_display_name": dataset_name,
         "dhis2_source_database_id": source_database_id,
         "dhis2_source_database_name": source_db.database_name,
@@ -1494,6 +1498,10 @@ def register_serving_table_as_superset_dataset(
         # datasource/api column-values endpoint can route to staging storage.
         # Also sync serving_database_id/name/table_ref so get_serving_database()
         # resolves correctly after engine migrations (e.g. DuckDB → ClickHouse).
+        # Set the native role before tagging.  The tag must describe the
+        # physical dataset rather than inherit a stale value from a prior
+        # registration.
+        existing.dataset_role = effective_dataset_role
         _ensure_dhis2_extra(
             existing,
             dataset_id,
@@ -1504,7 +1512,6 @@ def register_serving_table_as_superset_dataset(
             serving_database_name=serving_db.database_name,
             serving_table_ref=serving_table_ref,
         )
-        existing.dataset_role = effective_dataset_role
         _sync_columns(existing, serving_columns)
         db.session.commit()
         logger.info(
@@ -1520,6 +1527,10 @@ def register_serving_table_as_superset_dataset(
     initial_extra: dict[str, Any] = {
         "dhis2_staged_dataset_id": dataset_id,
         "dhis2_staged_local": True,
+        "dhis2_role": _resolve_dhis2_swapper_role(
+            effective_dataset_role, table_name
+        ),
+        "dhis2_serving": True,
         "dhis2_serving_database_id": serving_database_id,
         "dhis2_serving_database_name": serving_db.database_name,
         "dhis2_serving_table_ref": serving_table_ref,
@@ -1651,6 +1662,23 @@ def ensure_specialized_marts_for_sqla_table(sqla_table: Any) -> None:
         )
 
 
+def _resolve_dhis2_swapper_role(dataset_role: Any, table_name: Any) -> str:
+    """Return the role exposed to the DHIS2 dataset swapper.
+
+    ``extra`` is used by the UI as routing metadata, so it must reflect the
+    dataset's native role.  In particular, a friendly METADATA wrapper in
+    ``dhis2_serving`` must not be labelled as a physical MART merely because
+    it reads from one.
+    """
+    role = str(dataset_role or "").strip().upper()
+    name = str(table_name or "").strip().lower()
+    if role == "MART" or name.endswith("_mart"):
+        return "MART"
+    if role == "DHIS2_SOURCE_DATASET" or "SOURCE" in role:
+        return "SOURCE"
+    return "METADATA"
+
+
 def _ensure_dhis2_extra(
     sqla_table: Any,
     dataset_id: int,
@@ -1702,6 +1730,17 @@ def _ensure_dhis2_extra(
     if dataset_display_name is not None and extra.get("dhis2_dataset_display_name") != dataset_display_name:
         extra["dhis2_dataset_display_name"] = dataset_display_name
         changed = True
+    if str(getattr(sqla_table, "schema", "") or "").strip() == DHIS2_SERVING_SCHEMA:
+        swapper_role = _resolve_dhis2_swapper_role(
+            getattr(sqla_table, "dataset_role", None),
+            getattr(sqla_table, "table_name", None),
+        )
+        if extra.get("dhis2_role") != swapper_role:
+            extra["dhis2_role"] = swapper_role
+            changed = True
+        if extra.get("dhis2_serving") is not True:
+            extra["dhis2_serving"] = True
+            changed = True
     if changed:
         sqla_table.extra = json.dumps(extra)
 

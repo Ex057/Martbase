@@ -92,6 +92,42 @@ def test_ensure_dhis2_extra_updates_saved_dataset_display_name() -> None:
     )
 
 
+def test_ensure_dhis2_extra_adds_native_serving_swapper_tags() -> None:
+    sqla_table = SimpleNamespace(
+        schema="dhis2_serving",
+        dataset_role="METADATA",
+        table_name="mal_preg_dataset",
+        extra=json.dumps({"dhis2_staged_dataset_id": 7}),
+    )
+
+    _ensure_dhis2_extra(sqla_table, 7)
+
+    extra = json.loads(sqla_table.extra)
+    assert extra["dhis2_role"] == "METADATA"
+    assert extra["dhis2_serving"] is True
+
+
+def test_ensure_dhis2_extra_corrects_stale_role_tags() -> None:
+    mart = SimpleNamespace(
+        schema="dhis2_serving",
+        dataset_role="MART",
+        table_name="sv_34_mal_preg_dataset_mart",
+        extra=json.dumps({"dhis2_role": "METADATA"}),
+    )
+    source = SimpleNamespace(
+        schema="dhis2_serving",
+        dataset_role="DHIS2_SOURCE_DATASET",
+        table_name="sv_34_mal_preg_dataset",
+        extra=json.dumps({"dhis2_role": "MART"}),
+    )
+
+    _ensure_dhis2_extra(mart, 34)
+    _ensure_dhis2_extra(source, 34)
+
+    assert json.loads(mart.extra)["dhis2_role"] == "MART"
+    assert json.loads(source.extra)["dhis2_role"] == "SOURCE"
+
+
 def test_is_metadata_wrapper_candidate_matches_logical_virtual_wrapper() -> None:
     sqla_table = SimpleNamespace(
         database_id=5,
