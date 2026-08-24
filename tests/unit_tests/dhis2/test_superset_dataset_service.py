@@ -57,7 +57,7 @@ def test_period_variant_uses_human_readable_month_and_quarter_labels() -> None:
     assert service.normalize_period("2025")["period_variant"] == "2025"
 
 
-def test_period_manifest_keeps_dhis2_periods_categorical_with_display_expression() -> None:
+def test_period_manifest_keeps_dhis2_periods_categorical_without_virtual_sql() -> None:
     context = PeriodHierarchyService().augment_serving_schema(
         {"period_hierarchy_keys": ["period", "period_variant"]}, set()
     )
@@ -66,8 +66,15 @@ def test_period_manifest_keeps_dhis2_periods_categorical_with_display_expression
     assert columns["period"]["is_dttm"] is False
     assert columns["period_variant"]["is_dttm"] is False
     assert columns["period_variant"]["extra"]["dhis2_is_period_display"] is True
-    assert "multiIf(" in columns["period_variant"]["expression"]
-    assert "toString(`period`)" in columns["period_variant"]["expression"]
+    assert "expression" not in columns["period_variant"]
+
+
+def test_period_manifest_always_includes_period_variant_display_dimension() -> None:
+    context = PeriodHierarchyService().augment_serving_schema(
+        {"period_hierarchy_keys": ["period"]}, set()
+    )
+
+    assert context.column_names_by_key["period_variant"] == "period_variant"
 
 
 def test_resolve_clickhouse_serving_table_name_prefers_mart() -> None:
@@ -813,7 +820,7 @@ def test_normalize_dhis2_chart_payload_rewrites_metric_sql_and_reports_unresolve
     assert "datasource" not in json_query_context["queries"][0]
 
 
-def test_normalize_chart_payload_keeps_dhis2_periods_categorical() -> None:
+def test_normalize_chart_payload_does_not_rewrite_period_controls() -> None:
     datasource = SimpleNamespace(
         id=23,
         datasource_type="table",
@@ -838,11 +845,11 @@ def test_normalize_chart_payload_keeps_dhis2_periods_categorical() -> None:
     assert unresolved == {}
     assert query_context is None
     repaired = json.loads(params or "{}")
-    assert repaired["x_axis"] == "period_variant"
-    assert repaired["groupby"] == ["period_variant", "period"]
-    assert repaired["orderby"] == [["period", True]]
-    assert repaired["granularity_sqla"] is None
-    assert repaired["time_grain_sqla"] is None
+    assert repaired["x_axis"] == "period"
+    assert repaired["groupby"] == ["period"]
+    assert "orderby" not in repaired
+    assert repaired["granularity_sqla"] == "period"
+    assert repaired["time_grain_sqla"] == "P1D"
 
 
 def test_collect_dhis2_chart_unresolved_refs_detects_simple_metric_strings() -> None:

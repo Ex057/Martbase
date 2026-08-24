@@ -3,8 +3,8 @@
 
 This utility only changes charts linked to a DHIS2 staged dataset. It converts
 saved ``SUM(ou_level)`` adhoc WHERE filters into ordinary ``ou_level`` column
-filters. It also removes Superset time-grain controls from categorical DHIS2
-periods, displays ``period_variant``, and orders it by raw ``period``.
+filters. It also removes an invalid raw ``period`` ORDER BY when the raw key
+is not a grouped chart dimension, preventing ClickHouse aggregate errors.
 Run without ``--apply`` first.
 """
 
@@ -91,62 +91,24 @@ def _repair_payload(node: Any) -> tuple[bool, int, int, int]:
                 changed = True
                 filters_fixed += 1
 
-    def _uses_dhis2_period(value: Any) -> bool:
-        if isinstance(value, str) and value in {"period", "period_variant"}:
-            return True
-        if isinstance(value, list):
-            return any(_uses_dhis2_period(item) for item in value)
-        return False
-
-    uses_dhis2_period = any(
-        _uses_dhis2_period(node.get(key))
-        for key in ("x_axis", "groupby", "columns", "series")
-    )
-    if uses_dhis2_period:
-        # Explicitly disable SQLA temporal bucketing. DHIS2 compact period keys
-        # must remain categorical or ClickHouse results become epoch values.
-        for control in ("granularity_sqla", "time_grain_sqla"):
-            if control in node and node[control] is not None:
-                node[control] = None
-                changed = True
-                time_controls_cleared += 1
-        if node.get("x_axis") != "period_variant":
-            node["x_axis"] = "period_variant"
-            changed = True
-
     groupby = node.get("groupby")
-    if uses_dhis2_period and isinstance(groupby, list):
-        normalized_groupby = [
-            "period_variant" if value == "period" else value for value in groupby
-        ]
-        if "period_variant" not in normalized_groupby:
-            normalized_groupby.append("period_variant")
-        # ClickHouse requires an ORDER BY column to participate in the grouped
-        # query. Keep it as a hidden machine sort key; x_axis still selects
-        # period_variant for the displayed label.
-        if "period" not in normalized_groupby:
-            normalized_groupby.append("period")
-            orders_fixed += 1
-        if normalized_groupby != groupby:
-            node["groupby"] = normalized_groupby
-            changed = True
+    selected_dimensions = groupby if isinstance(groupby, list) else node.get("columns")
+    has_raw_period = isinstance(selected_dimensions, list) and "period" in selected_dimensions
     # Preserve period_variant as the selected/displayed dimension, but use the
-    # machine period key for chronological ordering.
+    # existing display order if a hidden raw key is unavailable. ClickHouse
+    # rejects ORDER BY raw period in an aggregate query unless it is grouped.
     orderby = node.get("orderby")
     if isinstance(orderby, list):
         for order_item in orderby:
-            if isinstance(order_item, list) and order_item and order_item[0] == "period_variant":
-                order_item[0] = "period"
+            if (
+                isinstance(order_item, list)
+                and order_item
+                and order_item[0] == "period"
+                and not has_raw_period
+            ):
+                order_item[0] = "period_variant"
                 changed = True
                 orders_fixed += 1
-        if uses_dhis2_period and not orderby:
-            node["orderby"] = [["period", True]]
-            changed = True
-            orders_fixed += 1
-    elif uses_dhis2_period:
-        node["orderby"] = [["period", True]]
-        changed = True
-        orders_fixed += 1
 
     for value in node.values():
         item_changed, item_filters, item_orders, item_time_controls = _repair_payload(value)

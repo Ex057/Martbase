@@ -377,53 +377,6 @@ def _normalize_dhis2_dimension_controls(payload: Any) -> bool:
                 filter_item.pop("sqlExpression", None)
                 filter_item.pop("expression", None)
                 changed = True
-    def uses_dhis2_period(value: Any) -> bool:
-        if isinstance(value, str):
-            return value in {"period", "period_variant"}
-        if isinstance(value, list):
-            return any(uses_dhis2_period(item) for item in value)
-        return False
-
-    groupby = payload.get("groupby")
-    uses_period = any(
-        uses_dhis2_period(payload.get(key))
-        for key in ("x_axis", "groupby", "columns", "series")
-    )
-    if uses_period:
-        # Compact DHIS2 period codes are categorical keys. Clear time-grain
-        # controls before they reach SQLA, otherwise Superset converts them to
-        # epoch timestamps for ClickHouse.
-        for control in ("granularity_sqla", "time_grain_sqla"):
-            if control in payload and payload[control] is not None:
-                payload[control] = None
-                changed = True
-        if payload.get("x_axis") != "period_variant":
-            payload["x_axis"] = "period_variant"
-            changed = True
-    if isinstance(groupby, list) and uses_period:
-        normalized_groupby = [
-            "period_variant" if item == "period" else item for item in groupby
-        ]
-        if "period_variant" not in normalized_groupby:
-            normalized_groupby.append("period_variant")
-        if "period" not in normalized_groupby:
-            normalized_groupby.append("period")
-        if normalized_groupby != groupby:
-            payload["groupby"] = normalized_groupby
-            groupby = normalized_groupby
-            changed = True
-    orderby = payload.get("orderby")
-    if isinstance(orderby, list):
-        for entry in orderby:
-            if isinstance(entry, list) and entry and entry[0] == "period_variant":
-                entry[0] = "period"
-                changed = True
-        if uses_period and not orderby:
-            payload["orderby"] = [["period", True]]
-            changed = True
-    elif uses_period:
-        payload["orderby"] = [["period", True]]
-        changed = True
     for value in payload.values():
         changed = _normalize_dhis2_dimension_controls(value) or changed
     return changed

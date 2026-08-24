@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Restore categorical DHIS2 period metadata in registered datasets.
+"""Stabilize categorical DHIS2 period metadata in registered datasets.
 
 The raw ``period`` column remains the sortable machine key and is explicitly
-non-temporal. This utility adds a virtual display expression (eg ``202508`` →
-``Aug 2025`` and ``2025Q3`` → ``2025 Q3``) to Superset column metadata. It
-intentionally does not rebuild, alter, or mutate any ClickHouse serving table.
+non-temporal. This utility removes the temporary generated ``period_variant``
+expression that was injected into chart SQL, while preserving physical serving
+columns and their values. It intentionally does not rebuild, alter, or mutate
+any ClickHouse serving table.
 
 Use ``--dataset-id`` for a limited repair. ``--all`` is intentionally explicit
 and targets every registered DHIS2 staged dataset. No charts are altered.
@@ -29,17 +30,13 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _period_variant_sql_expression() -> str:
-    """Return the ClickHouse display expression for the raw ``period`` key."""
-    value = "toString(`period`)"
-    months = "['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']"
-    month_numbers = "['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']"
+def _is_generated_period_display_expression(expression: Any) -> bool:
+    """Whether an expression is the temporary generated period label SQL."""
+    normalized = " ".join(str(expression or "").lower().split())
     return (
-        "multiIf("
-        f"match({value}, '^[0-9]{{6}}$'), concat(transform(substring({value}, 5, 2), {month_numbers}, {months}), ' ', substring({value}, 1, 4)), "
-        f"match({value}, '^[0-9]{{4}}Q[1-4]$'), concat(substring({value}, 1, 4), ' Q', substring({value}, 6, 1)), "
-        f"match({value}, '^[0-9]{{4}}$'), {value}, "
-        f"{value})"
+        "multiif(" in normalized
+        and "tostring(`period`)" in normalized
+        and "substring(tostring(`period`), 5, 2)" in normalized
     )
 
 
@@ -59,7 +56,7 @@ def _target_dataset_ids(args: argparse.Namespace) -> list[int]:
 
 def _repair_sqla_metadata(dataset_id: int) -> int:
     from superset import db
-    from superset.connectors.sqla.models import SqlaTable, TableColumn
+    from superset.connectors.sqla.models import SqlaTable
 
     matches = (
         db.session.query(SqlaTable)
@@ -69,17 +66,9 @@ def _repair_sqla_metadata(dataset_id: int) -> int:
         )
         .all()
     )
-    sql_expr = _period_variant_sql_expression()
-    period_variant_extra = json.dumps(
-        {
-            "dhis2_is_period_hierarchy": True,
-            "dhis2_period_key": "period_variant",
-            "dhis2_is_period_display": True,
-            "dhis2_sort_column": "period",
-        }
-    )
     updated = 0
     for sqla_table in matches:
+        changed = False
         raw_period = next(
             (item for item in sqla_table.columns if item.column_name == "period"),
             None,
@@ -88,34 +77,20 @@ def _repair_sqla_metadata(dataset_id: int) -> int:
             # Undo metadata written by the temporary DateTime conversion path.
             # Compact DHIS2 tokens are categorical keys and must not activate
             # Superset's time-grain/epoch handling.
-            raw_period.is_dttm = False
-            raw_period.python_date_format = None
+            if raw_period.is_dttm:
+                raw_period.is_dttm = False
+                changed = True
+            if raw_period.python_date_format:
+                raw_period.python_date_format = None
+                changed = True
 
         column = next(
             (item for item in sqla_table.columns if item.column_name == "period_variant"),
             None,
         )
-        if column is None:
-            column = TableColumn(
-                column_name="period_variant",
-                verbose_name="Period Variant",
-                type="STRING",
-                is_dttm=False,
-                groupby=True,
-                filterable=True,
-                is_active=True,
-                expression=sql_expr,
-                extra=period_variant_extra,
-            )
-            sqla_table.columns.append(column)
-        else:
-            column.verbose_name = "Period Variant"
-            column.type = "STRING"
-            column.is_dttm = False
-            column.groupby = True
-            column.filterable = True
-            column.expression = sql_expr
-            column.extra = period_variant_extra
+        if column is not None and _is_generated_period_display_expression(column.expression):
+            column.expression = None
+            changed = True
 
         # ``ou_level`` is a hierarchy dimension. It must never become an
         # aggregate metric when used by an Explore WHERE filter.
@@ -126,8 +101,11 @@ def _repair_sqla_metadata(dataset_id: int) -> int:
         if ou_column is not None:
             ou_column.groupby = True
             ou_column.filterable = True
-            ou_column.is_dttm = False
-        updated += 1
+            if ou_column.is_dttm:
+                ou_column.is_dttm = False
+                changed = True
+        if changed:
+            updated += 1
     return updated
 
 

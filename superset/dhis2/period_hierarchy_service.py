@@ -67,28 +67,6 @@ _MONTH_ABBREVIATIONS = (
 )
 
 
-def clickhouse_period_variant_expression(period_column: str = "period") -> str:
-    """Return a categorical ClickHouse label expression for a DHIS2 period.
-
-    DHIS2 period keys are not timestamps.  Keeping this expression separate
-    from the raw period key prevents Superset time-grain controls from turning
-    values such as ``202508`` into epoch milliseconds.
-    """
-    quoted_column = "`" + period_column.replace("`", "``") + "`"
-    value = f"toString({quoted_column})"
-    month_numbers = "['01','02','03','04','05','06','07','08','09','10','11','12']"
-    month_labels = "['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']"
-    return (
-        "multiIf("
-        f"match({value}, '^[0-9]{{6}}$'), "
-        f"concat(transform(substring({value}, 5, 2), {month_numbers}, {month_labels}), "
-        f"' ', substring({value}, 1, 4)), "
-        f"match({value}, '^[0-9]{{4}}Q[1-4]$'), "
-        f"concat(substring({value}, 1, 4), ' Q', substring({value}, 6, 1)), "
-        f"{value})"
-    )
-
-
 def sanitize_serving_identifier(value: str) -> str:
     sanitized = re.sub(r"[^a-zA-Z0-9_]+", "_", str(value or "").strip())
     sanitized = re.sub(r"_+", "_", sanitized).strip("_")
@@ -319,23 +297,6 @@ class PeriodHierarchyService:
             column_names_by_key[key] = column_name
             if key == "period":
                 primary_period_column = column_name
-
-        # ``period_variant`` is always a virtual display label derived from the
-        # raw machine key. This also repairs stale physical values after the
-        # serving metadata is refreshed.
-        period_variant_column = next(
-            (
-                column
-                for column in columns
-                if (column.get("extra") or {}).get("dhis2_period_key")
-                == "period_variant"
-            ),
-            None,
-        )
-        if period_variant_column is not None:
-            period_variant_column["expression"] = clickhouse_period_variant_expression(
-                primary_period_column
-            )
 
         diagnostics = self.build_period_query_context(dataset_config)
         diagnostics["selected_period_keys"] = selected_period_keys
