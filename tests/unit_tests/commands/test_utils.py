@@ -25,6 +25,7 @@ from superset.commands.utils import (
     compute_owner_list,
     inject_chart_dhis2_identity,
     normalize_chart_dhis2_payload,
+    sanitize_dhis2_chart_save_payload,
     populate_owner_list,
     Tag,
     TagType,
@@ -525,6 +526,34 @@ def test_normalize_chart_dhis2_payload_rewrites_dhis2_metric_strings():
     query_context = json.loads(updated["query_context"])
     assert query_context["form_data"]["datasource"] == "11__table"
     assert query_context["queries"][0]["metrics"] == ["SUM(new_indicator_rate)"]
+
+
+def test_sanitize_dhis2_chart_save_payload_removes_explore_metric_placeholders():
+    payload = {
+        "params": True,
+        "query_context": json.dumps(
+            {
+                "form_data": {
+                    "metrics": ["__metric__"],
+                    "True": True,
+                    "metric": "__metric__",
+                },
+                "queries": [{"metrics": ["__metric__"], "__metric__": True}],
+            }
+        ),
+        "form_data": {"metrics": ["__metric__"], "True": True},
+    }
+
+    sanitized = sanitize_dhis2_chart_save_payload(payload)
+
+    assert sanitized["params"] == "{}"
+    query_context = json.loads(sanitized["query_context"])
+    assert query_context["form_data"]["metrics"] == []
+    assert "True" not in query_context["form_data"]
+    assert "metric" not in query_context["form_data"]
+    assert query_context["queries"][0]["metrics"] == []
+    assert "__metric__" not in query_context["queries"][0]
+    assert sanitized["form_data"] == {"metrics": []}
 
 
 @pytest.mark.parametrize("object_type", OBJECT_TYPES)

@@ -227,6 +227,57 @@ def normalize_chart_dhis2_payload(
     return normalized, unresolved
 
 
+def sanitize_dhis2_chart_save_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Remove Explore's transient placeholder controls before chart validation.
+
+    Some custom visualizations serialize an unselected metric as ``__metric__``
+    or a boolean placeholder (for example ``{"True": true}``). Those are UI
+    control states rather than datasource references and must not be persisted
+    or treated as unresolved DHIS2 columns.
+    """
+    def _sanitize(value: Any, *, key: str | None = None) -> Any:
+        if isinstance(value, dict):
+            cleaned: dict[str, Any] = {}
+            for child_key, child_value in value.items():
+                if child_key in {"__metric__", "True"} and child_value is True:
+                    continue
+                if child_key == "__metric__":
+                    continue
+                if child_key in {"metric", "secondary_metric", "timeseries_limit_metric"} and child_value == "__metric__":
+                    continue
+                cleaned[child_key] = _sanitize(child_value, key=child_key)
+            return cleaned
+        if isinstance(value, list):
+            cleaned_list = [
+                _sanitize(item) for item in value if item != "__metric__"
+            ]
+            return cleaned_list
+        return value
+
+    cleaned_payload = payload.copy()
+    for field_name in ("params", "query_context", "form_data"):
+        if field_name not in cleaned_payload:
+            continue
+        raw_value = cleaned_payload[field_name]
+        if raw_value is True:
+            # Chart schemas expect JSON strings for params/query_context.
+            cleaned_payload[field_name] = json.dumps({})
+            continue
+        parsed_value = raw_value
+        serialized = isinstance(raw_value, str)
+        if serialized:
+            try:
+                parsed_value = json.loads(raw_value)
+            except (TypeError, json.JSONDecodeError):
+                continue
+        if isinstance(parsed_value, (dict, list)):
+            sanitized_value = _sanitize(parsed_value)
+            cleaned_payload[field_name] = (
+                json.dumps(sanitized_value) if serialized or field_name != "form_data" else sanitized_value
+            )
+    return cleaned_payload
+
+
 def validate_tags(
     object_type: ObjectType,
     current_tags: list[Tag],

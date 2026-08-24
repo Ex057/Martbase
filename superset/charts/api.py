@@ -73,6 +73,7 @@ from superset.commands.chart.unfave import DelFavoriteChartCommand
 from superset.commands.chart.update import UpdateChartCommand
 from superset.commands.chart.warm_up_cache import ChartWarmUpCacheCommand
 from superset.commands.exceptions import CommandException, TagForbiddenError
+from superset.commands.utils import sanitize_dhis2_chart_save_payload
 from superset.commands.importers.exceptions import (
     IncorrectFormatError,
     NoValidFilesFoundError,
@@ -359,7 +360,9 @@ class ChartRestApi(BaseSupersetModelRestApi):
               $ref: '#/components/responses/500'
         """
         try:
-            item = self.add_model_schema.load(request.json)
+            item = self.add_model_schema.load(
+                sanitize_dhis2_chart_save_payload(request.json)
+            )
         # This validates custom Schema with custom validations
         except ValidationError as error:
             return self.response_400(message=error.messages)
@@ -431,7 +434,9 @@ class ChartRestApi(BaseSupersetModelRestApi):
               $ref: '#/components/responses/500'
         """
         try:
-            item = self.edit_model_schema.load(request.json)
+            item = self.edit_model_schema.load(
+                sanitize_dhis2_chart_save_payload(request.json)
+            )
         # This validates custom Schema with custom validations
         except ValidationError as error:
             return self.response_400(message=error.messages)
