@@ -162,9 +162,7 @@ def _update_query_context_dhis2_identity(
     if isinstance(queries, list):
         for query in queries:
             if isinstance(query, dict):
-                query_datasource = query.get("datasource")
-                if isinstance(query_datasource, dict):
-                    query_datasource.update(identity)
+                query.pop("datasource", None)
 
 
 def inject_chart_dhis2_identity(

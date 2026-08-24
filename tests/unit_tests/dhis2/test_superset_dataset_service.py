@@ -252,6 +252,7 @@ def test_repair_charts_for_dhis2_staged_dataset_updates_saved_chart_json() -> No
     assert query_context["datasource"]["id"] == 23
     assert query_context["datasource"]["dhis2_staged_dataset_id"] == 7
     assert query_context["form_data"]["datasource"] == "23__table"
+    assert "datasource" not in query_context["queries"][0]
 
 
 def test_repair_charts_for_dhis2_staged_dataset_rewrites_stale_query_columns() -> None:
@@ -641,6 +642,29 @@ def test_repair_chart_bindings_aborts_when_target_has_unresolved_refs() -> None:
     session.commit.assert_not_called()
 
 
+def test_repair_chart_bindings_keeps_existing_binding_when_no_target_exists() -> None:
+    chart = SimpleNamespace(
+        datasource_id=359,
+        datasource_type="table",
+        datasource_name="mal_preg_dataset [MART]",
+        params=json.dumps({"datasource": "359__table"}),
+        query_context=json.dumps({"datasource": {"id": 359, "type": "table"}}),
+    )
+    session = SimpleNamespace(commit=MagicMock())
+
+    with patch("superset.db.session", session), patch(
+        "superset.dhis2.superset_dataset_service._get_dhis2_sqla_table",
+        return_value=None,
+    ):
+        repaired = repair_chart_bindings_for_dhis2_staged_dataset(34)
+
+    assert repaired == 0
+    assert chart.datasource_id == 359
+    assert chart.datasource_type == "table"
+    assert chart.datasource_name == "mal_preg_dataset [MART]"
+    session.commit.assert_not_called()
+
+
 def test_normalize_dhis2_chart_payload_rewrites_metric_sql_and_reports_unresolved() -> None:
     datasource = SimpleNamespace(
         id=23,
@@ -700,6 +724,7 @@ def test_normalize_dhis2_chart_payload_rewrites_metric_sql_and_reports_unresolve
     json_query_context = json.loads(query_context or "{}")
     assert json_query_context["form_data"]["datasource"] == "23__table"
     assert json_query_context["queries"][0]["metrics"][0] == "AVG(new_indicator_rate)"
+    assert "datasource" not in json_query_context["queries"][0]
 
 
 def test_collect_dhis2_chart_unresolved_refs_detects_simple_metric_strings() -> None:

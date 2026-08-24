@@ -1006,6 +1006,40 @@ def test_ensure_serving_table_rebuilds_existing_legacy_org_unit_projection():
     build_mock.assert_called_once_with(dataset, engine=engine, refresh_scope=None)
 
 
+def test_ensure_serving_table_skips_clickhouse_build_when_staging_is_missing(caplog):
+    """Metadata refresh retains the live serving table after a ds_* prune."""
+    from superset.dhis2 import staged_dataset_service as svc
+
+    dataset = _dataset(database_id=10)
+    engine = MagicMock(engine_name="clickhouse")
+    engine.table_exists.return_value = False
+    engine.get_superset_sql_table_ref.return_value = "`dhis2_staging`.`ds_1_dataset`"
+    engine.get_serving_sql_table_ref.return_value = "`dhis2_serving`.`sv_1_dataset`"
+    existing_columns = [{"column_name": "period"}]
+
+    with patch(
+        "superset.dhis2.staged_dataset_service.get_staged_dataset",
+        return_value=dataset,
+    ), patch(
+        "superset.dhis2.staged_dataset_service._get_engine",
+        return_value=engine,
+    ), patch(
+        "superset.dhis2.staged_dataset_service.build_serving_manifest",
+        return_value={"columns": []},
+    ), patch(
+        "superset.dhis2.staged_dataset_service.get_serving_columns",
+        return_value=existing_columns,
+    ), patch(
+        "superset.dhis2.staged_dataset_service.build_serving_table",
+    ) as build_mock:
+        table_ref, columns = svc.ensure_serving_table(dataset.id)
+
+    assert table_ref == "`dhis2_serving`.`sv_1_dataset`"
+    assert columns == existing_columns
+    build_mock.assert_not_called()
+    assert "Staging table `dhis2_staging`.`ds_1_dataset` does not exist" in caplog.text
+
+
 def test_ensure_serving_table_keeps_live_columns_when_staging_is_empty():
     from superset.dhis2 import staged_dataset_service as svc
 

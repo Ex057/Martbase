@@ -2111,6 +2111,21 @@ def _specialized_marts_need_rebuild(
     return False
 
 
+def _is_clickhouse_unknown_table_error(exc: Exception) -> bool:
+    """Return whether *exc* is ClickHouse's ``UNKNOWN_TABLE`` (Code 60)."""
+    return "Code: 60" in str(exc) or "UNKNOWN_TABLE" in str(exc)
+
+
+def _staging_table_is_available(engine: Any, dataset: Any) -> bool:
+    """Return whether the physical source table is available for a rebuild."""
+    try:
+        return bool(engine.table_exists(dataset))
+    except Exception as exc:  # pylint: disable=broad-except
+        if _is_clickhouse_unknown_table_error(exc):
+            return False
+        raise
+
+
 def ensure_serving_table(
     dataset_id: int,
     refresh_scope: Iterable[str] | None = None,
@@ -2125,6 +2140,20 @@ def ensure_serving_table(
     # serving_columns tracks the *actual* columns in the physical table.
     # When a rebuild runs, pruned columns replace the full manifest set.
     serving_columns = get_serving_columns(dataset.id)
+
+    # The ds_* source is intentionally transient in some deployments.  Do
+    # not try to rebuild a serving table (or its marts) from a source that has
+    # been pruned: it causes ClickHouse Code 60 and interrupts metadata fetch.
+    if (
+        getattr(engine, "engine_name", None) == "clickhouse"
+        and not _staging_table_is_available(engine, dataset)
+    ):
+        staging_ref = engine.get_superset_sql_table_ref(dataset)
+        logger.warning(
+            "Staging table %s does not exist in ClickHouse. Skipping build.",
+            staging_ref,
+        )
+        return engine.get_serving_sql_table_ref(dataset), serving_columns
     
     table_needs_rebuild = _serving_table_needs_rebuild(engine, dataset, manifest)
     marts_need_rebuild = _specialized_marts_need_rebuild(engine, dataset, manifest)

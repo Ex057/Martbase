@@ -1264,13 +1264,7 @@ def repair_dhis2_chart_metadata_backfill() -> dict[str, int]:
             for query in queries:
                 if not isinstance(query, dict):
                     continue
-                query_datasource = query.get("datasource")
-                if not isinstance(query_datasource, dict):
-                    query_datasource = {}
-                query_datasource.update(identity)
-                query_datasource["id"] = target.id
-                query_datasource["type"] = "table"
-                query["datasource"] = query_datasource
+                query.pop("datasource", None)
 
         chart.query_context = json.dumps(query_context)
         _repair_chart_query_content(chart, target)

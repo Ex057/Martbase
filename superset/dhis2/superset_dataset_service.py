@@ -511,14 +511,13 @@ def normalize_dhis2_chart_payload(
                 for query_item in queries:
                     if not isinstance(query_item, dict):
                         continue
-                    query_datasource = query_item.get("datasource")
-                    if not isinstance(query_datasource, dict):
-                        query_datasource = {}
-                    if identity:
-                        query_datasource.update(identity)
-                    query_datasource["id"] = datasource.id
-                    query_datasource["type"] = datasource_type
-                    query_item["datasource"] = query_datasource
+                    # QueryObjectFactory receives the context datasource as a
+                    # dedicated argument. Passing an additional datasource in
+                    # each query dict expands it twice and raises
+                    # ``create() got multiple values for keyword argument
+                    # 'datasource'``. DHIS2 chart contexts therefore keep the
+                    # datasource only at the top level.
+                    query_item.pop("datasource", None)
 
             rewritten = _rewrite_dhis2_chart_structure(parsed_query_context, rewrite_map)
             normalized_query_context = json.dumps(rewritten)
@@ -792,6 +791,10 @@ def repair_chart_bindings_for_dhis2_staged_dataset(dataset_id: int) -> int:
         if datasource is not None
     }
     if not eligible_targets:
+        logger.warning(
+            "repair_chart_bindings_for_dhis2_staged_dataset: no eligible target for dataset id=%s; retaining existing chart bindings",
+            dataset_id,
+        )
         return 0
 
     staged_patterns = [
@@ -1534,8 +1537,20 @@ def ensure_specialized_marts_for_sqla_table(sqla_table: Any) -> None:
                 ctx.push()
             
             try:
-                # This triggers a build if tables are missing or stale
-                ensure_serving_table(staged_id)
+                # A transient/missing ds_* source must not make metadata
+                # loading fail for an already materialized serving dataset.
+                try:
+                    ensure_serving_table(staged_id)
+                except Exception as exc:  # pylint: disable=broad-except
+                    if "Code: 60" in str(exc) or "UNKNOWN_TABLE" in str(exc):
+                        logger.warning(
+                            "ensure_specialized_marts_for_sqla_table: skipping "
+                            "serving build for staged dataset id=%s because its "
+                            "staging table is missing",
+                            staged_id,
+                        )
+                    else:
+                        raise
             finally:
                 if ctx:
                     ctx.pop()

@@ -539,11 +539,7 @@ class ClickHouseStagingEngine(LocalStagingEngineBase):
 
     def table_exists(self, staged_dataset: Any) -> bool:
         table = _staging_table_name(staged_dataset)
-        result = self._qry(
-            "SELECT count() FROM system.tables "
-            "WHERE database = {db:String} AND name = {tbl:String}",
-            parameters={"db": self._database, "tbl": table},
-        )
+        result = self._qry(f"EXISTS TABLE `{self._database}`.`{table}`")
         return bool(result.result_rows and result.result_rows[0][0] > 0)
 
     def serving_table_exists(self, staged_dataset: Any) -> bool:

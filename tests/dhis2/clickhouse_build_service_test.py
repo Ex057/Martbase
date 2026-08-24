@@ -17,7 +17,28 @@
 import tests.dhis2._bootstrap  # noqa: F401 - must be first import
 from unittest.mock import MagicMock, patch
 
-from superset.dhis2.clickhouse_build_service import _generate_serving_sql, _build_specialized_marts
+from superset.dhis2.clickhouse_build_service import (
+    _build_specialized_marts,
+    _generate_serving_sql,
+    build_serving_table_clickhouse,
+)
+
+
+def test_build_skips_missing_staging_table_before_any_diagnostic_queries(caplog):
+    """A pruned ds_* source must not cause ClickHouse Code 60 during refresh."""
+    dataset = MagicMock(id=35, database_id=4)
+    engine = MagicMock(engine_name="clickhouse")
+    engine.table_exists.return_value = False
+    engine.get_superset_sql_table_ref.return_value = "`dhis2_staging`.`ds_35_test_2`"
+    engine.get_serving_sql_table_ref.return_value = "`dhis2_serving`.`sv_35_test_2`"
+
+    result = build_serving_table_clickhouse(dataset, engine=engine)
+
+    assert result.serving_table_ref == "`dhis2_serving`.`sv_35_test_2`"
+    assert result.serving_columns == []
+    assert result.diagnostics["skipped_missing_staging_table"] is True
+    engine._qry.assert_not_called()
+    assert "Staging table `dhis2_staging`.`ds_35_test_2` does not exist" in caplog.text
 
 
 def test_generate_serving_sql_basic():

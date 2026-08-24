@@ -23,6 +23,8 @@ import logging
 import uuid
 from typing import Any, Iterable
 
+from clickhouse_connect.driver.exceptions import DatabaseError
+
 from superset.dhis2.analytical_serving import build_serving_manifest, dataset_columns_payload
 from superset.dhis2.org_unit_hierarchy_service import OrgUnitHierarchyService
 from superset.dhis2.period_hierarchy_service import PeriodHierarchyService
@@ -30,6 +32,26 @@ from superset.dhis2.serving_build_service import ServingBuildResult
 from superset.local_staging.engine_factory import get_active_staging_engine
 
 logger = logging.getLogger(__name__)
+
+
+def _is_unknown_table_error(exc: Exception) -> bool:
+    """Return whether *exc* is ClickHouse's ``UNKNOWN_TABLE`` (Code 60)."""
+    return "Code: 60" in str(exc) or "UNKNOWN_TABLE" in str(exc)
+
+
+def _staging_table_exists(engine: Any, dataset: Any) -> bool:
+    """Check the source staging table without allowing Code 60 to escape.
+
+    Test datasets can outlive their transient ``ds_*`` tables.  A missing
+    source must not turn an otherwise healthy serving dataset into a failed
+    metadata refresh.
+    """
+    try:
+        return bool(engine.table_exists(dataset))
+    except DatabaseError as exc:
+        if _is_unknown_table_error(exc):
+            return False
+        raise
 
 
 def _query_single_int(engine: Any, sql: str) -> int | None:
@@ -54,6 +76,22 @@ def build_serving_table_clickhouse(
     resolved_engine = engine or get_active_staging_engine(dataset.database_id)
     if resolved_engine.engine_name != "clickhouse":
         raise ValueError(f"Engine {resolved_engine.engine_name} is not supported by ClickHouse builder")
+
+    staging_ref = resolved_engine.get_superset_sql_table_ref(dataset)
+    if not _staging_table_exists(resolved_engine, dataset):
+        logger.warning(
+            "Staging table %s does not exist in ClickHouse. Skipping build.",
+            staging_ref,
+        )
+        return ServingBuildResult(
+            serving_table_ref=resolved_engine.get_serving_sql_table_ref(dataset),
+            serving_columns=[],
+            diagnostics={
+                "mode": "clickhouse_native",
+                "skipped_missing_staging_table": True,
+                "staging_table_ref": staging_ref,
+            },
+        )
 
     manifest = build_serving_manifest(dataset)
     build_id = str(uuid.uuid4())[:8]
@@ -96,7 +134,6 @@ def build_serving_table_clickhouse(
              ]
              logger.info("Pruned empty hierarchy columns: %s", dropped_cols)
 
-        staging_ref = resolved_engine.get_superset_sql_table_ref(dataset)
         if ou_map_table:
             ou_map_rows = _query_single_int(
                 resolved_engine,

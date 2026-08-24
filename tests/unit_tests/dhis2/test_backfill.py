@@ -111,3 +111,4 @@ def test_repair_dhis2_chart_metadata_backfill_rescues_name_only_chart() -> None:
     assert chart.datasource_name == "test_dataset"
     assert json.loads(chart.params)["datasource"] == "23__table"
     assert json.loads(chart.query_context)["datasource"]["id"] == 23
+    assert "datasource" not in json.loads(chart.query_context)["queries"][0]
