@@ -1595,6 +1595,69 @@ class SqlaTable(
             )
         return queryable_columns
 
+    def refresh_dhis2_serving_metadata_if_stale(self) -> bool:
+        """Synchronize a staged DHIS2 datasource when its columns lag ClickHouse.
+
+        A serving MART can gain columns during ETL while its ``TableColumn``
+        records remain stale. Refresh only the DHIS2 staged-local datasource;
+        ordinary datasets must never pay for this extra metadata probe.
+        """
+        if not self.is_dhis2_staged_local:
+            return False
+
+        staged_dataset_id = self.extra_dict.get("dhis2_staged_dataset_id")
+        if not isinstance(staged_dataset_id, int):
+            return False
+
+        try:
+            from superset.dhis2.staged_dataset_service import get_serving_columns
+
+            expected_columns = get_serving_columns(staged_dataset_id)
+        except Exception:  # pylint: disable=broad-except
+            logger.debug(
+                "Unable to resolve DHIS2 serving columns for SqlaTable id=%s",
+                self.id,
+                exc_info=True,
+            )
+            return False
+
+        registered_names = {
+            str(column.column_name or "").strip()
+            for column in self.columns
+            if str(column.column_name or "").strip()
+        }
+        expected_names = {
+            str(column.get("column_name") or "").strip()
+            for column in expected_columns
+            if str(column.get("column_name") or "").strip()
+        }
+        if expected_names and not expected_names.issubset(registered_names):
+            logger.info(
+                "Refreshing stale DHIS2 serving metadata for SqlaTable id=%s "
+                "(registered=%s physical=%s)",
+                self.id,
+                len(registered_names),
+                len(expected_names),
+            )
+            self.fetch_metadata()
+            return True
+        return False
+
+    @staticmethod
+    def _is_column_resolution_error(exc: Exception) -> bool:
+        """Recognize database errors caused by stale registered columns."""
+        message = str(exc).lower()
+        return any(
+            marker in message
+            for marker in (
+                "unknown identifier",
+                "unknown column",
+                "missing column",
+                "no such column",
+                "code: 47",
+            )
+        )
+
     @property
     def db_extra(self) -> dict[str, Any]:
         return self.get_serving_database().get_extra()
@@ -2141,6 +2204,7 @@ class SqlaTable(
     def query(self, query_obj: QueryObjectDict) -> QueryResult:
         qry_start_dttm = datetime.now()
         self.repair_staged_local_database_binding()
+        self.refresh_dhis2_serving_metadata_if_stale()
         query_str_ext = self.get_query_str_extended(query_obj)
         sql = query_str_ext.sql
         status = QueryStatus.SUCCESS
@@ -2367,6 +2431,35 @@ class SqlaTable(
             # errors. This is particularly important for database OAuth2, see SIP-85.
             raise
         except Exception as ex:  # pylint: disable=broad-except
+            # A MART may have been rebuilt between the preflight and query.
+            # Refresh once and recompile before returning a stale-column error.
+            if (
+                self.is_dhis2_staged_local
+                and self._is_column_resolution_error(ex)
+            ):
+                try:
+                    self.fetch_metadata()
+                    query_str_ext = self.get_query_str_extended(query_obj)
+                    sql = query_str_ext.sql
+                    df = database.get_df(
+                        sql,
+                        self.catalog,
+                        self.schema or None,
+                        mutator=assign_column_label,
+                    )
+                    return QueryResult(
+                        applied_template_filters=query_str_ext.applied_template_filters,
+                        applied_filter_columns=query_str_ext.applied_filter_columns,
+                        rejected_filter_columns=query_str_ext.rejected_filter_columns,
+                        status=QueryStatus.SUCCESS,
+                        df=df,
+                        duration=datetime.now() - qry_start_dttm,
+                        query=sql,
+                        errors=None,
+                        error_message=None,
+                    )
+                except Exception as refresh_ex:  # pylint: disable=broad-except
+                    ex = refresh_ex
             # TODO (betodealmeida): review exception handling while querying the external  # noqa: E501
             # database. Ideally we'd expect and handle external database error, but
             # everything else / the default should be to let things bubble up.

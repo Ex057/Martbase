@@ -2191,14 +2191,23 @@ def ensure_serving_table(
         from superset.datasets.policy import DatasetRole
         from superset import db as _db
 
-        # For DuckDB (and ClickHouse) engines the staging engine's database_id
-        # is the DHIS2 *source* database, not the serving database.
-        # Always ask the engine for the canonical serving Database record.
-        if hasattr(engine, "get_or_create_superset_database"):
-            _serving_db = engine.get_or_create_superset_database()
-            serving_db_id = getattr(_serving_db, "id", None)
-        else:
-            serving_db_id = getattr(engine, "database_id", None)
+        # The engine's database_id is normally the DHIS2 source database and
+        # older engine settings could return DuckDB. Resolve the serving
+        # connection from the Superset Database registry by ClickHouse URI.
+        from superset.dhis2.superset_dataset_service import (
+            get_clickhouse_serving_database,
+        )
+
+        engine_serving_db = (
+            engine.get_or_create_superset_database()
+            if hasattr(engine, "get_or_create_superset_database")
+            else None
+        )
+        _serving_db = get_clickhouse_serving_database(
+            getattr(engine_serving_db, "id", None),
+            preferred_database=engine_serving_db,
+        )
+        serving_db_id = getattr(_serving_db, "id", None)
         if serving_db_id is not None:
             # Collect source instance IDs from dataset variables so the
             # DHIS2Map can route geo/metadata requests to the right instances.

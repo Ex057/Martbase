@@ -3,6 +3,8 @@ from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
+
 from superset.dhis2.superset_dataset_service import (
     _build_metadata_wrapper_sql,
     _get_dhis2_sqla_table,
@@ -12,6 +14,7 @@ from superset.dhis2.superset_dataset_service import (
     normalize_dhis2_chart_payload,
     repair_chart_bindings_for_dhis2_staged_dataset,
     repair_charts_for_dhis2_staged_dataset,
+    resolve_clickhouse_serving_table_name,
     register_serving_table_as_superset_dataset,
 )
 
@@ -42,6 +45,30 @@ def test_build_metadata_wrapper_sql_normalises_double_quoted_ref() -> None:
 
 def test_build_metadata_wrapper_sql_handles_bare_table() -> None:
     assert _build_metadata_wrapper_sql("sv_1_foo") == "SELECT * FROM `sv_1_foo`"
+
+
+def test_resolve_clickhouse_serving_table_name_prefers_mart() -> None:
+    clickhouse_database = MagicMock()
+    clickhouse_database.get_df.return_value = pd.DataFrame(
+        {
+            "name": [
+                "sv_36_test_03_dataset",
+                "sv_36_test_03_dataset_mart",
+                "sv_35_test_2_dataset",
+            ]
+        }
+    )
+
+    with patch(
+        "superset.dhis2.superset_dataset_service.get_clickhouse_serving_database",
+        return_value=clickhouse_database,
+    ):
+        resolved = resolve_clickhouse_serving_table_name("test_03_dataset")
+
+    assert resolved == "sv_36_test_03_dataset_mart"
+    clickhouse_database.get_df.assert_called_once_with(
+        "SHOW TABLES FROM dhis2_serving"
+    )
 
 
 def test_ensure_dhis2_extra_updates_saved_dataset_display_name() -> None:

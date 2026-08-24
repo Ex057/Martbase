@@ -47,6 +47,75 @@ DHIS2_SERVING_SCHEMA = "dhis2_serving"
 _SIMPLE_METRIC_SQL_RE = re.compile(
     r"^\s*(?P<func>[A-Za-z_][A-Za-z0-9_]*)\s*\(\s*`?(?P<column>[A-Za-z0-9_]+)`?\s*\)\s*$"
 )
+
+
+def get_clickhouse_serving_database(
+    preferred_database_id: int | None = None,
+    preferred_database: Any | None = None,
+) -> Any:
+    """Return the ClickHouse Database used for all DHIS2 serving datasets.
+
+    Staged DHIS2 datasets may retain their DHIS2 source database in ``extra``,
+    but their SQLA datasource must always execute against ClickHouse.  Never
+    use DuckDB, SQLite, or the Superset metadata database as a fallback.
+    """
+    from superset import db
+    from superset.models.core import Database
+
+    preferred = preferred_database
+    if preferred is None and isinstance(preferred_database_id, int):
+        preferred = db.session.get(Database, preferred_database_id)
+    if preferred is not None:
+        preferred_uri = str(getattr(preferred, "sqlalchemy_uri", "") or "")
+        # ORM test doubles from older call paths do not carry a URI. Real
+        # Superset Database rows always do; those must explicitly be ClickHouse.
+        if not preferred_uri or "clickhouse" in preferred_uri.lower():
+            return preferred
+
+    serving_database = (
+        db.session.query(Database)
+        .filter(Database.sqlalchemy_uri.ilike("%clickhouse%"))
+        .order_by(Database.id.asc())
+        .first()
+    )
+    if serving_database is None:
+        raise RuntimeError(
+            "No ClickHouse Database is configured for DHIS2 serving datasets"
+        )
+    return serving_database
+
+
+def resolve_clickhouse_serving_table_name(table_name: str) -> str:
+    """Resolve a friendly DHIS2 name to its physical ClickHouse serving table.
+
+    A MART is preferred when both a base serving table and a MART exist.  The
+    function leaves an already physical ``sv_*`` name unchanged.
+    """
+    normalized_name = str(table_name or "").strip().strip("`\"")
+    if not normalized_name or normalized_name.startswith("sv_"):
+        return normalized_name
+
+    serving_database = get_clickhouse_serving_database()
+    try:
+        tables_frame = serving_database.get_df("SHOW TABLES FROM dhis2_serving")
+        table_names = [str(value) for value in tables_frame.iloc[:, 0].tolist()]
+    except Exception:  # pylint: disable=broad-except
+        logger.warning(
+            "Unable to resolve ClickHouse serving table for '%s'",
+            normalized_name,
+            exc_info=True,
+        )
+        return normalized_name
+
+    suffix = f"_{normalized_name}"
+    mart_matches = [
+        name for name in table_names if name.startswith("sv_") and name.endswith(f"{suffix}_mart")
+    ]
+    base_matches = [
+        name for name in table_names if name.startswith("sv_") and name.endswith(suffix)
+    ]
+    matches = mart_matches or base_matches
+    return sorted(matches)[0] if matches else normalized_name
 _DIRECT_COLUMN_SQL_RE = re.compile(r"^\s*`?(?P<column>[A-Za-z0-9_]+)`?\s*$")
 
 
@@ -925,22 +994,11 @@ def register_metadata_dataset_as_superset_dataset(
     if source_db is None:
         raise ValueError(f"Source database id={source_database_id} not found")
 
-    serving_db = (
-        db.session.get(Database, serving_database_id)
-        if isinstance(serving_database_id, int)
-        else None
-    )
-
-    # The metadata dataset must live on a real database that can execute queries.
-    # If the source database is a virtual DHIS2 connection (dhis2://), we must
-    # use the serving database instead so the SQL referencing serving tables works.
-    source_uri = str(getattr(source_db, "sqlalchemy_uri", "") or "")
-    if source_uri.startswith("dhis2://") and serving_db is not None:
-        effective_database_id = serving_db.id
-        effective_database = serving_db
-    else:
-        effective_database_id = source_database_id
-        effective_database = source_db
+    # A METADATA wrapper is user-facing but always executes its virtual SQL on
+    # ClickHouse.  Do not fall back to its DHIS2 source, DuckDB, or SQLite.
+    serving_db = get_clickhouse_serving_database(serving_database_id)
+    effective_database_id = serving_db.id
+    effective_database = serving_db
 
     metadata_sql = _build_metadata_wrapper_sql(serving_table_ref)
 
@@ -1225,14 +1283,21 @@ def register_serving_table_as_superset_dataset(
     from superset.datasets.policy import DatasetRole
     from superset.models.core import Database
 
-    _, table_name = _parse_table_ref(serving_table_ref)
+    ref_schema, table_name = _parse_table_ref(serving_table_ref)
+    resolved_table_name = resolve_clickhouse_serving_table_name(table_name)
+    if resolved_table_name != table_name:
+        serving_table_ref = _format_sql_table_ref(
+            ref_schema or DHIS2_SERVING_SCHEMA,
+            resolved_table_name,
+        )
+        table_name = resolved_table_name
     schema = DHIS2_SERVING_SCHEMA
     effective_dataset_role = dataset_role or DatasetRole.SOURCE.value
 
-    # Look up the serving database
-    serving_db = db.session.get(Database, serving_database_id)
-    if serving_db is None:
-        raise ValueError(f"Serving database id={serving_database_id} not found")
+    # All physical DHIS2 datasource rows must point to ClickHouse, even if a
+    # stale caller supplied the previous DuckDB/SQLite database ID.
+    serving_db = get_clickhouse_serving_database(serving_database_id)
+    serving_database_id = serving_db.id
 
     # --- Priority 1: find any SqlaTable on this database that already carries
     # dhis2_staged_dataset_id in its extra JSON. We match the current
