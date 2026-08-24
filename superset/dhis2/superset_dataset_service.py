@@ -50,6 +50,9 @@ _SIMPLE_METRIC_SQL_RE = re.compile(
 _DHIS2_CHART_PLACEHOLDER_REFS = frozenset(
     {"__metric__", "true", "params", "query_context"}
 )
+_DHIS2_SUM_OU_LEVEL_RE = re.compile(
+    r'^\s*sum\s*\(\s*[`\"]?ou_level[`\"]?\s*\)\s*$', re.I
+)
 
 
 def get_clickhouse_serving_database(
@@ -343,6 +346,63 @@ def _repair_chart_query_content(chart: Any, datasource: Any) -> bool:
     return changed
 
 
+def _normalize_dhis2_dimension_controls(payload: Any) -> bool:
+    """Prevent persisted DHIS2 controls from aggregating OU levels or labels."""
+    if isinstance(payload, list):
+        changed = False
+        for item in payload:
+            changed = _normalize_dhis2_dimension_controls(item) or changed
+        return changed
+    if not isinstance(payload, dict):
+        return False
+    changed = False
+    filters = payload.get("adhoc_filters")
+    if isinstance(filters, list):
+        for filter_item in filters:
+            if not isinstance(filter_item, dict):
+                continue
+            candidates = (
+                filter_item.get("subject"),
+                filter_item.get("sqlExpression"),
+                filter_item.get("expression"),
+            )
+            if any(
+                isinstance(candidate, str)
+                and _DHIS2_SUM_OU_LEVEL_RE.match(candidate)
+                for candidate in candidates
+            ):
+                filter_item.update(
+                    {"expressionType": "SIMPLE", "subject": "ou_level", "clause": "WHERE"}
+                )
+                filter_item.pop("sqlExpression", None)
+                filter_item.pop("expression", None)
+                changed = True
+    groupby = payload.get("groupby")
+    uses_variant = any(
+        payload.get(key) == "period_variant"
+        or (isinstance(payload.get(key), list) and "period_variant" in payload[key])
+        for key in ("x_axis", "groupby", "columns", "series")
+    )
+    if isinstance(groupby, list) and "period_variant" in groupby and "period" not in groupby:
+        groupby.append("period")
+        changed = True
+    orderby = payload.get("orderby")
+    if isinstance(orderby, list):
+        for entry in orderby:
+            if isinstance(entry, list) and entry and entry[0] == "period_variant":
+                entry[0] = "period"
+                changed = True
+        if uses_variant and not orderby:
+            payload["orderby"] = [["period", True]]
+            changed = True
+    elif uses_variant:
+        payload["orderby"] = [["period", True]]
+        changed = True
+    for value in payload.values():
+        changed = _normalize_dhis2_dimension_controls(value) or changed
+    return changed
+
+
 def _extract_invalid_metric_ref(value: str, valid_columns: set[str]) -> str | None:
     if _is_dhis2_chart_placeholder_ref(value) or value == DTTM_ALIAS:
         return None
@@ -562,6 +622,7 @@ def normalize_dhis2_chart_payload(
                 parsed_params.update(identity)
             parsed_params["datasource"] = datasource_key
             rewritten = _rewrite_dhis2_chart_structure(parsed_params, rewrite_map)
+            _normalize_dhis2_dimension_controls(rewritten)
             normalized_params = json.dumps(rewritten)
             changed = changed or rewritten != parsed_params or normalized_params != params
             parsed_params = rewritten
@@ -608,6 +669,7 @@ def normalize_dhis2_chart_payload(
                     query_item.pop("datasource", None)
 
             rewritten = _rewrite_dhis2_chart_structure(parsed_query_context, rewrite_map)
+            _normalize_dhis2_dimension_controls(rewritten)
             normalized_query_context = json.dumps(rewritten)
             changed = changed or rewritten != parsed_query_context or normalized_query_context != query_context
             parsed_query_context = rewritten

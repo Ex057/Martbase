@@ -52,6 +52,18 @@ def _parse_ref(reference: str) -> tuple[str | None, str]:
     return (parts[-2], parts[-1]) if len(parts) > 1 else (None, parts[-1])
 
 
+def _period_variant_sql_expression() -> str:
+    value = "toString(`period`)"
+    months = "['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']"
+    month_numbers = "['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']"
+    return (
+        "multiIf("
+        f"match({value}, '^[0-9]{{6}}$'), concat(transform(substring({value}, 5, 2), {month_numbers}, {months}), ' ', substring({value}, 1, 4)), "
+        f"match({value}, '^[0-9]{{4}}Q[1-4]$'), concat(substring({value}, 1, 4), ' Q', substring({value}, 6, 1)), "
+        f"match({value}, '^[0-9]{{4}}$'), {value}, {value})"
+    )
+
+
 def _verify(dataset_id: int, sample_limit: int) -> dict[str, Any]:
     from superset.dhis2.staged_dataset_service import get_staged_dataset
     from superset.dhis2.superset_dataset_service import get_clickhouse_serving_database
@@ -74,6 +86,7 @@ def _verify(dataset_id: int, sample_limit: int) -> dict[str, Any]:
     table_ref = _quote_ref(schema or "dhis2_serving", table_name)
     database = get_clickhouse_serving_database()
     period_expr = get_dhis2_clickhouse_period_expression("period")
+    display_expr = _period_variant_sql_expression()
 
     stats_sql = f"""
         SELECT
@@ -81,7 +94,7 @@ def _verify(dataset_id: int, sample_limit: int) -> dict[str, Any]:
           countIf(`period` != '') AS period_rows,
           countIf({period_expr} IS NOT NULL) AS parsed_rows,
           countIf(`period` != '' AND {period_expr} IS NULL) AS unparsed_rows,
-          countIf(`period_variant` IS NOT NULL AND `period_variant` != '') AS display_rows
+          countIf({display_expr} != '') AS display_rows
         FROM {table_ref}
     """
     stats = database.get_df(stats_sql).iloc[0].to_dict()
@@ -89,7 +102,7 @@ def _verify(dataset_id: int, sample_limit: int) -> dict[str, Any]:
         SELECT
           `period` AS raw_period,
           {period_expr} AS parsed_period,
-          `period_variant` AS display_period
+          {display_expr} AS display_period
         FROM {table_ref}
         WHERE `period` != ''
         ORDER BY parsed_period ASC
@@ -111,6 +124,10 @@ def _verify(dataset_id: int, sample_limit: int) -> dict[str, Any]:
         raise RuntimeError(
             f"No human-readable period_variant values returned for dataset id={dataset.id}"
         )
+    ou_level_rows = database.get_df(
+        f"SELECT count() AS rows FROM {table_ref} WHERE `ou_level` = 1"
+    ).iloc[0]["rows"]
+    report["ou_level_where_rows"] = int(ou_level_rows)
     return report
 
 
