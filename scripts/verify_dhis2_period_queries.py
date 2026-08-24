@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Verify that DHIS2 serving periods produce non-null ClickHouse timestamps.
+"""Verify categorical DHIS2 period labels from ClickHouse serving tables.
 
 This is read-only. It checks the real physical serving MART when present and
-fails if a table has period rows but the native DHIS2 period expression cannot
-turn any of them into calendar timestamps.
+fails if a table has period rows but the display expression cannot return a
+human-readable label. Raw values remain categorical sort keys.
 
 Example:
     /opt/superset-venv/bin/python scripts/verify_dhis2_period_queries.py \\
@@ -67,7 +67,6 @@ def _period_variant_sql_expression() -> str:
 def _verify(dataset_id: int, sample_limit: int) -> dict[str, Any]:
     from superset.dhis2.staged_dataset_service import get_staged_dataset
     from superset.dhis2.superset_dataset_service import get_clickhouse_serving_database
-    from superset.connectors.sqla.models import get_dhis2_clickhouse_period_expression
     from superset.local_staging.engine_factory import get_active_staging_engine
 
     dataset = get_staged_dataset(dataset_id)
@@ -85,15 +84,12 @@ def _verify(dataset_id: int, sample_limit: int) -> dict[str, Any]:
     )
     table_ref = _quote_ref(schema or "dhis2_serving", table_name)
     database = get_clickhouse_serving_database()
-    period_expr = get_dhis2_clickhouse_period_expression("period")
     display_expr = _period_variant_sql_expression()
 
     stats_sql = f"""
         SELECT
           count() AS total_rows,
           countIf(`period` != '') AS period_rows,
-          countIf({period_expr} IS NOT NULL) AS parsed_rows,
-          countIf(`period` != '' AND {period_expr} IS NULL) AS unparsed_rows,
           countIf({display_expr} != '') AS display_rows
         FROM {table_ref}
     """
@@ -101,11 +97,10 @@ def _verify(dataset_id: int, sample_limit: int) -> dict[str, Any]:
     samples_sql = f"""
         SELECT
           `period` AS raw_period,
-          {period_expr} AS parsed_period,
           {display_expr} AS display_period
         FROM {table_ref}
         WHERE `period` != ''
-        ORDER BY parsed_period ASC
+        ORDER BY `period` ASC
         LIMIT {max(1, sample_limit)}
     """
     samples = database.get_df(samples_sql).to_dict(orient="records")
@@ -116,10 +111,6 @@ def _verify(dataset_id: int, sample_limit: int) -> dict[str, Any]:
         "stats": {key: int(value) for key, value in stats.items()},
         "samples": samples,
     }
-    if report["stats"]["period_rows"] and not report["stats"]["parsed_rows"]:
-        raise RuntimeError(
-            f"No non-null parsed periods returned for dataset id={dataset.id}"
-        )
     if report["stats"]["period_rows"] and not report["stats"]["display_rows"]:
         raise RuntimeError(
             f"No human-readable period_variant values returned for dataset id={dataset.id}"
@@ -191,7 +182,12 @@ def main() -> int:
     with app.app_context():
         for dataset_id in list(dict.fromkeys(args.dataset_ids or [])):
             try:
-                print(json.dumps(_verify(dataset_id, args.sample_limit), default=str, indent=2))
+                report = _verify(dataset_id, args.sample_limit)
+                print(json.dumps(report, default=str, indent=2))
+                print(
+                    "✓ OK dataset id=%s: categorical period labels returned"
+                    % report["dataset_id"]
+                )
             except Exception as exc:  # pylint: disable=broad-except
                 failures += 1
                 print(f"ERROR dataset id={dataset_id}: {exc}", file=sys.stderr)

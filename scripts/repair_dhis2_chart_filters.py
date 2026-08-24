@@ -3,7 +3,8 @@
 
 This utility only changes charts linked to a DHIS2 staged dataset. It converts
 saved ``SUM(ou_level)`` adhoc WHERE filters into ordinary ``ou_level`` column
-filters and makes charts using ``period_variant`` order by raw ``period``.
+filters. It also removes Superset time-grain controls from categorical DHIS2
+periods, displays ``period_variant``, and orders it by raw ``period``.
 Run without ``--apply`` first.
 """
 
@@ -48,7 +49,11 @@ def _loads(raw: Any) -> dict[str, Any]:
 def _is_dhis2_chart(chart: Any) -> bool:
     datasource = getattr(chart, "datasource", None)
     extra = _loads(getattr(datasource, "extra", None))
-    return bool(extra.get("dhis2_staged_dataset_id") or extra.get("dhis2_staged_local"))
+    return bool(
+        extra.get("dhis2_staged_dataset_id")
+        or extra.get("dhis2_staged_local")
+        or getattr(datasource, "schema", None) == "dhis2_serving"
+    )
 
 
 def _repair_filter(item: dict[str, Any]) -> bool:
@@ -64,19 +69,20 @@ def _repair_filter(item: dict[str, Any]) -> bool:
     return True
 
 
-def _repair_payload(node: Any) -> tuple[bool, int, int]:
-    """Repair filters recursively and return changed/filter/order counts."""
+def _repair_payload(node: Any) -> tuple[bool, int, int, int]:
+    """Repair filters recursively; return changed/filter/order/time counts."""
     changed = False
-    filters_fixed = orders_fixed = 0
+    filters_fixed = orders_fixed = time_controls_cleared = 0
     if isinstance(node, list):
         for item in node:
-            item_changed, item_filters, item_orders = _repair_payload(item)
+            item_changed, item_filters, item_orders, item_time_controls = _repair_payload(item)
             changed |= item_changed
             filters_fixed += item_filters
             orders_fixed += item_orders
-        return changed, filters_fixed, orders_fixed
+            time_controls_cleared += item_time_controls
+        return changed, filters_fixed, orders_fixed, time_controls_cleared
     if not isinstance(node, dict):
-        return False, 0, 0
+        return False, 0, 0, 0
 
     adhoc_filters = node.get("adhoc_filters")
     if isinstance(adhoc_filters, list):
@@ -85,30 +91,45 @@ def _repair_payload(node: Any) -> tuple[bool, int, int]:
                 changed = True
                 filters_fixed += 1
 
-    def _uses_period_variant(value: Any) -> bool:
-        if value == "period_variant":
+    def _uses_dhis2_period(value: Any) -> bool:
+        if isinstance(value, str) and value in {"period", "period_variant"}:
             return True
         if isinstance(value, list):
-            return any(_uses_period_variant(item) for item in value)
+            return any(_uses_dhis2_period(item) for item in value)
         return False
 
-    uses_period_variant = any(
-        _uses_period_variant(node.get(key))
+    uses_dhis2_period = any(
+        _uses_dhis2_period(node.get(key))
         for key in ("x_axis", "groupby", "columns", "series")
     )
+    if uses_dhis2_period:
+        # Explicitly disable SQLA temporal bucketing. DHIS2 compact period keys
+        # must remain categorical or ClickHouse results become epoch values.
+        for control in ("granularity_sqla", "time_grain_sqla"):
+            if control in node and node[control] is not None:
+                node[control] = None
+                changed = True
+                time_controls_cleared += 1
+        if node.get("x_axis") != "period_variant":
+            node["x_axis"] = "period_variant"
+            changed = True
+
     groupby = node.get("groupby")
-    if (
-        uses_period_variant
-        and isinstance(groupby, list)
-        and "period_variant" in groupby
-        and "period" not in groupby
-    ):
+    if uses_dhis2_period and isinstance(groupby, list):
+        normalized_groupby = [
+            "period_variant" if value == "period" else value for value in groupby
+        ]
+        if "period_variant" not in normalized_groupby:
+            normalized_groupby.append("period_variant")
         # ClickHouse requires an ORDER BY column to participate in the grouped
         # query. Keep it as a hidden machine sort key; x_axis still selects
         # period_variant for the displayed label.
-        groupby.append("period")
-        changed = True
-        orders_fixed += 1
+        if "period" not in normalized_groupby:
+            normalized_groupby.append("period")
+            orders_fixed += 1
+        if normalized_groupby != groupby:
+            node["groupby"] = normalized_groupby
+            changed = True
     # Preserve period_variant as the selected/displayed dimension, but use the
     # machine period key for chronological ordering.
     orderby = node.get("orderby")
@@ -118,21 +139,22 @@ def _repair_payload(node: Any) -> tuple[bool, int, int]:
                 order_item[0] = "period"
                 changed = True
                 orders_fixed += 1
-        if uses_period_variant and not orderby:
+        if uses_dhis2_period and not orderby:
             node["orderby"] = [["period", True]]
             changed = True
             orders_fixed += 1
-    elif uses_period_variant:
+    elif uses_dhis2_period:
         node["orderby"] = [["period", True]]
         changed = True
         orders_fixed += 1
 
     for value in node.values():
-        item_changed, item_filters, item_orders = _repair_payload(value)
+        item_changed, item_filters, item_orders, item_time_controls = _repair_payload(value)
         changed |= item_changed
         filters_fixed += item_filters
         orders_fixed += item_orders
-    return changed, filters_fixed, orders_fixed
+        time_controls_cleared += item_time_controls
+    return changed, filters_fixed, orders_fixed, time_controls_cleared
 
 
 def main() -> int:
@@ -151,8 +173,8 @@ def main() -> int:
                 continue
             params = _loads(chart.params)
             query_context = _loads(chart.query_context)
-            params_changed, params_filters, params_orders = _repair_payload(params)
-            context_changed, context_filters, context_orders = _repair_payload(query_context)
+            params_changed, params_filters, params_orders, params_time_controls = _repair_payload(params)
+            context_changed, context_filters, context_orders, context_time_controls = _repair_payload(query_context)
             if not (params_changed or context_changed):
                 continue
             chart.params = json.dumps(params)
@@ -163,6 +185,7 @@ def main() -> int:
                     "chart_name": chart.slice_name,
                     "ou_level_filters_fixed": params_filters + context_filters,
                     "period_orders_fixed": params_orders + context_orders,
+                    "time_controls_cleared": params_time_controls + context_time_controls,
                 }
             )
         if args.apply:

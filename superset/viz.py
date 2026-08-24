@@ -276,11 +276,6 @@ class BaseViz:  # pylint: disable=too-many-public-methods
             granularity_col = self.datasource.get_column(query_obj["granularity"])
             if granularity_col:
                 timestamp_format = granularity_col.python_date_format
-                # Compact DHIS2 periods are returned by ClickHouse as parsed
-                # timestamps. A legacy %Y%m format would coerce them to NaT
-                # in pandas, which the UI presents as N/A.
-                if getattr(granularity_col, "is_dhis2_period", False):
-                    timestamp_format = None
 
         # The datasource here can be different backend but the interface is common
         self.results = self.datasource.query(query_obj)

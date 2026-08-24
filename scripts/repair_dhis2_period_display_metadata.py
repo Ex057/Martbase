@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Restore human-readable ``period_variant`` metadata in DHIS2 datasets.
+"""Restore categorical DHIS2 period metadata in registered datasets.
 
-The raw ``period`` column remains the sortable machine key. This utility adds
-a virtual display expression (eg ``202508`` → ``Aug 2025`` and ``2025Q3`` →
-``2025 Q3``) to Superset column metadata. It intentionally does not rebuild,
-alter, or mutate any ClickHouse serving table.
+The raw ``period`` column remains the sortable machine key and is explicitly
+non-temporal. This utility adds a virtual display expression (eg ``202508`` →
+``Aug 2025`` and ``2025Q3`` → ``2025 Q3``) to Superset column metadata. It
+intentionally does not rebuild, alter, or mutate any ClickHouse serving table.
 
 Use ``--dataset-id`` for a limited repair. ``--all`` is intentionally explicit
 and targets every registered DHIS2 staged dataset. No charts are altered.
@@ -80,6 +80,17 @@ def _repair_sqla_metadata(dataset_id: int) -> int:
     )
     updated = 0
     for sqla_table in matches:
+        raw_period = next(
+            (item for item in sqla_table.columns if item.column_name == "period"),
+            None,
+        )
+        if raw_period is not None:
+            # Undo metadata written by the temporary DateTime conversion path.
+            # Compact DHIS2 tokens are categorical keys and must not activate
+            # Superset's time-grain/epoch handling.
+            raw_period.is_dttm = False
+            raw_period.python_date_format = None
+
         column = next(
             (item for item in sqla_table.columns if item.column_name == "period_variant"),
             None,

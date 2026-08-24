@@ -122,22 +122,6 @@ logger = logging.getLogger(__name__)
 
 DHIS2_STAGED_LOCAL_QUERY_CACHE_VERSION = 2
 
-
-def get_dhis2_clickhouse_period_expression(column_name: str) -> str:
-    """Build a ClickHouse DateTime expression for a compact DHIS2 period."""
-    identifier = "`" + str(column_name or "").replace("`", "``") + "`"
-    value = f"toString({identifier})"
-    return (
-        "parseDateTimeBestEffortOrNull(multiIf("
-        f"match({value}, '^[0-9]{{6}}$'), "
-        f"concat(substring({value}, 1, 4), '-', substring({value}, 5, 2), '-01'), "
-        f"match({value}, '^[0-9]{{4}}Q[1-4]$'), "
-        f"concat(substring({value}, 1, 4), '-', "
-        f"transform(substring({value}, 6, 1), ['1', '2', '3', '4'], ['01', '04', '07', '10']), '-01'), "
-        f"match({value}, '^[0-9]{{4}}$'), concat({value}, '-01-01'), "
-        f"{value}))"
-    )
-
 _DHIS2_STAGED_LOCAL_SQL_PATTERN = re.compile(
     r"""
     select\s+\*\s+from\s+
@@ -978,35 +962,6 @@ class TableColumn(AuditMixinNullable, ImportExportMixin, CertificationMixin, Mod
         return self.database.get_extra()
 
     @property
-    def is_dhis2_period(self) -> bool:
-        """Whether this column stores a DHIS2 period token."""
-        try:
-            extra = json.loads(self.extra or "{}")
-        except (TypeError, json.JSONDecodeError):
-            return False
-        return isinstance(extra, dict) and extra.get("dhis2_is_period") is True
-
-    @property
-    def dhis2_period_timestamp_expression(self) -> str | None:
-        """Return a ClickHouse expression for compact DHIS2 period strings.
-
-        ClickHouse's normal time-grain expressions call ``toDateTime`` on the
-        source column. ``toDateTime('202508')`` and ``toDateTime('2025Q3')``
-        are not calendar timestamps. Convert standard monthly and quarterly
-        tokens to their first calendar day before applying a grain or filter.
-        """
-        if not self.is_dhis2_period:
-            return None
-        try:
-            backend = str(getattr(self.database, "backend", "") or "").lower()
-        except Exception:  # pylint: disable=broad-except
-            return None
-        if backend not in {"clickhouse", "clickhousedb"}:
-            return None
-
-        return get_dhis2_clickhouse_period_expression(self.column_name)
-
-    @property
     def type_generic(self) -> utils.GenericDataType | None:
         if self.is_dttm:
             return utils.GenericDataType.TEMPORAL
@@ -1031,7 +986,7 @@ class TableColumn(AuditMixinNullable, ImportExportMixin, CertificationMixin, Mod
         db_engine_spec = self.db_engine_spec
         column_spec = db_engine_spec.get_column_spec(self.type, db_extra=self.db_extra)
         type_ = column_spec.sqla_type if column_spec else None
-        expression = self.expression or self.dhis2_period_timestamp_expression
+        expression = self.expression
         if expression:
             if template_processor:
                 try:
@@ -1070,13 +1025,13 @@ class TableColumn(AuditMixinNullable, ImportExportMixin, CertificationMixin, Mod
         """
         label = label or utils.DTTM_ALIAS
 
-        pdf = None if self.dhis2_period_timestamp_expression else self.python_date_format
+        pdf = self.python_date_format
         is_epoch = pdf in ("epoch_s", "epoch_ms")
         column_spec = self.db_engine_spec.get_column_spec(
             self.type, db_extra=self.db_extra
         )
         type_ = column_spec.sqla_type if column_spec else DateTime
-        expression = self.expression or self.dhis2_period_timestamp_expression
+        expression = self.expression
         if not expression and not time_grain and not is_epoch:
             sqla_col = column(self.column_name, type_=type_)
             return self.database.make_sqla_column_compatible(sqla_col, label)

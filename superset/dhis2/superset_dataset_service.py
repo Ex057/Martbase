@@ -377,25 +377,51 @@ def _normalize_dhis2_dimension_controls(payload: Any) -> bool:
                 filter_item.pop("sqlExpression", None)
                 filter_item.pop("expression", None)
                 changed = True
+    def uses_dhis2_period(value: Any) -> bool:
+        if isinstance(value, str):
+            return value in {"period", "period_variant"}
+        if isinstance(value, list):
+            return any(uses_dhis2_period(item) for item in value)
+        return False
+
     groupby = payload.get("groupby")
-    uses_variant = any(
-        payload.get(key) == "period_variant"
-        or (isinstance(payload.get(key), list) and "period_variant" in payload[key])
+    uses_period = any(
+        uses_dhis2_period(payload.get(key))
         for key in ("x_axis", "groupby", "columns", "series")
     )
-    if isinstance(groupby, list) and "period_variant" in groupby and "period" not in groupby:
-        groupby.append("period")
-        changed = True
+    if uses_period:
+        # Compact DHIS2 period codes are categorical keys. Clear time-grain
+        # controls before they reach SQLA, otherwise Superset converts them to
+        # epoch timestamps for ClickHouse.
+        for control in ("granularity_sqla", "time_grain_sqla"):
+            if control in payload and payload[control] is not None:
+                payload[control] = None
+                changed = True
+        if payload.get("x_axis") != "period_variant":
+            payload["x_axis"] = "period_variant"
+            changed = True
+    if isinstance(groupby, list) and uses_period:
+        normalized_groupby = [
+            "period_variant" if item == "period" else item for item in groupby
+        ]
+        if "period_variant" not in normalized_groupby:
+            normalized_groupby.append("period_variant")
+        if "period" not in normalized_groupby:
+            normalized_groupby.append("period")
+        if normalized_groupby != groupby:
+            payload["groupby"] = normalized_groupby
+            groupby = normalized_groupby
+            changed = True
     orderby = payload.get("orderby")
     if isinstance(orderby, list):
         for entry in orderby:
             if isinstance(entry, list) and entry and entry[0] == "period_variant":
                 entry[0] = "period"
                 changed = True
-        if uses_variant and not orderby:
+        if uses_period and not orderby:
             payload["orderby"] = [["period", True]]
             changed = True
-    elif uses_variant:
+    elif uses_period:
         payload["orderby"] = [["period", True]]
         changed = True
     for value in payload.values():
@@ -2125,11 +2151,11 @@ def _sync_columns(sqla_table: Any, serving_columns: list[dict[str, Any]]) -> Non
         verbose_name: str = col_spec.get("verbose_name") or col_name
 
         # Determine flags from column metadata
-        is_dttm = bool(
-            col_spec.get("is_dttm")
-            or extra_meta.get("is_dttm")
-            or extra_meta.get("dhis2_is_period")
-        )
+        # DHIS2 period codes (for example ``202508`` and ``2025Q1``) are
+        # categorical keys, not database timestamps.  Never infer ``is_dttm``
+        # from ``dhis2_is_period``: doing so enables Superset time-grain
+        # bucketing and turns the compact values into epoch milliseconds.
+        is_dttm = bool(col_spec.get("is_dttm") or extra_meta.get("is_dttm"))
         is_period = bool(extra_meta.get("dhis2_is_period"))
         is_metric = col_type.upper() in ("FLOAT", "DOUBLE", "NUMERIC", "DECIMAL", "INTEGER", "BIGINT")
         is_dimension = not is_metric or is_period or bool(extra_meta.get("dhis2_is_ou_hierarchy"))
