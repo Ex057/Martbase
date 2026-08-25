@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 
 from superset.dhis2.period_hierarchy_service import PeriodHierarchyService
+from scripts.rollback_to_local_period_behavior import _repair_payload
 
 from superset.dhis2.superset_dataset_service import (
     _build_metadata_wrapper_sql,
@@ -65,8 +66,12 @@ def test_period_manifest_keeps_dhis2_periods_categorical_without_virtual_sql() -
 
     assert columns["period"]["is_dttm"] is False
     assert columns["period_variant"]["is_dttm"] is False
+    assert columns["period"]["groupby"] is True
+    assert columns["period"]["filterable"] is True
+    assert columns["period_variant"]["groupby"] is True
+    assert columns["period_variant"]["filterable"] is True
     assert columns["period_variant"]["extra"]["dhis2_is_period_display"] is True
-    assert "expression" not in columns["period_variant"]
+    assert columns["period_variant"]["expression"] is None
 
 
 def test_period_manifest_always_includes_period_variant_display_dimension() -> None:
@@ -850,6 +855,26 @@ def test_normalize_chart_payload_does_not_rewrite_period_controls() -> None:
     assert "orderby" not in repaired
     assert repaired["granularity_sqla"] == "period"
     assert repaired["time_grain_sqla"] == "P1D"
+
+
+def test_period_rollback_removes_only_injected_period_controls() -> None:
+    payload = {
+        "groupby": ["region", "period_variant", "period"],
+        "columns": ["period_variant", "period"],
+        "orderby": [["period", True], ["region", True]],
+        "metrics": [{"aggregate": "SUM", "column": {"column_name": "cases"}}],
+    }
+
+    changed, paths = _repair_payload(payload)
+
+    assert changed is True
+    assert paths == ["$.groupby", "$.columns", "$.orderby"]
+    assert payload["groupby"] == ["region", "period_variant"]
+    assert payload["columns"] == ["period_variant"]
+    assert payload["orderby"] == [["region", True]]
+    assert payload["metrics"] == [
+        {"aggregate": "SUM", "column": {"column_name": "cases"}}
+    ]
 
 
 def test_collect_dhis2_chart_unresolved_refs_detects_simple_metric_strings() -> None:

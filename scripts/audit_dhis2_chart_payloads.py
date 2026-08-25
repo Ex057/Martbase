@@ -130,6 +130,30 @@ def _period_order_findings(payload: dict[str, Any], field: str) -> list[dict[str
     return findings
 
 
+def _duplicate_period_dimension_findings(
+    payload: dict[str, Any], field: str
+) -> list[dict[str, Any]]:
+    """Report the old automatic ``period`` injection without changing it."""
+    findings: list[dict[str, Any]] = []
+    for path, value in _walk(payload):
+        if not isinstance(value, dict):
+            continue
+        for key in ("groupby", "columns"):
+            dimensions = value.get(key)
+            if not isinstance(dimensions, list):
+                continue
+            if "period" in dimensions and "period_variant" in dimensions:
+                findings.append(
+                    {
+                        "field": field,
+                        "path": f"{path}.{key}",
+                        "kind": "duplicate_period_and_period_variant_dimension",
+                        "value": dimensions,
+                    }
+                )
+    return findings
+
+
 def _is_dhis2_chart(chart: Any) -> bool:
     datasource = getattr(chart, "datasource", None)
     if getattr(datasource, "schema", None) == "dhis2_serving":
@@ -173,7 +197,9 @@ def main() -> int:
                 finding
                 for field, payload in payloads.items()
                 for finding in (
-                    _metric_findings(payload, field) + _period_order_findings(payload, field)
+                    _metric_findings(payload, field)
+                    + _period_order_findings(payload, field)
+                    + _duplicate_period_dimension_findings(payload, field)
                 )
             ]
             if findings:

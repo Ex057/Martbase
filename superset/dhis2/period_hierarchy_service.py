@@ -290,8 +290,15 @@ class PeriodHierarchyService:
                 # which can transform compact values into epoch milliseconds.
                 "is_dttm": False,
                 "is_dimension": True,
+                # These are ordinary physical ClickHouse dimensions.  In
+                # particular, ``period_variant`` must not become a virtual
+                # SQL expression: serving marts already expose it.
+                "groupby": True,
+                "filterable": True,
                 "extra": extra,
             }
+            if key == "period_variant":
+                column["expression"] = None
             columns.append(column)
             dimension_column_names.append(column_name)
             column_names_by_key[key] = column_name

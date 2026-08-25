@@ -2118,6 +2118,11 @@ def _sync_columns(sqla_table: Any, serving_columns: list[dict[str, Any]]) -> Non
         # filter panels can read them without needing the staging API.
         extra_json = json.dumps(extra_meta) if extra_meta else None
         expression = col_spec.get("expression") or ""
+        # ``period_variant`` is a real serving-table column.  Keeping a
+        # generated expression here makes ClickHouse select ``period`` behind
+        # the user's back and conflicts with GROUP BY in Explore.
+        if extra_meta.get("dhis2_is_period_display"):
+            expression = None
 
         if col_name in existing_by_name:
             tc = existing_by_name[col_name]
