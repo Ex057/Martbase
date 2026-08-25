@@ -135,15 +135,9 @@ def user_can_access_ai_mode(mode: str) -> bool:
     # Public/guest dashboard AI — allow if configured
     if mode == AI_MODE_PUBLIC_DASHBOARD:
         config = get_ai_insights_config()
-        if not config.get("allow_public_dashboard_ai"):
-            return False
-        # Guest users are treated as authenticated with is_guest_user flag
-        if user and getattr(user, "is_guest_user", False):
-            return True
-        # Also allow if user is fully authenticated
-        if user and getattr(user, "is_authenticated", False):
-            return True
-        return False
+        # This mode is deliberately anonymous. The endpoint subsequently verifies
+        # that its target is a published dashboard before exposing any context.
+        return bool(config.get("allow_public_dashboard_ai"))
 
     if not user or not getattr(user, "is_authenticated", False):
         return False

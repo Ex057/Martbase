@@ -7,7 +7,10 @@ import {
   AIInsightResult,
 } from './types';
 
-function getCapabilitiesEndpoint(mode: AIInsightMode) {
+function getCapabilitiesEndpoint(mode: AIInsightMode, isPublic = false) {
+  if (mode === 'dashboard' && isPublic) {
+    return '/api/v1/ai/public/dashboard/capabilities';
+  }
   if (mode === 'dashboard') return '/api/v1/ai/dashboard/capabilities';
   if (mode === 'sql') return '/api/v1/ai/sql/capabilities';
   return '/api/v1/ai/chart/capabilities';
@@ -19,7 +22,9 @@ function getActionEndpoint(
   isPublic = false,
 ) {
   if (mode === 'dashboard') {
-    const base = isPublic ? '/api/v1/ai/public/dashboard' : '/api/v1/ai/dashboard';
+    const base = isPublic
+      ? '/api/v1/ai/public/dashboard'
+      : '/api/v1/ai/dashboard';
     return `${base}/${targetId}/insight`;
   }
   if (mode === 'sql') return '/api/v1/ai/sql/assistant';
@@ -32,7 +37,9 @@ function getStreamEndpoint(
   isPublic = false,
 ) {
   if (mode === 'dashboard') {
-    const base = isPublic ? '/api/v1/ai/public/dashboard' : '/api/v1/ai/dashboard';
+    const base = isPublic
+      ? '/api/v1/ai/public/dashboard'
+      : '/api/v1/ai/dashboard';
     return `${base}/${targetId}/insight/stream`;
   }
   return `/api/v1/ai/chart/${targetId}/insight/stream`;
@@ -40,9 +47,10 @@ function getStreamEndpoint(
 
 export async function fetchAICapabilities(
   mode: AIInsightMode,
+  isPublic = false,
 ): Promise<AICapabilities> {
   const { json } = await SupersetClient.get({
-    endpoint: getCapabilitiesEndpoint(mode),
+    endpoint: getCapabilitiesEndpoint(mode, isPublic),
   });
   return json.result;
 }
@@ -64,9 +72,10 @@ export async function requestAIInsight(input: {
   metric?: string | null;
   metrics?: string[] | null;
   period?: string | null;
+  isPublic?: boolean;
 }): Promise<AIInsightResult> {
   const { json } = await SupersetClient.post({
-    endpoint: getActionEndpoint(input.mode, input.targetId),
+    endpoint: getActionEndpoint(input.mode, input.targetId, input.isPublic),
     jsonPayload: {
       provider_id: input.providerId || null,
       model: input.model || null,
@@ -100,6 +109,7 @@ export async function requestAIInsightStream(input: {
   context: Record<string, unknown>;
   conversation: AIConversationMessage[];
   conversationId?: number | null;
+  isPublic?: boolean;
   onChunk: (text: string) => void;
   onDone: (fullText: string) => void;
   onError: (error: string) => void;
@@ -119,7 +129,11 @@ export async function requestAIInsightStream(input: {
     return;
   }
 
-  const endpoint = getStreamEndpoint(input.mode, input.targetId);
+  const endpoint = getStreamEndpoint(
+    input.mode,
+    input.targetId,
+    input.isPublic,
+  );
   const csrfToken = await SupersetClient.getCSRFToken();
 
   const headers: Record<string, string> = {

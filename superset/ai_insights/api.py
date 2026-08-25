@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 
 from flask import Response, request, stream_with_context
@@ -13,9 +14,10 @@ from superset.ai_insights.config import (
     AI_MODE_DASHBOARD,
     AI_MODE_PUBLIC_DASHBOARD,
     AI_MODE_SQL,
+    get_ai_insights_config,
 )
 from superset.ai_insights.service import AIInsightError, AIInsightService
-from superset.extensions import event_logger
+from superset.extensions import cache_manager, event_logger
 from superset.views.base_api import (
     BaseSupersetApi,
     requires_json,
@@ -47,6 +49,27 @@ def _sse_response(stream_gen) -> Response:
             "Connection": "keep-alive",
         },
     )
+
+
+def _enforce_public_rate_limit() -> None:
+    """Apply a shared, per-IP fixed-window limit to public AI requests."""
+    limit = int(get_ai_insights_config().get("public_ai_rate_limit_per_minute") or 10)
+    if limit <= 0:
+        return
+    client_ip = request.access_route[0] if request.access_route else request.remote_addr
+    key = "ai_insights:public:rpm:" + hashlib.sha256(
+        (client_ip or "unknown").encode()
+    ).hexdigest()
+    try:
+        # RedisCache implements add/inc atomically and shares this counter across
+        # Gunicorn workers. Keep the TTL from the first request in the window.
+        cache_manager.cache.add(key, 0, timeout=60)
+        count = cache_manager.cache.inc(key)
+    except Exception:  # pylint: disable=broad-except
+        # A transient cache problem must not make published dashboards unusable.
+        return
+    if count > limit:
+        raise AIInsightError("Public AI request limit exceeded", 429)
 
 
 class ConversationMessageSchema(Schema):
@@ -418,7 +441,6 @@ class AIPublicDashboardRestApi(BaseSupersetApi):
     request_schema = AIRequestSchema()
 
     @expose("/capabilities", methods=("GET",))
-    @protect()
     @safe
     @statsd_metrics
     @validate_feature_flags([AI_INSIGHTS_FEATURE_FLAG])
@@ -432,13 +454,13 @@ class AIPublicDashboardRestApi(BaseSupersetApi):
             return self.response(ex.status_code, message=ex.message)
 
     @expose("/<dashboard_id>/insight", methods=("POST",))
-    @protect()
     @safe
     @statsd_metrics
     @requires_json
     @validate_feature_flags([AI_INSIGHTS_FEATURE_FLAG])
     def insight(self, dashboard_id: str) -> Response:
         try:
+            _enforce_public_rate_limit()
             payload = self.request_schema.load(request.json or {})
             result = AIInsightService().generate_dashboard_insight(
                 dashboard_id, payload, public_mode=True
@@ -450,12 +472,12 @@ class AIPublicDashboardRestApi(BaseSupersetApi):
             return self.response(ex.status_code, message=ex.message)
 
     @expose("/<dashboard_id>/insight/stream", methods=("POST",))
-    @protect()
     @statsd_metrics
     @requires_json
     @validate_feature_flags([AI_INSIGHTS_FEATURE_FLAG])
     def insight_stream(self, dashboard_id: str) -> Response:
         try:
+            _enforce_public_rate_limit()
             payload = self.request_schema.load(request.json or {})
             stream = AIInsightService().stream_dashboard_insight(
                 dashboard_id, payload, public_mode=True

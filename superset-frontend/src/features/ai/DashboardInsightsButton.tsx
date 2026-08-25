@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { styled, css, t } from '@superset-ui/core';
 import { Button, ModalTrigger } from '@superset-ui/core/components';
 import { useSelector } from 'react-redux';
@@ -7,6 +7,7 @@ import type Chart from 'src/types/Chart';
 import AIInsightPanel from './AIInsightPanel';
 import { buildDashboardInsightContext } from './context';
 import { useAIEnabled } from './useAIEnabled';
+import { fetchAICapabilities } from './api';
 
 const FloatingButton = styled.div`
   ${({ theme }) => css`
@@ -22,6 +23,7 @@ type Props = {
   dashboardTitle?: string;
   charts: Chart[];
   activeFilters?: unknown;
+  isPublicView?: boolean;
 };
 
 export default function DashboardInsightsButton({
@@ -29,9 +31,28 @@ export default function DashboardInsightsButton({
   dashboardTitle,
   charts,
   activeFilters,
+  isPublicView = false,
 }: Props) {
   const aiEnabled = useAIEnabled();
+  const [publicAvailable, setPublicAvailable] = useState(false);
   const chartStates = useSelector((state: RootState) => state.charts);
+
+  useEffect(() => {
+    if (!isPublicView) return;
+    let active = true;
+    fetchAICapabilities('dashboard', true)
+      .then(
+        result =>
+          active &&
+          setPublicAvailable(
+            result.enabled !== false && result.providers.length > 0,
+          ),
+      )
+      .catch(() => active && setPublicAvailable(false));
+    return () => {
+      active = false;
+    };
+  }, [isPublicView]);
 
   const context = useMemo(
     () =>
@@ -50,18 +71,14 @@ export default function DashboardInsightsButton({
     [activeFilters, chartStates, charts, dashboardId, dashboardTitle],
   );
 
-  if (!aiEnabled) {
+  if ((!isPublicView && !aiEnabled) || (isPublicView && !publicAvailable)) {
     return null;
   }
 
   return (
     <FloatingButton>
       <ModalTrigger
-        triggerNode={
-          <Button buttonStyle="primary">
-            {t('AI insights')}
-          </Button>
-        }
+        triggerNode={<Button buttonStyle="primary">{t('AI insights')}</Button>}
         modalTitle={t('Dashboard AI insights')}
         modalBody={
           <AIInsightPanel
@@ -74,6 +91,8 @@ export default function DashboardInsightsButton({
               sliceName: chart.slice_name,
               vizType: chart.viz_type,
             }))}
+            isPublic={isPublicView}
+            showHistory={!isPublicView}
           />
         }
         responsive

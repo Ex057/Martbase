@@ -55,8 +55,8 @@ const Header = styled.div`
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--pro-border, #E5EAF0);
-  background: var(--pro-bg-card, #FAFBFC);
+  border-bottom: 1px solid var(--pro-border, #e5eaf0);
+  background: var(--pro-bg-card, #fafbfc);
 `;
 
 const ProviderControls = styled.div`
@@ -66,7 +66,7 @@ const ProviderControls = styled.div`
 
   select {
     min-height: 32px;
-    border: 1px solid var(--pro-border, #E5EAF0);
+    border: 1px solid var(--pro-border, #e5eaf0);
     border-radius: 6px;
     padding: 0 8px;
     background: #fff;
@@ -76,7 +76,7 @@ const ProviderControls = styled.div`
 
   label {
     font-size: 11px;
-    color: #6B7280;
+    color: #6b7280;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -286,7 +286,7 @@ const TypingIndicator = styled.div`
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #9CA3AF;
+    background: #9ca3af;
     animation: blink 1.4s infinite both;
   }
   span:nth-of-type(2) {
@@ -309,19 +309,19 @@ const TypingIndicator = styled.div`
 `;
 
 const InputArea = styled.div`
-  border-top: 1px solid var(--pro-border, #E5EAF0);
+  border-top: 1px solid var(--pro-border, #e5eaf0);
   padding: 12px 16px;
   display: flex;
   gap: 8px;
-  background: var(--pro-bg-card, #FAFBFC);
+  background: var(--pro-bg-card, #fafbfc);
 `;
 
 const SqlBlock = styled.div`
   margin-top: 8px;
   padding: 10px 12px;
   border-radius: 8px;
-  background: #1E293B;
-  color: #E2E8F0;
+  background: #1e293b;
+  color: #e2e8f0;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 12px;
   white-space: pre-wrap;
@@ -337,10 +337,10 @@ const ActionRow = styled.div`
 
 const HistorySidebar = styled.div`
   width: 200px;
-  border-right: 1px solid var(--pro-border, #E5EAF0);
+  border-right: 1px solid var(--pro-border, #e5eaf0);
   overflow-y: auto;
   padding: 8px;
-  background: var(--pro-bg-card, #FAFBFC);
+  background: var(--pro-bg-card, #fafbfc);
 `;
 
 const HistoryItem = styled.div<{ $active: boolean }>`
@@ -356,7 +356,7 @@ const HistoryItem = styled.div<{ $active: boolean }>`
   font-weight: ${({ $active }) => ($active ? 600 : 400)};
 
   &:hover {
-    background: #F3F4F6;
+    background: #f3f4f6;
   }
 `;
 
@@ -367,7 +367,7 @@ const EmptyChat = styled.div`
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: #9CA3AF;
+  color: #9ca3af;
   font-size: 14px;
   text-align: center;
   padding: 40px;
@@ -382,7 +382,7 @@ const SuggestionChips = styled.div`
 
 const Chip = styled.button`
   padding: 4px 10px;
-  border: 1px solid var(--pro-border, #E5EAF0);
+  border: 1px solid var(--pro-border, #e5eaf0);
   border-radius: 16px;
   background: #fff;
   font-size: 11px;
@@ -390,9 +390,9 @@ const Chip = styled.button`
   cursor: pointer;
 
   &:hover {
-    background: #EFF6FF;
-    border-color: #1976D2;
-    color: #1976D2;
+    background: #eff6ff;
+    border-color: #1976d2;
+    color: #1976d2;
   }
 `;
 
@@ -407,10 +407,10 @@ const ExportBar = styled.div`
   align-items: center;
   gap: 6px;
   padding: 6px 16px;
-  border-top: 1px solid var(--pro-border, #E5EAF0);
-  background: var(--pro-bg-card, #FAFBFC);
+  border-top: 1px solid var(--pro-border, #e5eaf0);
+  background: var(--pro-bg-card, #fafbfc);
   font-size: 11px;
-  color: #6B7280;
+  color: #6b7280;
 `;
 
 const ExportButton = styled.button`
@@ -418,19 +418,21 @@ const ExportButton = styled.button`
   align-items: center;
   gap: 4px;
   padding: 3px 10px;
-  border: 1px solid var(--pro-border, #E5EAF0);
+  border: 1px solid var(--pro-border, #e5eaf0);
   border-radius: 6px;
   background: #fff;
   font-size: 11px;
   font-weight: 600;
   color: #374151;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 
   &:hover {
-    background: #EFF6FF;
-    border-color: #1976D2;
-    color: #1976D2;
+    background: #eff6ff;
+    border-color: #1976d2;
+    color: #1976d2;
   }
 `;
 
@@ -457,14 +459,15 @@ type Props = {
   chartNodeSelector?: string;
   /** Chart metadata for dashboard chart-by-chart mode. */
   dashboardCharts?: DashboardChartInfo[];
+  isPublic?: boolean;
 };
 
 /* ── Chart Preview Components ─────────────────────────── */
 
 const ChartPreview = styled.div`
   padding: 8px 16px;
-  border-bottom: 1px solid #E5E7EB;
-  background: #F8FAFC;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
 `;
 
 const ChartPreviewImage = styled.img`
@@ -478,7 +481,7 @@ const ChartPreviewImage = styled.img`
 const ChartPreviewLabel = styled.div`
   font-size: 11px;
   font-weight: 600;
-  color: #6B7280;
+  color: #6b7280;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-bottom: 6px;
@@ -488,8 +491,8 @@ const DashboardModeSelector = styled.div`
   display: flex;
   gap: 4px;
   padding: 6px 16px;
-  border-bottom: 1px solid #E5E7EB;
-  background: #F8FAFC;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
 `;
 
 const ModeTab = styled.button<{ $active: boolean }>`
@@ -503,13 +506,13 @@ const ModeTab = styled.button<{ $active: boolean }>`
   cursor: pointer;
   transition: all 0.15s;
   &:hover {
-    border-color: #1976D2;
-    color: #1976D2;
+    border-color: #1976d2;
+    color: #1976d2;
   }
 `;
 
 const ChartByChartCard = styled.div`
-  border: 1px solid #E5E7EB;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   margin: 8px 0;
   overflow: hidden;
@@ -521,8 +524,8 @@ const ChartByChartHeader = styled.div`
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: #F3F4F6;
-  border-bottom: 1px solid #E5E7EB;
+  background: #f3f4f6;
+  border-bottom: 1px solid #e5e7eb;
   font-size: 13px;
   font-weight: 600;
   color: #374151;
@@ -536,9 +539,7 @@ const ChartByChartBody = styled.div`
  * Capture a DOM element as a PNG data-URL using dom-to-image-more.
  * Returns null on failure (element not found, cross-origin, etc).
  */
-async function captureElementAsImage(
-  selector: string,
-): Promise<string | null> {
+async function captureElementAsImage(selector: string): Promise<string | null> {
   try {
     const container = document.querySelector(selector);
     if (!container) return null;
@@ -556,7 +557,12 @@ async function captureElementAsImage(
     // Temporarily expand all scroll containers so the full chart is visible.
     // Walk up from the viz element and remove overflow/height constraints,
     // then restore them after capture.
-    const saved: { el: HTMLElement; overflow: string; maxHeight: string; height: string }[] = [];
+    const saved: {
+      el: HTMLElement;
+      overflow: string;
+      maxHeight: string;
+      height: string;
+    }[] = [];
     let walk: HTMLElement | null = el;
     while (walk && walk !== document.body) {
       const cs = window.getComputedStyle(walk);
@@ -608,11 +614,21 @@ async function captureElementAsImage(
     await new Promise(r => setTimeout(r, 100));
 
     // Remove borders, shadows, and padding from chart containers for clean capture
-    const borderOverrides: { el: HTMLElement; border: string; shadow: string; padding: string; borderRadius: string }[] = [];
+    const borderOverrides: {
+      el: HTMLElement;
+      border: string;
+      shadow: string;
+      padding: string;
+      borderRadius: string;
+    }[] = [];
     let borderWalk: HTMLElement | null = el;
     while (borderWalk && borderWalk !== document.body) {
       const cs = window.getComputedStyle(borderWalk);
-      if (cs.border !== 'none' || cs.boxShadow !== 'none' || cs.borderRadius !== '0px') {
+      if (
+        cs.border !== 'none' ||
+        cs.boxShadow !== 'none' ||
+        cs.borderRadius !== '0px'
+      ) {
         borderOverrides.push({
           el: borderWalk,
           border: borderWalk.style.border,
@@ -842,22 +858,22 @@ function sanitizeNonAscii(text: string): string {
   // Step 1: Convert common Unicode symbols to plain English words
   // so they render correctly in PDF (helvetica doesn't support Unicode arrows)
   const symbolsToText = text
-    .replace(/\u2191|\u25B2|\u25B3|\u2197/g, 'Rising')   // ↑ ▲ △ ↗
-    .replace(/\u2193|\u25BC|\u25BD|\u2198/g, 'Falling')   // ↓ ▼ ▽ ↘
-    .replace(/\u2192|\u2794|\u279C|\u27A1/g, 'Stable')    // → ➔ ➜ ➡
-    .replace(/\u2190/g, 'Declining')                        // ←
-    .replace(/\u2194/g, 'Fluctuating')                      // ↔
-    .replace(/\u2714|\u2705|\u2611/g, 'Yes')               // ✔ ✅ ☑
-    .replace(/\u2716|\u274C|\u2717/g, 'No')                // ✖ ❌ ✗
-    .replace(/\u26A0/g, '[WARNING]')                        // ⚠
-    .replace(/\u2022/g, '-')                                // •
-    .replace(/\u2013/g, '-')                                // –
-    .replace(/\u2014/g, ' - ')                              // —
-    .replace(/\u2018|\u2019/g, "'")                         // ' '
-    .replace(/\u201C|\u201D/g, '"')                         // " "
-    .replace(/\u2026/g, '...')                              // …
-    .replace(/\u00B7/g, '-')                                // ·
-    .replace(/\u25CF|\u25CB/g, '-');                        // ● ○
+    .replace(/\u2191|\u25B2|\u25B3|\u2197/g, 'Rising') // ↑ ▲ △ ↗
+    .replace(/\u2193|\u25BC|\u25BD|\u2198/g, 'Falling') // ↓ ▼ ▽ ↘
+    .replace(/\u2192|\u2794|\u279C|\u27A1/g, 'Stable') // → ➔ ➜ ➡
+    .replace(/\u2190/g, 'Declining') // ←
+    .replace(/\u2194/g, 'Fluctuating') // ↔
+    .replace(/\u2714|\u2705|\u2611/g, 'Yes') // ✔ ✅ ☑
+    .replace(/\u2716|\u274C|\u2717/g, 'No') // ✖ ❌ ✗
+    .replace(/\u26A0/g, '[WARNING]') // ⚠
+    .replace(/\u2022/g, '-') // •
+    .replace(/\u2013/g, '-') // –
+    .replace(/\u2014/g, ' - ') // —
+    .replace(/\u2018|\u2019/g, "'") // ' '
+    .replace(/\u201C|\u201D/g, '"') // " "
+    .replace(/\u2026/g, '...') // …
+    .replace(/\u00B7/g, '-') // ·
+    .replace(/\u25CF|\u25CB/g, '-'); // ● ○
 
   // Step 2: Remove emoji and miscellaneous symbols
   const cleaned = symbolsToText
@@ -892,18 +908,12 @@ function fixMarkdownStructure(text: string): string {
   // 2. Missing newline after ## header that runs into content
   //    "## Header\nContent" is fine, but "## HeaderContent" needs split
   //    Match: ## followed by text, then a digit+period (numbered list start)
-  fixed = fixed.replace(
-    /^(#{2,3}\s+[^\n]+?)(\d+\.\s)/gm,
-    '$1\n$2',
-  );
+  fixed = fixed.replace(/^(#{2,3}\s+[^\n]+?)(\d+\.\s)/gm, '$1\n$2');
 
   // 3. Numbered list item starting mid-line after non-list text
   //    "some sentence1. First item" → "some sentence\n1. First item"
   //    Guard: don't split within table cells (|) or after decimal points
-  fixed = fixed.replace(
-    /([a-zA-Z.,:;!?])(\d+\.\s+[A-Z])/g,
-    '$1\n$2',
-  );
+  fixed = fixed.replace(/([a-zA-Z.,:;!?])(\d+\.\s+[A-Z])/g, '$1\n$2');
 
   // 4. Bullet point merged onto end of previous text
   //    "some text- bullet" → "some text\n- bullet"
@@ -951,56 +961,226 @@ function fixWordSpacing(text: string): string {
   // Sorted longest-first so "through" matches before "the".
   const BOUNDARY_WORDS = [
     // 8+ letter words — longest first to match greedily
-    'throughout', 'presenting', 'associated', 'considered', 'represents',
-    'concerning', 'continuing', 'indicating', 'suggesting', 'addressing',
-    'experience', 'particular', 'management', 'proportion', 'generation',
-    'population', 'department', 'percentage', 'comparison',
-    'significant', 'important', 'concerning', 'including', 'according',
-    'therefore', 'meanwhile', 'currently', 'following', 'affecting',
-    'requiring', 'improving', 'declining', 'remaining', 'resulting',
-    'achieving', 'providing', 'reporting', 'receiving', 'revealing',
-    'primarily', 'typically', 'generally', 'estimated', 'available',
+    'throughout',
+    'presenting',
+    'associated',
+    'considered',
+    'represents',
+    'concerning',
+    'continuing',
+    'indicating',
+    'suggesting',
+    'addressing',
+    'experience',
+    'particular',
+    'management',
+    'proportion',
+    'generation',
+    'population',
+    'department',
+    'percentage',
+    'comparison',
+    'significant',
+    'important',
+    'concerning',
+    'including',
+    'according',
+    'therefore',
+    'meanwhile',
+    'currently',
+    'following',
+    'affecting',
+    'requiring',
+    'improving',
+    'declining',
+    'remaining',
+    'resulting',
+    'achieving',
+    'providing',
+    'reporting',
+    'receiving',
+    'revealing',
+    'primarily',
+    'typically',
+    'generally',
+    'estimated',
+    'available',
     // 7 letter words
-    'between', 'through', 'without', 'against', 'because', 'however',
-    'quality', 'several', 'overall', 'another', 'whether', 'notably',
-    'already', 'remains', 'appears', 'reveals', 'implies', 'suggest',
-    'warrant', 'signals', 'require', 'present', 'despite',
+    'between',
+    'through',
+    'without',
+    'against',
+    'because',
+    'however',
+    'quality',
+    'several',
+    'overall',
+    'another',
+    'whether',
+    'notably',
+    'already',
+    'remains',
+    'appears',
+    'reveals',
+    'implies',
+    'suggest',
+    'warrant',
+    'signals',
+    'require',
+    'present',
+    'despite',
     // Domain-specific (health, analytics, geography)
     // NOTE: avoid short suffixes that appear inside common words:
     //   - "rates" breaks "demonstrates", "illustrates", "generates"
     //   - "health" breaks "stealth", "wealth", "commonwealth"
     //   - "cases" breaks "showcases", "staircases"
     //   - "zero" is safe (few false positives)
-    'surveillance', 'adherence', 'preventive', 'treatment', 'clinical',
-    'national', 'diagnostic', 'district', 'facility',
-    'coverage', 'baseline', 'outbreak', 'incidence', 'mortality',
-    'morbidity', 'indicator', 'threshold', 'quarterly', 'monthly',
-    'annually', 'regional', 'performance', 'programme', 'program',
-    'hotspots', 'hotspot', 'positivity', 'admissions',
-    'watchouts', 'leadership', 'testing', 'malaria',
-    'eradication', 'prevention', 'control', 'measures', 'resources',
-    'commodities', 'interventions', 'protocols', 'strategies',
-    'burden', 'capacity', 'children', 'pediatric', 'maternal',
-    'migration', 'percent', 'million', 'thousand',
+    'surveillance',
+    'adherence',
+    'preventive',
+    'treatment',
+    'clinical',
+    'national',
+    'diagnostic',
+    'district',
+    'facility',
+    'coverage',
+    'baseline',
+    'outbreak',
+    'incidence',
+    'mortality',
+    'morbidity',
+    'indicator',
+    'threshold',
+    'quarterly',
+    'monthly',
+    'annually',
+    'regional',
+    'performance',
+    'programme',
+    'program',
+    'hotspots',
+    'hotspot',
+    'positivity',
+    'admissions',
+    'watchouts',
+    'leadership',
+    'testing',
+    'malaria',
+    'eradication',
+    'prevention',
+    'control',
+    'measures',
+    'resources',
+    'commodities',
+    'interventions',
+    'protocols',
+    'strategies',
+    'burden',
+    'capacity',
+    'children',
+    'pediatric',
+    'maternal',
+    'migration',
+    'percent',
+    'million',
+    'thousand',
     // 6 letter words
-    'before', 'during', 'within', 'around', 'across', 'toward',
-    'likely', 'rather', 'simply', 'nearly', 'showed', 'showed',
-    'higher', 'lowest', 'showed', 'steady', 'growth',
+    'before',
+    'during',
+    'within',
+    'around',
+    'across',
+    'toward',
+    'likely',
+    'rather',
+    'simply',
+    'nearly',
+    'showed',
+    'showed',
+    'higher',
+    'lowest',
+    'showed',
+    'steady',
+    'growth',
     // 5 letter words
-    'about', 'after', 'which', 'where', 'while', 'their', 'there',
-    'these', 'those', 'would', 'could', 'should', 'other',
-    'being', 'still', 'under', 'until', 'since', 'shows',
-    'needs', 'below', 'above', 'level',
+    'about',
+    'after',
+    'which',
+    'where',
+    'while',
+    'their',
+    'there',
+    'these',
+    'those',
+    'would',
+    'could',
+    'should',
+    'other',
+    'being',
+    'still',
+    'under',
+    'until',
+    'since',
+    'shows',
+    'needs',
+    'below',
+    'above',
+    'level',
     // 4 letter words
-    'from', 'with', 'into', 'upon', 'over', 'than', 'then',
-    'when', 'what', 'this', 'that', 'have', 'been', 'were',
-    'more', 'some', 'will', 'only', 'just', 'each', 'both',
-    'also', 'very', 'much', 'such', 'most', 'must',
-    'like', 'even', 'well', 'many', 'high', 'poor',
-    'data', 'rate', 'year',
+    'from',
+    'with',
+    'into',
+    'upon',
+    'over',
+    'than',
+    'then',
+    'when',
+    'what',
+    'this',
+    'that',
+    'have',
+    'been',
+    'were',
+    'more',
+    'some',
+    'will',
+    'only',
+    'just',
+    'each',
+    'both',
+    'also',
+    'very',
+    'much',
+    'such',
+    'most',
+    'must',
+    'like',
+    'even',
+    'well',
+    'many',
+    'high',
+    'poor',
+    'data',
+    'rate',
+    'year',
     // 3 letter words
-    'for', 'but', 'and', 'the', 'not', 'are', 'was', 'has',
-    'had', 'can', 'may', 'all', 'its', 'per', 'yet', 'nor',
+    'for',
+    'but',
+    'and',
+    'the',
+    'not',
+    'are',
+    'was',
+    'has',
+    'had',
+    'can',
+    'may',
+    'all',
+    'its',
+    'per',
+    'yet',
+    'nor',
   ];
   // Build a single regex: (3+ lowercase)(boundary word) at word-like boundary
   const boundaryPattern = new RegExp(
@@ -1009,25 +1189,132 @@ function fixWordSpacing(text: string): string {
   );
 
   const SPLIT_WORDS = new Set([
-    'a', 'all', 'an', 'and', 'are', 'as', 'at', 'by', 'for', 'from', 'has',
-    'have', 'in', 'into', 'is', 'it', 'its', 'last', 'lowest', 'month',
-    'months', 'more', 'most', 'no', 'of', 'on', 'or', 'per', 'remained',
-    'respectively', 'significant', 'significantly', 'since', 'stable', 'test',
-    'tested', 'testing', 'tests', 'than', 'that', 'the', 'their', 'these',
-    'this', 'those', 'to', 'treated', 'under', 'while', 'with', 'without',
-    'year', 'years',
-    'action', 'actions', 'admission', 'admissions', 'analysis', 'busoga',
-    'cases', 'case', 'chart', 'critical', 'dashboard', 'death', 'deaths',
-    'district', 'districts', 'dose', 'dropped', 'english', 'executive',
-    'facilities', 'facility', 'fatality', 'highest', 'historical', 'hospital',
-    'infection', 'insight',
-    'insights', 'kampala', 'key', 'kigezi', 'lango', 'leadership', 'malaria',
-    'massive', 'mip', 'nile', 'north', 'period', 'periods', 'points', 'positivity', 'pregnancy',
-    'proportion', 'proportions', 'quality', 'rate', 'rates', 'recommendation',
-    'recommendations', 'region', 'regions', 'signal', 'signals', 'sp',
-    'summary', 'targeted', 'teso', 'treatment', 'under', 'urgent', 'warning', 'watchouts', 'west',
-    'performing', 'population', 'rapid', 'record', 'required', 'response',
-    'administered', 'treated', 'month',
+    'a',
+    'all',
+    'an',
+    'and',
+    'are',
+    'as',
+    'at',
+    'by',
+    'for',
+    'from',
+    'has',
+    'have',
+    'in',
+    'into',
+    'is',
+    'it',
+    'its',
+    'last',
+    'lowest',
+    'month',
+    'months',
+    'more',
+    'most',
+    'no',
+    'of',
+    'on',
+    'or',
+    'per',
+    'remained',
+    'respectively',
+    'significant',
+    'significantly',
+    'since',
+    'stable',
+    'test',
+    'tested',
+    'testing',
+    'tests',
+    'than',
+    'that',
+    'the',
+    'their',
+    'these',
+    'this',
+    'those',
+    'to',
+    'treated',
+    'under',
+    'while',
+    'with',
+    'without',
+    'year',
+    'years',
+    'action',
+    'actions',
+    'admission',
+    'admissions',
+    'analysis',
+    'busoga',
+    'cases',
+    'case',
+    'chart',
+    'critical',
+    'dashboard',
+    'death',
+    'deaths',
+    'district',
+    'districts',
+    'dose',
+    'dropped',
+    'english',
+    'executive',
+    'facilities',
+    'facility',
+    'fatality',
+    'highest',
+    'historical',
+    'hospital',
+    'infection',
+    'insight',
+    'insights',
+    'kampala',
+    'key',
+    'kigezi',
+    'lango',
+    'leadership',
+    'malaria',
+    'massive',
+    'mip',
+    'nile',
+    'north',
+    'period',
+    'periods',
+    'points',
+    'positivity',
+    'pregnancy',
+    'proportion',
+    'proportions',
+    'quality',
+    'rate',
+    'rates',
+    'recommendation',
+    'recommendations',
+    'region',
+    'regions',
+    'signal',
+    'signals',
+    'sp',
+    'summary',
+    'targeted',
+    'teso',
+    'treatment',
+    'under',
+    'urgent',
+    'warning',
+    'watchouts',
+    'west',
+    'performing',
+    'population',
+    'rapid',
+    'record',
+    'required',
+    'response',
+    'administered',
+    'treated',
+    'month',
   ]);
 
   const mergeSingleChars = (parts: string[]) => {
@@ -1077,7 +1364,8 @@ function fixWordSpacing(text: string): string {
 
     const parts = mergeSingleChars(paths[n] || [token]);
     const recognized = parts.reduce(
-      (sum, part) => sum + (SPLIT_WORDS.has(part.toLowerCase()) ? part.length : 0),
+      (sum, part) =>
+        sum + (SPLIT_WORDS.has(part.toLowerCase()) ? part.length : 0),
       0,
     );
     if (parts.length >= 2 && recognized / Math.max(1, token.length) >= 0.65) {
@@ -1185,16 +1473,16 @@ function fixWordSpacing(text: string): string {
       // 5. camelCase mid-sentence: lowercase + Uppercase word
       //    "highlightsA" → "highlights A", "treatedFor" → "treated For"
       //    Preserve actual camelCase inside backticks
-      fixed = fixed.replace(
-        /(?<!`)([a-z]{2,})([A-Z][a-z])(?!`)/g,
-        '$1 $2',
-      );
+      fixed = fixed.replace(/(?<!`)([a-z]{2,})([A-Z][a-z])(?!`)/g, '$1 $2');
       fixed = splitJoinedTokensInLine(fixed);
 
       // 5b. Number joined to word: "early2026" → "early 2026", "5.0percent" → "5.0 percent"
       //     Guard: don't split hex codes, version numbers like "v2", or ordinals like "1st"
       fixed = fixed.replace(/([a-zA-Z]{2,})(\d{2,})/g, '$1 $2');
-      fixed = fixed.replace(/(\d+(?:\.\d+)?)(percent|million|billion|thousand|cases|deaths|admissions|tests|patients|districts|regions|facilities|months|years|weeks|days)/gi, '$1 $2');
+      fixed = fixed.replace(
+        /(\d+(?:\.\d+)?)(percent|million|billion|thousand|cases|deaths|admissions|tests|patients|districts|regions|facilities|months|years|weeks|days)/gi,
+        '$1 $2',
+      );
 
       // 6. Concatenated common words: "treatedfor" → "treated for"
       //    Apply the boundary word list. Guard against false positives
@@ -1209,59 +1497,227 @@ function fixWordSpacing(text: string): string {
         if (word.length < 3) return match;
         // Common false positives to skip
         const falsePositives = [
-          'therefore', 'perform', 'performed', 'performer', 'performing', 'before',
-          'inform', 'informed', 'information', 'informal', 'informing', 'transform',
-          'transformed', 'transforming', 'transformation',
-          'platform', 'reform', 'reformed', 'uniform', 'comfortable', 'furthermore',
-          'moreover', 'otherwise', 'somewhere', 'everywhere', 'nowhere',
-          'anywhere', 'whoever', 'whatever', 'however', 'whenever',
-          'wherever', 'whether', 'together', 'altogether', 'another',
-          'mother', 'father', 'brother', 'bother', 'other', 'rather',
-          'gather', 'weather', 'feather', 'leather', 'either', 'neither',
-          'further', 'perhaps', 'overall', 'overhaul', 'overcome',
-          'within', 'forthwith', 'hitherto', 'withdraw', 'withstand',
-          'withhold', 'notwithstanding', 'although', 'also',
-          'already', 'always', 'almost', 'itself', 'himself', 'herself',
-          'themselves', 'ourselves', 'yourself', 'myself',
-          'percent', 'percentage', 'perennial', 'period', 'periodic',
-          'permission', 'personal', 'personnel', 'perspective',
-          'format', 'formula', 'formal', 'formation', 'formerly',
-          'thermal', 'normal', 'abnormal',
+          'therefore',
+          'perform',
+          'performed',
+          'performer',
+          'performing',
+          'before',
+          'inform',
+          'informed',
+          'information',
+          'informal',
+          'informing',
+          'transform',
+          'transformed',
+          'transforming',
+          'transformation',
+          'platform',
+          'reform',
+          'reformed',
+          'uniform',
+          'comfortable',
+          'furthermore',
+          'moreover',
+          'otherwise',
+          'somewhere',
+          'everywhere',
+          'nowhere',
+          'anywhere',
+          'whoever',
+          'whatever',
+          'however',
+          'whenever',
+          'wherever',
+          'whether',
+          'together',
+          'altogether',
+          'another',
+          'mother',
+          'father',
+          'brother',
+          'bother',
+          'other',
+          'rather',
+          'gather',
+          'weather',
+          'feather',
+          'leather',
+          'either',
+          'neither',
+          'further',
+          'perhaps',
+          'overall',
+          'overhaul',
+          'overcome',
+          'within',
+          'forthwith',
+          'hitherto',
+          'withdraw',
+          'withstand',
+          'withhold',
+          'notwithstanding',
+          'although',
+          'also',
+          'already',
+          'always',
+          'almost',
+          'itself',
+          'himself',
+          'herself',
+          'themselves',
+          'ourselves',
+          'yourself',
+          'myself',
+          'percent',
+          'percentage',
+          'perennial',
+          'period',
+          'periodic',
+          'permission',
+          'personal',
+          'personnel',
+          'perspective',
+          'format',
+          'formula',
+          'formal',
+          'formation',
+          'formerly',
+          'thermal',
+          'normal',
+          'abnormal',
           // Additional false positives for expanded word list
-          'thereafter', 'beforehand', 'underlying', 'understand', 'understood',
-          'undertake', 'underway', 'undergo', 'underline', 'undercover',
-          'afterward', 'afterwards', 'afterward', 'toward', 'towards',
-          'upward', 'downward', 'inward', 'outward', 'forward',
-          'generate', 'generated', 'generating', 'generation',
-          'erate', 'eration', 'moderate', 'accelerate', 'tolerate',
-          'elaborate', 'integrate', 'integrated', 'demonstrate',
-          'separate', 'separated', 'operate', 'operated', 'cooperate',
-          'indicator', 'predicate', 'dedicate', 'dedicated',
-          'investigate', 'investigate', 'syndicate',
-          'coverage', 'leverage', 'average', 'beverage',
-          'baseline', 'guideline', 'timeline', 'headline', 'deadline', 'outline',
-          'decline', 'declined', 'incline',
-          'populate', 'populated', 'population',
-          'simulate', 'stimulate', 'accumulate', 'calculate',
-          'regulate', 'regulated', 'speculate',
-          'absolute', 'resolute', 'dissolve',
-          'represent', 'represents', 'representing', 'represented',
-          'present', 'presented', 'presenting', 'presentation',
-          'programme', 'programmed', 'programmatic',
-          'threshold', 'watershed',
-          'district', 'restrict', 'restricted',
-          'facility', 'ability', 'stability', 'capability',
-          'monthly', 'quarterly', 'annually', 'currently',
-          'recently', 'frequently', 'subsequently', 'consequently',
-          'apparently', 'evidently', 'sufficiently', 'consistently',
-          'persistently', 'predominantly', 'significantly',
-          'unfortunately', 'approximately', 'particularly',
+          'thereafter',
+          'beforehand',
+          'underlying',
+          'understand',
+          'understood',
+          'undertake',
+          'underway',
+          'undergo',
+          'underline',
+          'undercover',
+          'afterward',
+          'afterwards',
+          'afterward',
+          'toward',
+          'towards',
+          'upward',
+          'downward',
+          'inward',
+          'outward',
+          'forward',
+          'generate',
+          'generated',
+          'generating',
+          'generation',
+          'erate',
+          'eration',
+          'moderate',
+          'accelerate',
+          'tolerate',
+          'elaborate',
+          'integrate',
+          'integrated',
+          'demonstrate',
+          'separate',
+          'separated',
+          'operate',
+          'operated',
+          'cooperate',
+          'indicator',
+          'predicate',
+          'dedicate',
+          'dedicated',
+          'investigate',
+          'investigate',
+          'syndicate',
+          'coverage',
+          'leverage',
+          'average',
+          'beverage',
+          'baseline',
+          'guideline',
+          'timeline',
+          'headline',
+          'deadline',
+          'outline',
+          'decline',
+          'declined',
+          'incline',
+          'populate',
+          'populated',
+          'population',
+          'simulate',
+          'stimulate',
+          'accumulate',
+          'calculate',
+          'regulate',
+          'regulated',
+          'speculate',
+          'absolute',
+          'resolute',
+          'dissolve',
+          'represent',
+          'represents',
+          'representing',
+          'represented',
+          'present',
+          'presented',
+          'presenting',
+          'presentation',
+          'programme',
+          'programmed',
+          'programmatic',
+          'threshold',
+          'watershed',
+          'district',
+          'restrict',
+          'restricted',
+          'facility',
+          'ability',
+          'stability',
+          'capability',
+          'monthly',
+          'quarterly',
+          'annually',
+          'currently',
+          'recently',
+          'frequently',
+          'subsequently',
+          'consequently',
+          'apparently',
+          'evidently',
+          'sufficiently',
+          'consistently',
+          'persistently',
+          'predominantly',
+          'significantly',
+          'unfortunately',
+          'approximately',
+          'particularly',
           // New additions for health domain words
-          'diseases', 'stealth', 'stealthy', 'wealth', 'wealthy',
-          'commonwealth', 'health', 'healthy', 'healthcare',
-          'cases', 'showcases', 'suitcases', 'staircases',
-          'resources', 'courses', 'forces', 'sources',
-          'services', 'devices', 'practices', 'offices',
+          'diseases',
+          'stealth',
+          'stealthy',
+          'wealth',
+          'wealthy',
+          'commonwealth',
+          'health',
+          'healthy',
+          'healthcare',
+          'cases',
+          'showcases',
+          'suitcases',
+          'staircases',
+          'resources',
+          'courses',
+          'forces',
+          'sources',
+          'services',
+          'devices',
+          'practices',
+          'offices',
         ];
         if (falsePositives.includes(combined)) return match;
         // Pattern-based false positive detection: if the combined word is a
@@ -1271,8 +1727,11 @@ function fixWordSpacing(text: string): string {
         // But "geographicmigration" (20 chars) should be split.
         if (
           combined.length <= 16 &&
-          /(?:ates|tion|sion|ment|ness|ence|ance|ible|able|ious|eous|ture|ular|iver|ical|inal|onal|ural|rial|tial|cial|ntal|rnal|ther|ever|over|ward|wise|like|less|ship|hood|full)$/i.test(combined)
-        ) return match;
+          /(?:ates|tion|sion|ment|ness|ence|ance|ible|able|ious|eous|ture|ular|iver|ical|inal|onal|ural|rial|tial|cial|ntal|rnal|ther|ever|over|ward|wise|like|less|ship|hood|full)$/i.test(
+            combined,
+          )
+        )
+          return match;
         return `${prefix} ${word}`;
       });
 
@@ -1282,13 +1741,50 @@ function fixWordSpacing(text: string): string {
       fixed = fixed.replace(/([a-z]{3,})(a)\s/g, (match, prefix, article) => {
         // Skip known words ending in 'a': "data", "visa", "extra", "quota", etc.
         const wordsEndingInA = [
-          'data', 'visa', 'extra', 'ultra', 'meta', 'quota', 'alpha',
-          'beta', 'delta', 'gamma', 'sigma', 'omega', 'flora', 'fauna',
-          'drama', 'comma', 'dilemma', 'plasma', 'schema', 'stigma',
-          'criteria', 'phenomena', 'area', 'idea', 'era', 'via',
-          'formula', 'antenna', 'banana', 'camera', 'china', 'cola',
-          'opera', 'pizza', 'saliva', 'sofa', 'toga', 'yoga', 'zebra',
-          'manga', 'panda', 'propaganda', 'malaria', 'anda',
+          'data',
+          'visa',
+          'extra',
+          'ultra',
+          'meta',
+          'quota',
+          'alpha',
+          'beta',
+          'delta',
+          'gamma',
+          'sigma',
+          'omega',
+          'flora',
+          'fauna',
+          'drama',
+          'comma',
+          'dilemma',
+          'plasma',
+          'schema',
+          'stigma',
+          'criteria',
+          'phenomena',
+          'area',
+          'idea',
+          'era',
+          'via',
+          'formula',
+          'antenna',
+          'banana',
+          'camera',
+          'china',
+          'cola',
+          'opera',
+          'pizza',
+          'saliva',
+          'sofa',
+          'toga',
+          'yoga',
+          'zebra',
+          'manga',
+          'panda',
+          'propaganda',
+          'malaria',
+          'anda',
         ];
         if (wordsEndingInA.includes(prefix.toLowerCase() + 'a')) return match;
         return `${prefix} a `;
@@ -1326,7 +1822,10 @@ function fixMarkdownTables(text: string): string {
 
     // Detect a pipe-delimited row
     if (trimmed.startsWith('|') && trimmed.includes('|', 1)) {
-      const cells = trimmed.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+      const cells = trimmed
+        .replace(/^\||\|$/g, '')
+        .split('|')
+        .map(c => c.trim());
 
       // Skip completely empty rows (| | | | |) — these are malformed separators
       if (cells.every(c => c === '')) {
@@ -1338,19 +1837,18 @@ function fixMarkdownTables(text: string): string {
 
       // Check if this looks like a header row (has content) and next row is NOT a separator
       result.push(line);
-      if (
-        cells.some(c => c !== '') &&
-        i + 1 < lines.length
-      ) {
+      if (cells.some(c => c !== '') && i + 1 < lines.length) {
         const nextTrimmed = lines[i + 1]?.trim() || '';
-        const isNextPipe = nextTrimmed.startsWith('|') && nextTrimmed.includes('|', 1);
+        const isNextPipe =
+          nextTrimmed.startsWith('|') && nextTrimmed.includes('|', 1);
         if (isNextPipe) {
-          const nextCells = nextTrimmed.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+          const nextCells = nextTrimmed
+            .replace(/^\||\|$/g, '')
+            .split('|')
+            .map(c => c.trim());
           // If next row is empty (malformed sep) or already a proper sep, we'll handle it naturally
           // But if next row is a data row (no separator between header and data), inject one
-          if (
-            i === 0 || !result[result.length - 2]?.trim().startsWith('|')
-          ) {
+          if (i === 0 || !result[result.length - 2]?.trim().startsWith('|')) {
             // This might be the first row of a table — check if next line needs a separator
             const isNextSep = nextCells.every(c => /^[-:]+$/.test(c));
             const isNextEmpty = nextCells.every(c => c === '');
@@ -1483,7 +1981,8 @@ function getImageDimensions(
 ): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onload = () =>
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
     img.onerror = reject;
     img.src = dataUrl;
   });
@@ -1504,11 +2003,24 @@ function fitImage(
   return { width: naturalW * ratio, height: naturalH * ratio };
 }
 
-const ALERT_PDF_COLORS: Record<string, { bg: string; border: string; text: string; badge: string }> = {
-  CRITICAL: { bg: '#FEF2F2', border: '#DC2626', text: '#991B1B', badge: '#DC2626' },
-  WARNING:  { bg: '#FFFBEB', border: '#F59E0B', text: '#92400E', badge: '#F59E0B' },
-  GOOD:     { bg: '#F0FDF4', border: '#16A34A', text: '#166534', badge: '#16A34A' },
-  INFO:     { bg: '#EFF6FF', border: '#3B82F6', text: '#1E40AF', badge: '#3B82F6' },
+const ALERT_PDF_COLORS: Record<
+  string,
+  { bg: string; border: string; text: string; badge: string }
+> = {
+  CRITICAL: {
+    bg: '#FEF2F2',
+    border: '#DC2626',
+    text: '#991B1B',
+    badge: '#DC2626',
+  },
+  WARNING: {
+    bg: '#FFFBEB',
+    border: '#F59E0B',
+    text: '#92400E',
+    badge: '#F59E0B',
+  },
+  GOOD: { bg: '#F0FDF4', border: '#16A34A', text: '#166534', badge: '#16A34A' },
+  INFO: { bg: '#EFF6FF', border: '#3B82F6', text: '#1E40AF', badge: '#3B82F6' },
 };
 
 /**
@@ -1562,14 +2074,24 @@ function renderMarkdownToPdf(
     const maxW = contentWidth - indent;
     const regex = /\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|([^*`]+)/g;
     let m: RegExpExecArray | null;
-    const segments: { text: string; bold: boolean; italic: boolean; code: boolean }[] = [];
+    const segments: {
+      text: string;
+      bold: boolean;
+      italic: boolean;
+      code: boolean;
+    }[] = [];
     while ((m = regex.exec(line)) !== null) {
-      if (m[1]) segments.push({ text: m[1], bold: true, italic: false, code: false });
-      else if (m[2]) segments.push({ text: m[2], bold: false, italic: true, code: false });
-      else if (m[3]) segments.push({ text: m[3], bold: false, italic: false, code: true });
-      else if (m[4]) segments.push({ text: m[4], bold: false, italic: false, code: false });
+      if (m[1])
+        segments.push({ text: m[1], bold: true, italic: false, code: false });
+      else if (m[2])
+        segments.push({ text: m[2], bold: false, italic: true, code: false });
+      else if (m[3])
+        segments.push({ text: m[3], bold: false, italic: false, code: true });
+      else if (m[4])
+        segments.push({ text: m[4], bold: false, italic: false, code: false });
     }
-    if (!segments.length) segments.push({ text: line, bold: false, italic: false, code: false });
+    if (!segments.length)
+      segments.push({ text: line, bold: false, italic: false, code: false });
 
     const fullText = segments.map(s => s.text).join('');
     pdf.setFont('helvetica', baseStyle);
@@ -1587,7 +2109,10 @@ function renderMarkdownToPdf(
         if (remaining.startsWith(seg.text)) {
           chunk = seg.text;
           remaining = remaining.slice(chunk.length);
-        } else if (seg.text.length > 0 && remaining.includes(seg.text.substring(0, 1))) {
+        } else if (
+          seg.text.length > 0 &&
+          remaining.includes(seg.text.substring(0, 1))
+        ) {
           const idx = Math.min(remaining.length, seg.text.length);
           chunk = remaining.substring(0, idx);
           remaining = remaining.slice(idx);
@@ -1600,10 +2125,25 @@ function renderMarkdownToPdf(
           pdf.setFontSize(baseSize - 1);
           const cw = pdf.getTextWidth(chunk);
           pdf.setFillColor(229, 231, 235);
-          pdf.roundedRect(xPos - 1, y - baseSize * 0.35, cw + 2, baseSize * 0.5, 1, 1, 'F');
+          pdf.roundedRect(
+            xPos - 1,
+            y - baseSize * 0.35,
+            cw + 2,
+            baseSize * 0.5,
+            1,
+            1,
+            'F',
+          );
           pdf.setTextColor(30, 41, 59);
         } else {
-          const style = seg.bold && seg.italic ? 'bolditalic' : seg.bold ? 'bold' : seg.italic ? 'italic' : baseStyle;
+          const style =
+            seg.bold && seg.italic
+              ? 'bolditalic'
+              : seg.bold
+                ? 'bold'
+                : seg.italic
+                  ? 'italic'
+                  : baseStyle;
           pdf.setFont('helvetica', style);
           pdf.setFontSize(baseSize);
           pdf.setTextColor(...color);
@@ -1649,7 +2189,9 @@ function renderMarkdownToPdf(
     }
 
     // Alert tags — rendered as callout boxes with multi-line body support
-    const alertMatch = trimmed.match(/^\[(CRITICAL|WARNING|GOOD|INFO)\]\s*(.*)/);
+    const alertMatch = trimmed.match(
+      /^\[(CRITICAL|WARNING|GOOD|INFO)\]\s*(.*)/,
+    );
     if (alertMatch) {
       const [, tag, sameLine] = alertMatch;
       // Collect continuation lines: everything until next alert tag, double blank, or end
@@ -1658,7 +2200,12 @@ function renderMarkdownToPdf(
       while (lineIdx + 1 < lines.length) {
         const nextTrimmed = lines[lineIdx + 1].trim();
         // Stop at blank line, next alert tag, or heading
-        if (!nextTrimmed || /^\[(CRITICAL|WARNING|GOOD|INFO)\]/.test(nextTrimmed) || /^#{1,3} /.test(nextTrimmed)) break;
+        if (
+          !nextTrimmed ||
+          /^\[(CRITICAL|WARNING|GOOD|INFO)\]/.test(nextTrimmed) ||
+          /^#{1,3} /.test(nextTrimmed)
+        )
+          break;
         bodyParts.push(nextTrimmed);
         lineIdx++;
       }
@@ -1671,7 +2218,10 @@ function renderMarkdownToPdf(
       pdf.setFontSize(BODY_FONT);
       const labelW_ = pdf.getTextWidth(`${label}: `);
       pdf.setFont('helvetica', 'normal');
-      const bodyLines_: string[] = pdf.splitTextToSize(body, contentWidth - 10 - labelW_);
+      const bodyLines_: string[] = pdf.splitTextToSize(
+        body,
+        contentWidth - 10 - labelW_,
+      );
       const lineH = BODY_FONT * LINE_HEIGHT * 0.352;
       const totalLines = Math.max(1, bodyLines_.length);
       const blockHeight = totalLines * lineH + 3;
@@ -1705,7 +2255,10 @@ function renderMarkdownToPdf(
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(BODY_FONT);
       pdf.setTextColor(txR, txG, txB);
-      const bodyWrapped: string[] = pdf.splitTextToSize(body, contentWidth - 10 - labelW);
+      const bodyWrapped: string[] = pdf.splitTextToSize(
+        body,
+        contentWidth - 10 - labelW,
+      );
       if (bodyWrapped.length > 0) {
         // First line starts after the label
         pdf.text(bodyWrapped[0], margin + 5 + labelW, alertY);
@@ -1759,7 +2312,13 @@ function renderMarkdownToPdf(
       pdf.setFontSize(BODY_FONT);
       pdf.setTextColor(55, 65, 81);
       pdf.text('\u2022', margin + 5, y);
-      renderFormattedLine(bulletMatch[1], BODY_FONT, 'normal', [55, 65, 81], 12);
+      renderFormattedLine(
+        bulletMatch[1],
+        BODY_FONT,
+        'normal',
+        [55, 65, 81],
+        12,
+      );
       y += 0.5;
       continue;
     }
@@ -1791,7 +2350,10 @@ function renderMarkdownToPdf(
 
     // Table rows (pipe-delimited markdown tables)
     if (trimmed.startsWith('|') && trimmed.includes('|', 1)) {
-      const cells = trimmed.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+      const cells = trimmed
+        .replace(/^\||\|$/g, '')
+        .split('|')
+        .map(c => c.trim());
       // Skip separator rows (e.g., |---|---| or |:---:|:---|)
       if (cells.every(c => /^[-:]+$/.test(c))) {
         (pdf as any).__tableSepSeen = true;
@@ -1814,7 +2376,10 @@ function renderMarkdownToPdf(
       // Header = row index 0 (first row), body rows come after separator
       const isHeader = (pdf as any).__tableRowIdx === 0;
       const rowIdx: number = Math.max(0, (pdf as any).__tableRowIdx - 1);
-      const colCount = Math.max((pdf as any).__tableColCount || cells.length, 1);
+      const colCount = Math.max(
+        (pdf as any).__tableColCount || cells.length,
+        1,
+      );
       const colW = contentWidth / colCount;
       const rowH = 7;
       ensureSpace(rowH + 2);
@@ -1823,7 +2388,7 @@ function renderMarkdownToPdf(
       // contamination from prior alert callouts, code blocks, etc.
       pdf.setDrawColor(210, 218, 228); // #D2DAE4 — visible border
       pdf.setLineWidth(0.2);
-      pdf.setTextColor(31, 41, 55);    // dark gray text — always readable
+      pdf.setTextColor(31, 41, 55); // dark gray text — always readable
 
       if (isHeader) {
         pdf.setFont('helvetica', 'bold');
@@ -1856,12 +2421,17 @@ function renderMarkdownToPdf(
         }
         // Strip inline markdown (**bold**, *italic*) from table cells for clean PDF output
         const rawCell = (cells[ci] || '').substring(0, 60);
-        const cellText = rawCell.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1');
+        const cellText = rawCell
+          .replace(/\*\*(.+?)\*\*/g, '$1')
+          .replace(/\*(.+?)\*/g, '$1');
         if (cellText) {
           // Truncate text to fit within column width (with padding)
           const maxTextW = colW - 5;
           let truncated = cellText;
-          while (truncated.length > 1 && pdf.getTextWidth(truncated) > maxTextW) {
+          while (
+            truncated.length > 1 &&
+            pdf.getTextWidth(truncated) > maxTextW
+          ) {
             truncated = truncated.substring(0, truncated.length - 1);
           }
           if (truncated.length < cellText.length && truncated.length > 2) {
@@ -1971,10 +2541,15 @@ async function exportAsPdf(
       const dim = await getImageDimensions(dataUrl);
       const fit = fitImage(dim.width, dim.height, contentWidth, maxH);
       const xOffset = margin + (contentWidth - fit.width) / 2;
-      if (y + fit.height + 6 > pageHeight - 25) { pdf.addPage(); y = margin; }
+      if (y + fit.height + 6 > pageHeight - 25) {
+        pdf.addPage();
+        y = margin;
+      }
       pdf.addImage(dataUrl, 'PNG', xOffset, y, fit.width, fit.height);
       y += fit.height + 6;
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
 
   // ── Chart preview image (single chart mode) — enlarged for full visibility ──
@@ -1986,9 +2561,10 @@ async function exportAsPdf(
   function matchChartForSection(sectionTitle: string | undefined) {
     if (!sectionTitle || !images?.dashboardCharts) return undefined;
     const lower = sectionTitle.toLowerCase();
-    return images.dashboardCharts.find(c =>
-      lower.includes(c.sliceName.toLowerCase()) ||
-      c.sliceName.toLowerCase().includes(lower),
+    return images.dashboardCharts.find(
+      c =>
+        lower.includes(c.sliceName.toLowerCase()) ||
+        c.sliceName.toLowerCase().includes(lower),
     );
   }
 
@@ -2006,14 +2582,23 @@ async function exportAsPdf(
         const headingMatch = section.match(/^## (.+)/m);
         const matched = matchChartForSection(headingMatch?.[1]?.trim());
         if (matched && images.dashboardChartImages![matched.chartId]) {
-          if (y > pageHeight - 40) { pdf.addPage(); y = margin; }
-          await addChartImage(images.dashboardChartImages![matched.chartId], 140);
+          if (y > pageHeight - 40) {
+            pdf.addPage();
+            y = margin;
+          }
+          await addChartImage(
+            images.dashboardChartImages![matched.chartId],
+            140,
+          );
         }
         y = renderMarkdownToPdf(pdf, section, y, pageWidth, margin);
         y += 4;
       }
     } else {
-      if (y > pageHeight - 40) { pdf.addPage(); y = margin; }
+      if (y > pageHeight - 40) {
+        pdf.addPage();
+        y = margin;
+      }
       y = renderMarkdownToPdf(pdf, msg.content, y, pageWidth, margin);
     }
     y += 6;
@@ -2074,29 +2659,48 @@ async function exportAsDocx(
   aiInfo?: { provider?: string; model?: string },
 ) {
   const [
-    { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle, ShadingType, ImageRun, TabStopType, TabStopPosition, Header: DocxHeader, Footer: DocxFooter, PageNumber, Table, TableRow, TableCell, WidthType },
+    {
+      Document,
+      Packer,
+      Paragraph,
+      TextRun,
+      HeadingLevel,
+      AlignmentType,
+      BorderStyle,
+      ShadingType,
+      ImageRun,
+      TabStopType,
+      TabStopPosition,
+      Header: DocxHeader,
+      Footer: DocxFooter,
+      PageNumber,
+      Table,
+      TableRow,
+      TableCell,
+      WidthType,
+    },
     { saveAs },
   ] = await Promise.all([import('docx'), import('file-saver')]);
 
   // Typography constants (half-points: 22 = 11pt)
-  const BODY_SIZE = 22;      // 11pt
+  const BODY_SIZE = 22; // 11pt
   const BODY_FONT = 'Calibri';
   const HEADING_FONT = 'Calibri Light';
   const CODE_FONT = 'Consolas';
-  const CODE_SIZE = 20;      // 10pt
+  const CODE_SIZE = 20; // 10pt
 
   // Spacing (twips: 20 twips = 1pt, 240 twips = 12pt)
-  const SP_PARA_BEFORE = 80;   // 4pt
-  const SP_PARA_AFTER = 80;    // 4pt
-  const SP_H1_BEFORE = 320;    // 16pt
-  const SP_H1_AFTER = 160;     // 8pt
-  const SP_H2_BEFORE = 260;    // 13pt
-  const SP_H2_AFTER = 120;     // 6pt
-  const SP_H3_BEFORE = 200;    // 10pt
-  const SP_H3_AFTER = 80;      // 4pt
-  const SP_LIST_BEFORE = 40;   // 2pt
-  const SP_LIST_AFTER = 40;    // 2pt
-  const SP_SECTION = 300;      // 15pt — between message blocks
+  const SP_PARA_BEFORE = 80; // 4pt
+  const SP_PARA_AFTER = 80; // 4pt
+  const SP_H1_BEFORE = 320; // 16pt
+  const SP_H1_AFTER = 160; // 8pt
+  const SP_H2_BEFORE = 260; // 13pt
+  const SP_H2_AFTER = 120; // 6pt
+  const SP_H3_BEFORE = 200; // 10pt
+  const SP_H3_AFTER = 80; // 4pt
+  const SP_LIST_BEFORE = 40; // 2pt
+  const SP_LIST_AFTER = 40; // 2pt
+  const SP_SECTION = 300; // 15pt — between message blocks
 
   // Usable image width (A4 at 1" margins → ~6.27" ≈ 451pt, in EMU/pixel terms ~595px)
   const MAX_IMG_W = 580;
@@ -2109,24 +2713,49 @@ async function exportAsDocx(
     let match: RegExpExecArray | null;
     while ((match = regex.exec(text)) !== null) {
       if (match[1]) {
-        runs.push(new TextRun({ text: match[1], bold: true, size: baseSz, font: BODY_FONT }));
+        runs.push(
+          new TextRun({
+            text: match[1],
+            bold: true,
+            size: baseSz,
+            font: BODY_FONT,
+          }),
+        );
       } else if (match[2]) {
-        runs.push(new TextRun({ text: match[2], italics: true, size: baseSz, font: BODY_FONT }));
+        runs.push(
+          new TextRun({
+            text: match[2],
+            italics: true,
+            size: baseSz,
+            font: BODY_FONT,
+          }),
+        );
       } else if (match[3]) {
-        runs.push(new TextRun({
-          text: match[3], font: CODE_FONT, size: CODE_SIZE,
-          shading: { type: ShadingType.SOLID, color: 'F3F4F6' },
-        }));
+        runs.push(
+          new TextRun({
+            text: match[3],
+            font: CODE_FONT,
+            size: CODE_SIZE,
+            shading: { type: ShadingType.SOLID, color: 'F3F4F6' },
+          }),
+        );
       } else if (match[4]) {
-        runs.push(new TextRun({ text: match[4], size: baseSz, font: BODY_FONT }));
+        runs.push(
+          new TextRun({ text: match[4], size: baseSz, font: BODY_FONT }),
+        );
       }
     }
-    return runs.length ? runs : [new TextRun({ text, size: baseSz, font: BODY_FONT })];
+    return runs.length
+      ? runs
+      : [new TextRun({ text, size: baseSz, font: BODY_FONT })];
   }
 
   /** Convert markdown text to docx Paragraph objects with professional spacing. */
   function markdownToDocx(text: string) {
-    const paragraphs: (InstanceType<typeof Paragraph> | InstanceType<typeof Table>)[] = [];
+    const paragraphs: (
+      | InstanceType<typeof Paragraph>
+      | InstanceType<typeof Table>
+    )[] = [];
     const lines = proofreadInsight(text).split('\n');
     let inCodeBlock = false;
 
@@ -2136,30 +2765,47 @@ async function exportAsDocx(
       if (tableRows.length === 0) return;
       const colCount = Math.max(...tableRows.map(r => r.length));
       const colWidthPct = Math.floor(100 / Math.max(colCount, 1));
-      const rows = tableRows.map((cells, ri) =>
-        new TableRow({
-          children: Array.from({ length: colCount }, (_, ci) =>
-            new TableCell({
-              children: [new Paragraph({
-                children: ri === 0
-                  ? [new TextRun({ text: cells[ci] || '', bold: true, size: BODY_SIZE - 2, font: BODY_FONT, color: '1F2937' })]
-                  : parseInline(cells[ci] || '', BODY_SIZE - 2),
-                spacing: { before: 20, after: 20 },
-              })],
-              width: { size: colWidthPct, type: WidthType.PERCENTAGE },
-              shading: ri === 0
-                ? { type: ShadingType.SOLID, color: 'E6EAF0' }
-                : ri % 2 === 0
-                  ? { type: ShadingType.SOLID, color: 'F8FAFC' }
-                  : undefined,
-            }),
-          ),
+      const rows = tableRows.map(
+        (cells, ri) =>
+          new TableRow({
+            children: Array.from(
+              { length: colCount },
+              (_, ci) =>
+                new TableCell({
+                  children: [
+                    new Paragraph({
+                      children:
+                        ri === 0
+                          ? [
+                              new TextRun({
+                                text: cells[ci] || '',
+                                bold: true,
+                                size: BODY_SIZE - 2,
+                                font: BODY_FONT,
+                                color: '1F2937',
+                              }),
+                            ]
+                          : parseInline(cells[ci] || '', BODY_SIZE - 2),
+                      spacing: { before: 20, after: 20 },
+                    }),
+                  ],
+                  width: { size: colWidthPct, type: WidthType.PERCENTAGE },
+                  shading:
+                    ri === 0
+                      ? { type: ShadingType.SOLID, color: 'E6EAF0' }
+                      : ri % 2 === 0
+                        ? { type: ShadingType.SOLID, color: 'F8FAFC' }
+                        : undefined,
+                }),
+            ),
+          }),
+      );
+      paragraphs.push(
+        new Table({
+          rows,
+          width: { size: 100, type: WidthType.PERCENTAGE },
         }),
       );
-      paragraphs.push(new Table({
-        rows,
-        width: { size: 100, type: WidthType.PERCENTAGE },
-      }));
       // Space after table
       paragraphs.push(new Paragraph({ spacing: { before: 80, after: 80 } }));
       tableRows = [];
@@ -2167,21 +2813,36 @@ async function exportAsDocx(
 
     for (const line of lines) {
       const trimmed = line.trim();
-      if (trimmed.startsWith('```')) { inCodeBlock = !inCodeBlock; continue; }
+      if (trimmed.startsWith('```')) {
+        inCodeBlock = !inCodeBlock;
+        continue;
+      }
       if (inCodeBlock) {
         flushTable();
-        paragraphs.push(new Paragraph({
-          children: [new TextRun({ text: line, font: CODE_FONT, size: CODE_SIZE, color: '1E293B' })],
-          shading: { type: ShadingType.SOLID, color: 'F3F4F6' },
-          spacing: { before: 20, after: 20, line: 276 },
-          indent: { left: 200 },
-        }));
+        paragraphs.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: line,
+                font: CODE_FONT,
+                size: CODE_SIZE,
+                color: '1E293B',
+              }),
+            ],
+            shading: { type: ShadingType.SOLID, color: 'F3F4F6' },
+            spacing: { before: 20, after: 20, line: 276 },
+            indent: { left: 200 },
+          }),
+        );
         continue;
       }
 
       // Table rows (pipe-delimited)
       if (trimmed.startsWith('|') && trimmed.includes('|', 1)) {
-        const cells = trimmed.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+        const cells = trimmed
+          .replace(/^\||\|$/g, '')
+          .split('|')
+          .map(c => c.trim());
         // Skip separator rows
         if (cells.every(c => /^[-:]+$/.test(c))) continue;
         tableRows.push(cells);
@@ -2191,103 +2852,187 @@ async function exportAsDocx(
       flushTable();
 
       if (!trimmed) {
-        paragraphs.push(new Paragraph({ spacing: { before: SP_PARA_BEFORE, after: SP_PARA_AFTER } }));
+        paragraphs.push(
+          new Paragraph({
+            spacing: { before: SP_PARA_BEFORE, after: SP_PARA_AFTER },
+          }),
+        );
         continue;
       }
 
       // Alert callouts
-      const alertMatch = trimmed.match(/^\[(CRITICAL|WARNING|GOOD|INFO)\]\s*(.*)/);
+      const alertMatch = trimmed.match(
+        /^\[(CRITICAL|WARNING|GOOD|INFO)\]\s*(.*)/,
+      );
       if (alertMatch) {
         const [, tag, body] = alertMatch;
-        const colors: Record<string, { bg: string; border: string; text: string }> = {
+        const colors: Record<
+          string,
+          { bg: string; border: string; text: string }
+        > = {
           CRITICAL: { bg: 'FEF2F2', border: 'DC2626', text: '991B1B' },
-          WARNING:  { bg: 'FFFBEB', border: 'F59E0B', text: '92400E' },
-          GOOD:     { bg: 'F0FDF4', border: '16A34A', text: '166534' },
-          INFO:     { bg: 'EFF6FF', border: '3B82F6', text: '1E40AF' },
+          WARNING: { bg: 'FFFBEB', border: 'F59E0B', text: '92400E' },
+          GOOD: { bg: 'F0FDF4', border: '16A34A', text: '166534' },
+          INFO: { bg: 'EFF6FF', border: '3B82F6', text: '1E40AF' },
         };
         const c = colors[tag] || colors.INFO;
-        paragraphs.push(new Paragraph({
-          children: [
-            new TextRun({ text: `${ALERT_TAGS[tag]?.label || tag}  `, bold: true, color: c.border, size: BODY_SIZE, font: BODY_FONT }),
-            ...parseInline(body),
-          ],
-          shading: { type: ShadingType.SOLID, color: c.bg },
-          spacing: { before: 160, after: 160, line: 300 },
-          border: { left: { style: BorderStyle.SINGLE, size: 18, color: c.border, space: 8 } },
-          indent: { left: 240 },
-        }));
+        paragraphs.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `${ALERT_TAGS[tag]?.label || tag}  `,
+                bold: true,
+                color: c.border,
+                size: BODY_SIZE,
+                font: BODY_FONT,
+              }),
+              ...parseInline(body),
+            ],
+            shading: { type: ShadingType.SOLID, color: c.bg },
+            spacing: { before: 160, after: 160, line: 300 },
+            border: {
+              left: {
+                style: BorderStyle.SINGLE,
+                size: 18,
+                color: c.border,
+                space: 8,
+              },
+            },
+            indent: { left: 240 },
+          }),
+        );
         continue;
       }
 
       // Headings
       const h1 = trimmed.match(/^# (.+)/);
       if (h1) {
-        paragraphs.push(new Paragraph({
-          children: [new TextRun({ text: h1[1], bold: true, size: 32, color: '1976D2', font: HEADING_FONT })],
-          heading: HeadingLevel.HEADING_1,
-          spacing: { before: SP_H1_BEFORE, after: SP_H1_AFTER, line: 276 },
-          border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'C8D4E4', space: 4 } },
-        }));
+        paragraphs.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: h1[1],
+                bold: true,
+                size: 32,
+                color: '1976D2',
+                font: HEADING_FONT,
+              }),
+            ],
+            heading: HeadingLevel.HEADING_1,
+            spacing: { before: SP_H1_BEFORE, after: SP_H1_AFTER, line: 276 },
+            border: {
+              bottom: {
+                style: BorderStyle.SINGLE,
+                size: 4,
+                color: 'C8D4E4',
+                space: 4,
+              },
+            },
+          }),
+        );
         continue;
       }
       const h2 = trimmed.match(/^## (.+)/);
       if (h2) {
-        paragraphs.push(new Paragraph({
-          children: [new TextRun({ text: h2[1], bold: true, size: 26, color: '1976D2', font: HEADING_FONT })],
-          heading: HeadingLevel.HEADING_2,
-          spacing: { before: SP_H2_BEFORE, after: SP_H2_AFTER, line: 276 },
-        }));
+        paragraphs.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: h2[1],
+                bold: true,
+                size: 26,
+                color: '1976D2',
+                font: HEADING_FONT,
+              }),
+            ],
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: SP_H2_BEFORE, after: SP_H2_AFTER, line: 276 },
+          }),
+        );
         continue;
       }
       const h3 = trimmed.match(/^### (.+)/);
       if (h3) {
-        paragraphs.push(new Paragraph({
-          children: [new TextRun({ text: h3[1], bold: true, size: 24, color: '374151', font: HEADING_FONT })],
-          heading: HeadingLevel.HEADING_3,
-          spacing: { before: SP_H3_BEFORE, after: SP_H3_AFTER, line: 276 },
-        }));
+        paragraphs.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: h3[1],
+                bold: true,
+                size: 24,
+                color: '374151',
+                font: HEADING_FONT,
+              }),
+            ],
+            heading: HeadingLevel.HEADING_3,
+            spacing: { before: SP_H3_BEFORE, after: SP_H3_AFTER, line: 276 },
+          }),
+        );
         continue;
       }
 
       // Bullet list
       const bullet = trimmed.match(/^[\s]*[-*]\s+(.+)/);
       if (bullet) {
-        paragraphs.push(new Paragraph({
-          children: parseInline(bullet[1]),
-          bullet: { level: 0 },
-          spacing: { before: SP_LIST_BEFORE, after: SP_LIST_AFTER, line: 276 },
-        }));
+        paragraphs.push(
+          new Paragraph({
+            children: parseInline(bullet[1]),
+            bullet: { level: 0 },
+            spacing: {
+              before: SP_LIST_BEFORE,
+              after: SP_LIST_AFTER,
+              line: 276,
+            },
+          }),
+        );
         continue;
       }
 
       // Numbered list
       const num = trimmed.match(/^[\s]*(\d+)[.)]\s+(.+)/);
       if (num) {
-        paragraphs.push(new Paragraph({
-          children: [
-            new TextRun({ text: `${num[1]}. `, bold: true, size: BODY_SIZE, font: BODY_FONT }),
-            ...parseInline(num[2]),
-          ],
-          spacing: { before: SP_LIST_BEFORE, after: SP_LIST_AFTER, line: 276 },
-          indent: { left: 360 },
-        }));
+        paragraphs.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `${num[1]}. `,
+                bold: true,
+                size: BODY_SIZE,
+                font: BODY_FONT,
+              }),
+              ...parseInline(num[2]),
+            ],
+            spacing: {
+              before: SP_LIST_BEFORE,
+              after: SP_LIST_AFTER,
+              line: 276,
+            },
+            indent: { left: 360 },
+          }),
+        );
         continue;
       }
 
       // Horizontal rule
       if (/^---+$/.test(trimmed)) {
-        paragraphs.push(new Paragraph({
-          border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'D0D8E4' } },
-          spacing: { before: 160, after: 160 },
-        }));
+        paragraphs.push(
+          new Paragraph({
+            border: {
+              bottom: { style: BorderStyle.SINGLE, size: 4, color: 'D0D8E4' },
+            },
+            spacing: { before: 160, after: 160 },
+          }),
+        );
         continue;
       }
 
       // Normal paragraph
-      paragraphs.push(new Paragraph({
-        children: parseInline(trimmed),
-        spacing: { before: SP_PARA_BEFORE, after: SP_PARA_AFTER, line: 300 },
-      }));
+      paragraphs.push(
+        new Paragraph({
+          children: parseInline(trimmed),
+          spacing: { before: SP_PARA_BEFORE, after: SP_PARA_AFTER, line: 300 },
+        }),
+      );
     }
     flushTable(); // flush any trailing table
     return paragraphs;
@@ -2303,12 +3048,19 @@ async function exportAsDocx(
   }
 
   /** Create an ImageRun preserving aspect ratio within max bounds. */
-  async function makeImageRun(dataUrl: string, maxW = MAX_IMG_W, maxH = MAX_IMG_H) {
+  async function makeImageRun(
+    dataUrl: string,
+    maxW = MAX_IMG_W,
+    maxH = MAX_IMG_H,
+  ) {
     const dim = await getImageDimensions(dataUrl);
     const fit = fitImage(dim.width, dim.height, maxW, maxH);
     return new ImageRun({
       data: dataUrlToUint8Array(dataUrl),
-      transformation: { width: Math.round(fit.width), height: Math.round(fit.height) },
+      transformation: {
+        width: Math.round(fit.width),
+        height: Math.round(fit.height),
+      },
       type: 'png',
     });
   }
@@ -2316,45 +3068,80 @@ async function exportAsDocx(
   // ── Build document content ──
   const brand = getBrandInfo();
   const brandTitle = buildExportTitle(brand, exportContext);
-  const children: (InstanceType<typeof Paragraph> | InstanceType<typeof Table>)[] = [];
+  const children: (
+    | InstanceType<typeof Paragraph>
+    | InstanceType<typeof Table>
+  )[] = [];
 
   // Title — use dynamic brand + dashboard/chart name
-  children.push(new Paragraph({
-    children: [new TextRun({ text: brandTitle, bold: true, size: 44, color: '1976D2', font: HEADING_FONT })],
-    heading: HeadingLevel.TITLE,
-    alignment: AlignmentType.LEFT,
-    spacing: { after: 60 },
-  }));
-  children.push(new Paragraph({
-    border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: '1976D2', space: 2 } },
-    spacing: { after: 120 },
-  }));
-  children.push(new Paragraph({
-    children: [
-      new TextRun({ text: `Generated: ${new Date().toLocaleString()}`, size: 18, color: '9CA3AF', italics: true, font: BODY_FONT }),
-    ],
-    spacing: { after: SP_SECTION },
-  }));
+  children.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: brandTitle,
+          bold: true,
+          size: 44,
+          color: '1976D2',
+          font: HEADING_FONT,
+        }),
+      ],
+      heading: HeadingLevel.TITLE,
+      alignment: AlignmentType.LEFT,
+      spacing: { after: 60 },
+    }),
+  );
+  children.push(
+    new Paragraph({
+      border: {
+        bottom: {
+          style: BorderStyle.SINGLE,
+          size: 8,
+          color: '1976D2',
+          space: 2,
+        },
+      },
+      spacing: { after: 120 },
+    }),
+  );
+  children.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: `Generated: ${new Date().toLocaleString()}`,
+          size: 18,
+          color: '9CA3AF',
+          italics: true,
+          font: BODY_FONT,
+        }),
+      ],
+      spacing: { after: SP_SECTION },
+    }),
+  );
 
   // Chart preview (single chart mode)
   if (images?.chartPreviewUrl) {
     try {
       const imgRun = await makeImageRun(images.chartPreviewUrl);
-      children.push(new Paragraph({
-        children: [imgRun],
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 240 },
-      }));
-    } catch { /* skip */ }
+      children.push(
+        new Paragraph({
+          children: [imgRun],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 240 },
+        }),
+      );
+    } catch {
+      /* skip */
+    }
   }
 
   /** Match a ## heading to a dashboard chart. */
   function matchChartDocx(sectionTitle: string | undefined) {
     if (!sectionTitle || !images?.dashboardCharts) return undefined;
     const lower = sectionTitle.toLowerCase();
-    return images.dashboardCharts.find(c =>
-      lower.includes(c.sliceName.toLowerCase()) ||
-      c.sliceName.toLowerCase().includes(lower),
+    return images.dashboardCharts.find(
+      c =>
+        lower.includes(c.sliceName.toLowerCase()) ||
+        c.sliceName.toLowerCase().includes(lower),
     );
   }
 
@@ -2373,13 +3160,21 @@ async function exportAsDocx(
         const matched = matchChartDocx(headingMatch?.[1]?.trim());
         if (matched && images.dashboardChartImages![matched.chartId]) {
           try {
-            const imgRun = await makeImageRun(images.dashboardChartImages![matched.chartId], MAX_IMG_W, 280);
-            children.push(new Paragraph({
-              children: [imgRun],
-              alignment: AlignmentType.CENTER,
-              spacing: { before: SP_SECTION, after: 120 },
-            }));
-          } catch { /* skip */ }
+            const imgRun = await makeImageRun(
+              images.dashboardChartImages![matched.chartId],
+              MAX_IMG_W,
+              280,
+            );
+            children.push(
+              new Paragraph({
+                children: [imgRun],
+                alignment: AlignmentType.CENTER,
+                spacing: { before: SP_SECTION, after: 120 },
+              }),
+            );
+          } catch {
+            /* skip */
+          }
         }
         children.push(...markdownToDocx(section));
       }
@@ -2397,41 +3192,87 @@ async function exportAsDocx(
         },
       },
     },
-    sections: [{
-      properties: {
-        page: {
-          margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
+    sections: [
+      {
+        properties: {
+          page: {
+            margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
+          },
         },
-      },
-      headers: {
-        default: new DocxHeader({
-          children: [new Paragraph({
-            children: [new TextRun({ text: brandTitle, size: 16, color: 'B0B8C8', italics: true, font: BODY_FONT })],
-            alignment: AlignmentType.RIGHT,
-          })],
-        }),
-      },
-      footers: {
-        default: new DocxFooter({
-          children: [new Paragraph({
+        headers: {
+          default: new DocxHeader({
             children: [
-              new TextRun({ text: aiInfo?.provider ? `AI Insights \u2014 ${aiInfo.provider}${aiInfo.model ? ` / ${aiInfo.model}` : ''}` : 'AI Insights', size: 16, color: '9CA3AF', font: BODY_FONT }),
-              new TextRun({ text: '\t', size: 16 }),
-              new TextRun({ text: '\t', size: 16 }),
-              new TextRun({ children: [PageNumber.CURRENT], size: 16, color: '9CA3AF', font: BODY_FONT }),
-              new TextRun({ text: ' / ', size: 16, color: '9CA3AF', font: BODY_FONT }),
-              new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 16, color: '9CA3AF', font: BODY_FONT }),
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: brandTitle,
+                    size: 16,
+                    color: 'B0B8C8',
+                    italics: true,
+                    font: BODY_FONT,
+                  }),
+                ],
+                alignment: AlignmentType.RIGHT,
+              }),
             ],
-            tabStops: [
-              { type: TabStopType.CENTER, position: TabStopPosition.MAX / 2 },
-              { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
+          }),
+        },
+        footers: {
+          default: new DocxFooter({
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: aiInfo?.provider
+                      ? `AI Insights \u2014 ${aiInfo.provider}${aiInfo.model ? ` / ${aiInfo.model}` : ''}`
+                      : 'AI Insights',
+                    size: 16,
+                    color: '9CA3AF',
+                    font: BODY_FONT,
+                  }),
+                  new TextRun({ text: '\t', size: 16 }),
+                  new TextRun({ text: '\t', size: 16 }),
+                  new TextRun({
+                    children: [PageNumber.CURRENT],
+                    size: 16,
+                    color: '9CA3AF',
+                    font: BODY_FONT,
+                  }),
+                  new TextRun({
+                    text: ' / ',
+                    size: 16,
+                    color: '9CA3AF',
+                    font: BODY_FONT,
+                  }),
+                  new TextRun({
+                    children: [PageNumber.TOTAL_PAGES],
+                    size: 16,
+                    color: '9CA3AF',
+                    font: BODY_FONT,
+                  }),
+                ],
+                tabStops: [
+                  {
+                    type: TabStopType.CENTER,
+                    position: TabStopPosition.MAX / 2,
+                  },
+                  { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
+                ],
+                border: {
+                  top: {
+                    style: BorderStyle.SINGLE,
+                    size: 2,
+                    color: 'D0D8E4',
+                    space: 4,
+                  },
+                },
+              }),
             ],
-            border: { top: { style: BorderStyle.SINGLE, size: 2, color: 'D0D8E4', space: 4 } },
-          })],
-        }),
+          }),
+        },
+        children,
       },
-      children,
-    }],
+    ],
   });
 
   const blob = await Packer.toBlob(doc);
@@ -2453,8 +3294,8 @@ async function exportAsPptx(
   aiInfo?: { provider?: string; model?: string },
 ) {
   const PptxGenJSModule = await import('pptxgenjs');
-  const PptxGenJS =
-    (PptxGenJSModule.default || PptxGenJSModule) as new () => any;
+  const PptxGenJS = (PptxGenJSModule.default ||
+    PptxGenJSModule) as new () => any;
 
   const pptx = new PptxGenJS();
   pptx.layout = 'LAYOUT_WIDE'; // 13.33" × 7.5"
@@ -2480,38 +3321,59 @@ async function exportAsPptx(
   const CONTENT_H = SLIDE_H - 1.95;
 
   // Alert colours for PPTX
-  const PPTX_ALERT: Record<string, { label: string; color: string; bg: string }> = {
+  const PPTX_ALERT: Record<
+    string,
+    { label: string; color: string; bg: string }
+  > = {
     CRITICAL: { label: 'Critical', color: 'DC2626', bg: 'FEF2F2' },
-    WARNING:  { label: 'Warning',  color: 'D97706', bg: 'FFFBEB' },
-    GOOD:     { label: 'Good',     color: '16A34A', bg: 'F0FDF4' },
-    INFO:     { label: 'Info',     color: '3B82F6', bg: 'EFF6FF' },
+    WARNING: { label: 'Warning', color: 'D97706', bg: 'FFFBEB' },
+    GOOD: { label: 'Good', color: '16A34A', bg: 'F0FDF4' },
+    INFO: { label: 'Info', color: '3B82F6', bg: 'EFF6FF' },
   };
 
   /** Apply the professional master layout to a content slide. */
   function applyMaster(slide: any, title: string, slideNum?: string) {
     // Top accent bar
     slide.addShape('rect', {
-      x: 0, y: 0, w: SLIDE_W, h: 0.08,
+      x: 0,
+      y: 0,
+      w: SLIDE_W,
+      h: 0.08,
       fill: { color: BRAND },
     });
     // Header background (taller to fit 24pt title)
     slide.addShape('rect', {
-      x: 0, y: 0.08, w: SLIDE_W, h: 0.82,
+      x: 0,
+      y: 0.08,
+      w: SLIDE_W,
+      h: 0.82,
       fill: { color: LIGHT_BG },
     });
     // Header divider line
     slide.addShape('line', {
-      x: 0, y: 0.9, w: SLIDE_W, h: 0,
+      x: 0,
+      y: 0.9,
+      w: SLIDE_W,
+      h: 0,
       line: { color: 'D0D8E4', width: 0.5 },
     });
     // Slide title in header — insight-led titles (6×6 rule: visible from back of room)
     slide.addText(title, {
-      x: 0.6, y: 0.12, w: 11.5, h: 0.6,
-      fontSize: 24, bold: true, color: BRAND, fontFace: FONT,
+      x: 0.6,
+      y: 0.12,
+      w: 11.5,
+      h: 0.6,
+      fontSize: 24,
+      bold: true,
+      color: BRAND,
+      fontFace: FONT,
     });
     // Footer separator
     slide.addShape('line', {
-      x: 0.5, y: SLIDE_H - 0.5, w: SLIDE_W - 1, h: 0,
+      x: 0.5,
+      y: SLIDE_H - 0.5,
+      w: SLIDE_W - 1,
+      h: 0,
       line: { color: 'D0D8E4', width: 0.5 },
     });
     // Footer text
@@ -2519,13 +3381,24 @@ async function exportAsPptx(
       ? `${brandTitle} — AI Insights — ${aiInfo.provider}${aiInfo.model ? ` / ${aiInfo.model}` : ''}`
       : `${brandTitle} — AI Insights`;
     slide.addText(pptxFooter, {
-      x: 0.6, y: SLIDE_H - 0.45, w: 8, h: 0.3,
-      fontSize: 8, color: GRAY, fontFace: FONT,
+      x: 0.6,
+      y: SLIDE_H - 0.45,
+      w: 8,
+      h: 0.3,
+      fontSize: 8,
+      color: GRAY,
+      fontFace: FONT,
     });
     if (slideNum) {
       slide.addText(slideNum, {
-        x: SLIDE_W - 1.5, y: SLIDE_H - 0.45, w: 1, h: 0.3,
-        fontSize: 8, color: GRAY, fontFace: FONT, align: 'right',
+        x: SLIDE_W - 1.5,
+        y: SLIDE_H - 0.45,
+        w: 1,
+        h: 0.3,
+        fontSize: 8,
+        color: GRAY,
+        fontFace: FONT,
+        align: 'right',
       });
     }
   }
@@ -2548,7 +3421,9 @@ async function exportAsPptx(
       const xOff = (SLIDE_W - wIn) / 2;
       const yOff = 1.0 + (maxH - hIn) / 2;
       slide.addImage({ data: dataUrl, x: xOff, y: yOff, w: wIn, h: hIn });
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
 
   /** Parse inline markdown **bold**, *italic*, `code` into pptxgenjs text objects. */
@@ -2557,35 +3432,85 @@ async function exportAsPptx(
     baseFontSize: number,
     baseColor: string,
   ): Array<{ text: string; options: Record<string, unknown> }> {
-    const segments: Array<{ text: string; options: Record<string, unknown> }> = [];
-    const regex = /\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|([^*`]+)/g;
+    const segments: Array<{ text: string; options: Record<string, unknown> }> =
+      [];
+    const regex =
+      /\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|([^*`]+)/g;
     let m: RegExpExecArray | null;
     while ((m = regex.exec(text)) !== null) {
       if (m[1]) {
-        segments.push({ text: m[1], options: { fontSize: baseFontSize, bold: true, italic: true, color: baseColor, fontFace: FONT } });
+        segments.push({
+          text: m[1],
+          options: {
+            fontSize: baseFontSize,
+            bold: true,
+            italic: true,
+            color: baseColor,
+            fontFace: FONT,
+          },
+        });
       } else if (m[2]) {
-        segments.push({ text: m[2], options: { fontSize: baseFontSize, bold: true, color: baseColor, fontFace: FONT } });
+        segments.push({
+          text: m[2],
+          options: {
+            fontSize: baseFontSize,
+            bold: true,
+            color: baseColor,
+            fontFace: FONT,
+          },
+        });
       } else if (m[3]) {
-        segments.push({ text: m[3], options: { fontSize: baseFontSize, italic: true, color: baseColor, fontFace: FONT } });
+        segments.push({
+          text: m[3],
+          options: {
+            fontSize: baseFontSize,
+            italic: true,
+            color: baseColor,
+            fontFace: FONT,
+          },
+        });
       } else if (m[4]) {
-        segments.push({ text: m[4], options: { fontSize: baseFontSize - 1, color: '374151', fontFace: 'Consolas' } });
+        segments.push({
+          text: m[4],
+          options: {
+            fontSize: baseFontSize - 1,
+            color: '374151',
+            fontFace: 'Consolas',
+          },
+        });
       } else if (m[5]) {
-        segments.push({ text: m[5], options: { fontSize: baseFontSize, color: baseColor, fontFace: FONT } });
+        segments.push({
+          text: m[5],
+          options: { fontSize: baseFontSize, color: baseColor, fontFace: FONT },
+        });
       }
     }
-    if (!segments.length) segments.push({ text, options: { fontSize: baseFontSize, color: baseColor, fontFace: FONT } });
+    if (!segments.length)
+      segments.push({
+        text,
+        options: { fontSize: baseFontSize, color: baseColor, fontFace: FONT },
+      });
     return segments;
   }
 
   /** Parse markdown into structured slide content blocks. */
   type SlideBlock =
-    | { type: 'text'; parts: Array<{ text: string; options: Record<string, unknown> }> }
+    | {
+        type: 'text';
+        parts: Array<{ text: string; options: Record<string, unknown> }>;
+      }
     | { type: 'table'; rows: string[][] };
 
-  function markdownToSlideBlocks(text: string, skipFirstH2 = false): SlideBlock[] {
+  function markdownToSlideBlocks(
+    text: string,
+    skipFirstH2 = false,
+  ): SlideBlock[] {
     const blocks: SlideBlock[] = [];
     const lines = proofreadInsight(text).split('\n');
-    let currentParts: Array<{ text: string; options: Record<string, unknown> }> = [];
+    let currentParts: Array<{
+      text: string;
+      options: Record<string, unknown>;
+    }> = [];
     let tableRows: string[][] = [];
     let inCodeBlock = false;
     let skippedFirstH2 = false;
@@ -2607,21 +3532,32 @@ async function exportAsPptx(
       const trimmed = lines[li].trim();
 
       // Code blocks — render as monospace text
-      if (trimmed.startsWith('```')) { inCodeBlock = !inCodeBlock; continue; }
+      if (trimmed.startsWith('```')) {
+        inCodeBlock = !inCodeBlock;
+        continue;
+      }
       if (inCodeBlock) {
-        currentParts.push({ text: `${trimmed}\n`, options: { fontSize: 11, color: '374151', fontFace: 'Consolas' } });
+        currentParts.push({
+          text: `${trimmed}\n`,
+          options: { fontSize: 11, color: '374151', fontFace: 'Consolas' },
+        });
         continue;
       }
 
       // Table rows
       if (trimmed.startsWith('|') && trimmed.includes('|', 1)) {
-        const cells = trimmed.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+        const cells = trimmed
+          .replace(/^\||\|$/g, '')
+          .split('|')
+          .map(c => c.trim());
         if (cells.every(c => /^[-:]+$/.test(c))) continue;
         flushParts();
         tableRows.push(cells);
         continue;
       }
-      if (tableRows.length) { flushTable(); }
+      if (tableRows.length) {
+        flushTable();
+      }
 
       if (!trimmed) {
         currentParts.push({ text: '\n', options: { fontSize: 8 } });
@@ -2629,21 +3565,37 @@ async function exportAsPptx(
       }
 
       // Alert callouts — with multi-line body support
-      const alertMatch = trimmed.match(/^\[(CRITICAL|WARNING|GOOD|INFO)\]\s*(.*)/);
+      const alertMatch = trimmed.match(
+        /^\[(CRITICAL|WARNING|GOOD|INFO)\]\s*(.*)/,
+      );
       if (alertMatch) {
         const [, tag, sameLine] = alertMatch;
         const bodyParts: string[] = [];
         if (sameLine.trim()) bodyParts.push(sameLine.trim());
         while (li + 1 < lines.length) {
           const nextTrimmed = lines[li + 1].trim();
-          if (!nextTrimmed || /^\[(CRITICAL|WARNING|GOOD|INFO)\]/.test(nextTrimmed) || /^#{1,3} /.test(nextTrimmed)) break;
+          if (
+            !nextTrimmed ||
+            /^\[(CRITICAL|WARNING|GOOD|INFO)\]/.test(nextTrimmed) ||
+            /^#{1,3} /.test(nextTrimmed)
+          )
+            break;
           bodyParts.push(nextTrimmed);
           li++;
         }
         const body = bodyParts.join(' ');
         const a = PPTX_ALERT[tag] || PPTX_ALERT.INFO;
         currentParts.push({ text: '\n', options: { fontSize: 8 } });
-        currentParts.push({ text: ` ${a.label} `, options: { fontSize: 18, bold: true, color: 'FFFFFF', highlight: a.color, fontFace: FONT } });
+        currentParts.push({
+          text: ` ${a.label} `,
+          options: {
+            fontSize: 18,
+            bold: true,
+            color: 'FFFFFF',
+            highlight: a.color,
+            fontFace: FONT,
+          },
+        });
         currentParts.push(...parseInlinePptx(`  ${body}\n`, 20, DARK));
         continue;
       }
@@ -2652,7 +3604,10 @@ async function exportAsPptx(
       const h1 = trimmed.match(/^# (.+)/);
       if (h1) {
         currentParts.push({ text: '\n', options: { fontSize: 8 } });
-        currentParts.push({ text: `${h1[1]}\n`, options: { fontSize: 24, bold: true, color: BRAND, fontFace: FONT } });
+        currentParts.push({
+          text: `${h1[1]}\n`,
+          options: { fontSize: 24, bold: true, color: BRAND, fontFace: FONT },
+        });
         continue;
       }
       const h2 = trimmed.match(/^## (.+)/);
@@ -2663,20 +3618,29 @@ async function exportAsPptx(
           continue;
         }
         currentParts.push({ text: '\n', options: { fontSize: 8 } });
-        currentParts.push({ text: `${h2[1]}\n`, options: { fontSize: 28, bold: true, color: BRAND, fontFace: FONT } });
+        currentParts.push({
+          text: `${h2[1]}\n`,
+          options: { fontSize: 28, bold: true, color: BRAND, fontFace: FONT },
+        });
         continue;
       }
       const h3 = trimmed.match(/^### (.+)/);
       if (h3) {
         currentParts.push({ text: '\n', options: { fontSize: 8 } });
-        currentParts.push({ text: `${h3[1]}\n`, options: { fontSize: 24, bold: true, color: DARK, fontFace: FONT } });
+        currentParts.push({
+          text: `${h3[1]}\n`,
+          options: { fontSize: 24, bold: true, color: DARK, fontFace: FONT },
+        });
         continue;
       }
 
       // Bullet list — preserve bold/italic (6×6 rule: 20pt for readability)
       const bullet = trimmed.match(/^[-*]\s+(.+)/);
       if (bullet) {
-        currentParts.push({ text: '   \u2022  ', options: { fontSize: 20, color: DARK, fontFace: FONT } });
+        currentParts.push({
+          text: '   \u2022  ',
+          options: { fontSize: 20, color: DARK, fontFace: FONT },
+        });
         currentParts.push(...parseInlinePptx(bullet[1], 20, DARK));
         currentParts.push({ text: '\n', options: { fontSize: 20 } });
         continue;
@@ -2685,7 +3649,10 @@ async function exportAsPptx(
       // Numbered list
       const num = trimmed.match(/^(\d+)[.)]\s+(.+)/);
       if (num) {
-        currentParts.push({ text: `   ${num[1]}.  `, options: { fontSize: 20, bold: true, color: DARK, fontFace: FONT } });
+        currentParts.push({
+          text: `   ${num[1]}.  `,
+          options: { fontSize: 20, bold: true, color: DARK, fontFace: FONT },
+        });
         currentParts.push(...parseInlinePptx(num[2], 20, DARK));
         currentParts.push({ text: '\n', options: { fontSize: 20 } });
         continue;
@@ -2730,28 +3697,31 @@ async function exportAsPptx(
           PptxBorderProps,
           PptxBorderProps,
           PptxBorderProps,
-        ] = [
-          BORDER_STYLE,
-          BORDER_STYLE,
-          BORDER_STYLE,
-          BORDER_STYLE,
-        ];
+        ] = [BORDER_STYLE, BORDER_STYLE, BORDER_STYLE, BORDER_STYLE];
         const tblRows: PptxTableRow[] = block.rows.map((cells, ri) =>
-          Array.from({ length: colCount }, (_, ci): PptxTableCell => ({
-            text: (cells[ci] || '')
-              .replace(/\*\*(.+?)\*\*/g, '$1')
-              .replace(/\*(.+?)\*/g, '$1'),
-            options: {
-              fontSize: ri === 0 ? 16 : 14,
-              bold: ri === 0,
-              color: DARK,
-              fontFace: FONT,
-              fill: ri === 0 ? { color: 'E6EAF0' } : ri % 2 === 0 ? { color: 'F8FAFC' } : undefined,
-              border: CELL_BORDER,
-              valign: 'middle' as const,
-              margin: [3, 6, 3, 6],
-            },
-          })),
+          Array.from(
+            { length: colCount },
+            (_, ci): PptxTableCell => ({
+              text: (cells[ci] || '')
+                .replace(/\*\*(.+?)\*\*/g, '$1')
+                .replace(/\*(.+?)\*/g, '$1'),
+              options: {
+                fontSize: ri === 0 ? 16 : 14,
+                bold: ri === 0,
+                color: DARK,
+                fontFace: FONT,
+                fill:
+                  ri === 0
+                    ? { color: 'E6EAF0' }
+                    : ri % 2 === 0
+                      ? { color: 'F8FAFC' }
+                      : undefined,
+                border: CELL_BORDER,
+                valign: 'middle' as const,
+                margin: [3, 6, 3, 6],
+              },
+            }),
+          ),
         );
         slide.addTable(tblRows, {
           x: CONTENT_X,
@@ -2773,9 +3743,15 @@ async function exportAsPptx(
         const title = j === 0 ? label : `${label} (cont.)`;
         applyMaster(slide, title, `${slideCount}`);
         slide.addText(chunk as any, {
-          x: CONTENT_X, y: CONTENT_Y, w: CONTENT_W, h: CONTENT_H,
-          fontSize: 20, color: DARK, fontFace: FONT,
-          valign: 'top', lineSpacingMultiple: 1.3,
+          x: CONTENT_X,
+          y: CONTENT_Y,
+          w: CONTENT_W,
+          h: CONTENT_H,
+          fontSize: 20,
+          color: DARK,
+          fontFace: FONT,
+          valign: 'top',
+          lineSpacingMultiple: 1.3,
           paraSpaceAfter: 6,
         });
       }
@@ -2791,27 +3767,42 @@ async function exportAsPptx(
 
   // Full-bleed background
   titleSlide.addShape('rect', {
-    x: 0, y: 0, w: SLIDE_W, h: SLIDE_H,
+    x: 0,
+    y: 0,
+    w: SLIDE_W,
+    h: SLIDE_H,
     fill: { color: 'FFFFFF' },
   });
   // Left accent column
   titleSlide.addShape('rect', {
-    x: 0, y: 0, w: 0.5, h: SLIDE_H,
+    x: 0,
+    y: 0,
+    w: 0.5,
+    h: SLIDE_H,
     fill: { color: BRAND },
   });
   // Top accent bar
   titleSlide.addShape('rect', {
-    x: 0, y: 0, w: SLIDE_W, h: 0.12,
+    x: 0,
+    y: 0,
+    w: SLIDE_W,
+    h: 0.12,
     fill: { color: BRAND },
   });
   // Bottom accent bar
   titleSlide.addShape('rect', {
-    x: 0, y: SLIDE_H - 0.12, w: SLIDE_W, h: 0.12,
+    x: 0,
+    y: SLIDE_H - 0.12,
+    w: SLIDE_W,
+    h: 0.12,
     fill: { color: BRAND_DARK },
   });
   // Decorative background box
   titleSlide.addShape('rect', {
-    x: 0.5, y: 1.8, w: 8, h: 3.5,
+    x: 0.5,
+    y: 1.8,
+    w: 8,
+    h: 3.5,
     fill: { color: LIGHT_BG },
     rectRadius: 0.1,
   });
@@ -2820,25 +3811,52 @@ async function exportAsPptx(
   const allAssistant = messages.filter(m => m.role === 'assistant');
   const firstContent = allAssistant[0]?.content || '';
   const titleMatch = firstContent.match(/^# (.+)/m);
-  const subtitle = titleMatch?.[1]?.trim() || 'Data-Driven Analysis & Recommendations';
+  const subtitle =
+    titleMatch?.[1]?.trim() || 'Data-Driven Analysis & Recommendations';
 
   titleSlide.addText(brandTitle, {
-    x: 1.2, y: 2.2, w: 8, h: 1.2,
-    fontSize: 36, bold: true, color: BRAND_DARK, fontFace: FONT,
+    x: 1.2,
+    y: 2.2,
+    w: 8,
+    h: 1.2,
+    fontSize: 36,
+    bold: true,
+    color: BRAND_DARK,
+    fontFace: FONT,
     lineSpacingMultiple: 1.1,
   });
   titleSlide.addText(subtitle, {
-    x: 1.2, y: 3.3, w: 7, h: 0.5,
-    fontSize: 16, color: GRAY, fontFace: FONT,
+    x: 1.2,
+    y: 3.3,
+    w: 7,
+    h: 0.5,
+    fontSize: 16,
+    color: GRAY,
+    fontFace: FONT,
   });
   titleSlide.addShape('line', {
-    x: 1.2, y: 4.0, w: 3, h: 0,
+    x: 1.2,
+    y: 4.0,
+    w: 3,
+    h: 0,
     line: { color: BRAND, width: 2 },
   });
-  titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), {
-    x: 1.2, y: 4.3, w: 5, h: 0.4,
-    fontSize: 13, color: GRAY, fontFace: FONT,
-  });
+  titleSlide.addText(
+    new Date().toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }),
+    {
+      x: 1.2,
+      y: 4.3,
+      w: 5,
+      h: 0.4,
+      fontSize: 13,
+      color: GRAY,
+      fontFace: FONT,
+    },
+  );
 
   // ── Chart preview slide (single chart mode) ──
   if (images?.chartPreviewUrl) {
@@ -2850,65 +3868,103 @@ async function exportAsPptx(
   function matchChartPptx(sectionTitle: string | undefined) {
     if (!sectionTitle || !images?.dashboardCharts) return undefined;
     const lower = sectionTitle.toLowerCase();
-    return images.dashboardCharts.find(c =>
-      lower.includes(c.sliceName.toLowerCase()) ||
-      c.sliceName.toLowerCase().includes(lower),
+    return images.dashboardCharts.find(
+      c =>
+        lower.includes(c.sliceName.toLowerCase()) ||
+        c.sliceName.toLowerCase().includes(lower),
     );
   }
 
   // ── Section divider slide — visual separator between major sections ──
-  function addSectionDivider(title: string, subtitle: string, accentColor: string) {
+  function addSectionDivider(
+    title: string,
+    subtitle: string,
+    accentColor: string,
+  ) {
     slideCount += 1;
     const slide = pptx.addSlide();
     // Full background
     slide.addShape('rect', {
-      x: 0, y: 0, w: SLIDE_W, h: SLIDE_H,
+      x: 0,
+      y: 0,
+      w: SLIDE_W,
+      h: SLIDE_H,
       fill: { color: 'FFFFFF' },
     });
     // Left accent strip
     slide.addShape('rect', {
-      x: 0, y: 0, w: 0.15, h: SLIDE_H,
+      x: 0,
+      y: 0,
+      w: 0.15,
+      h: SLIDE_H,
       fill: { color: accentColor },
     });
     // Large decorative circle (top-right)
     slide.addShape('ellipse', {
-      x: SLIDE_W - 3.5, y: -1.5, w: 5, h: 5,
+      x: SLIDE_W - 3.5,
+      y: -1.5,
+      w: 5,
+      h: 5,
       fill: { color: accentColor, type: 'solid' },
       line: { color: accentColor, width: 0 },
     });
     // Smaller accent circle (bottom-left)
     slide.addShape('ellipse', {
-      x: -1, y: SLIDE_H - 2, w: 3, h: 3,
+      x: -1,
+      y: SLIDE_H - 2,
+      w: 3,
+      h: 3,
       fill: { color: LIGHT_BG, type: 'solid' },
       line: { color: 'E0E4EB', width: 1 },
     });
     // Section number / decorative bar
     slide.addShape('rect', {
-      x: 1.2, y: 2.8, w: 2.5, h: 0.06,
+      x: 1.2,
+      y: 2.8,
+      w: 2.5,
+      h: 0.06,
       fill: { color: accentColor },
     });
     // Section title
     slide.addText(title, {
-      x: 1.2, y: 3.0, w: 9, h: 1.2,
-      fontSize: 36, bold: true, color: DARK, fontFace: FONT,
+      x: 1.2,
+      y: 3.0,
+      w: 9,
+      h: 1.2,
+      fontSize: 36,
+      bold: true,
+      color: DARK,
+      fontFace: FONT,
     });
     // Subtitle
     slide.addText(subtitle, {
-      x: 1.2, y: 4.1, w: 8, h: 0.6,
-      fontSize: 20, color: GRAY, fontFace: FONT,
+      x: 1.2,
+      y: 4.1,
+      w: 8,
+      h: 0.6,
+      fontSize: 20,
+      color: GRAY,
+      fontFace: FONT,
     });
     // Footer
     const dividerFooter = aiInfo?.provider
       ? `${brandTitle} — AI Insights — ${aiInfo.provider}${aiInfo.model ? ` / ${aiInfo.model}` : ''}`
       : `${brandTitle} — AI Insights`;
     slide.addText(dividerFooter, {
-      x: 0.6, y: SLIDE_H - 0.45, w: 8, h: 0.3,
-      fontSize: 8, color: GRAY, fontFace: FONT,
+      x: 0.6,
+      y: SLIDE_H - 0.45,
+      w: 8,
+      h: 0.3,
+      fontSize: 8,
+      color: GRAY,
+      fontFace: FONT,
     });
   }
 
   /** Add a visual KPI summary slide with colored stat boxes (dashboard overview). */
-  function addDashboardOverviewSlide(charts: { sliceName: string; chartId: number }[]) {
+  function addDashboardOverviewSlide(
+    charts: { sliceName: string; chartId: number }[],
+  ) {
     slideCount += 1;
     const slide = pptx.addSlide();
     applyMaster(slide, 'Dashboard Overview', `${slideCount}`);
@@ -2917,9 +3973,19 @@ async function exportAsPptx(
     const rows = count <= 4 ? 1 : 2;
     const boxW = Math.min(2.8, (CONTENT_W - (cols - 1) * 0.3) / cols);
     const boxH = 1.4;
-    const startX = CONTENT_X + (CONTENT_W - (cols * boxW + (cols - 1) * 0.3)) / 2;
+    const startX =
+      CONTENT_X + (CONTENT_W - (cols * boxW + (cols - 1) * 0.3)) / 2;
     const startY = CONTENT_Y + 0.5;
-    const chartColors = ['1976D2', 'E53935', '43A047', 'FB8C00', '8E24AA', '00ACC1', 'D81B60', '3949AB'];
+    const chartColors = [
+      '1976D2',
+      'E53935',
+      '43A047',
+      'FB8C00',
+      '8E24AA',
+      '00ACC1',
+      'D81B60',
+      '3949AB',
+    ];
     for (let i = 0; i < count; i++) {
       const col = i % cols;
       const row = Math.floor(i / cols);
@@ -2928,7 +3994,10 @@ async function exportAsPptx(
       const color = chartColors[i % chartColors.length];
       // Card background
       slide.addShape('roundRect', {
-        x: cx, y: cy, w: boxW, h: boxH,
+        x: cx,
+        y: cy,
+        w: boxW,
+        h: boxH,
         fill: { color: 'FFFFFF' },
         shadow: { type: 'outer', blur: 3, offset: 1, color: '00000015' },
         line: { color: 'E0E4EB', width: 0.5 },
@@ -2936,21 +4005,35 @@ async function exportAsPptx(
       });
       // Color accent bar at top of card
       slide.addShape('rect', {
-        x: cx, y: cy, w: boxW, h: 0.06,
+        x: cx,
+        y: cy,
+        w: boxW,
+        h: 0.06,
         fill: { color },
       });
       // Chart name
       slide.addText(charts[i].sliceName, {
-        x: cx + 0.15, y: cy + 0.2, w: boxW - 0.3, h: 1.0,
-        fontSize: 14, color: DARK, fontFace: FONT,
+        x: cx + 0.15,
+        y: cy + 0.2,
+        w: boxW - 0.3,
+        h: 1.0,
+        fontSize: 14,
+        color: DARK,
+        fontFace: FONT,
         valign: 'middle',
         wrap: true,
       });
     }
     // Subtitle text
     slide.addText(`${charts.length} charts analyzed in this dashboard`, {
-      x: CONTENT_X, y: startY + rows * (boxH + 0.4) + 0.3, w: CONTENT_W, h: 0.4,
-      fontSize: 16, color: GRAY, fontFace: FONT, align: 'center',
+      x: CONTENT_X,
+      y: startY + rows * (boxH + 0.4) + 0.3,
+      w: CONTENT_W,
+      h: 0.4,
+      fontSize: 16,
+      color: GRAY,
+      fontFace: FONT,
+      align: 'center',
     });
   }
 
@@ -2984,13 +4067,33 @@ async function exportAsPptx(
         const titleLower = sectionTitle.toLowerCase();
         if (titleLower.includes('executive summary') && !sectionDividers.exec) {
           sectionDividers.exec = true;
-          addSectionDivider('Executive Summary', 'Key findings and strategic overview', BRAND);
-        } else if ((titleLower.includes('detailed analysis') || titleLower.includes('chart by chart')) && !sectionDividers.detail) {
+          addSectionDivider(
+            'Executive Summary',
+            'Key findings and strategic overview',
+            BRAND,
+          );
+        } else if (
+          (titleLower.includes('detailed analysis') ||
+            titleLower.includes('chart by chart')) &&
+          !sectionDividers.detail
+        ) {
           sectionDividers.detail = true;
-          addSectionDivider('Detailed Analysis', 'Chart-by-chart breakdown with key insights', '43A047');
-        } else if ((titleLower.includes('recommendation') || titleLower.includes('action')) && !sectionDividers.action) {
+          addSectionDivider(
+            'Detailed Analysis',
+            'Chart-by-chart breakdown with key insights',
+            '43A047',
+          );
+        } else if (
+          (titleLower.includes('recommendation') ||
+            titleLower.includes('action')) &&
+          !sectionDividers.action
+        ) {
           sectionDividers.action = true;
-          addSectionDivider('Action Recommendations', 'Prioritized next steps based on the analysis', 'E53935');
+          addSectionDivider(
+            'Action Recommendations',
+            'Prioritized next steps based on the analysis',
+            'E53935',
+          );
         }
       }
 
@@ -3011,10 +4114,7 @@ async function exportAsPptx(
       // skipFirstH2=true: the ## heading is already used as slide header by applyMaster
       const blocks = markdownToSlideBlocks(section, !!sectionTitle);
       if (blocks.length > 0) {
-        renderBlocksToSlides(
-          blocks,
-          sectionTitle || `Insight ${idx + 1}`,
-        );
+        renderBlocksToSlides(blocks, sectionTitle || `Insight ${idx + 1}`);
       }
     }
   }
@@ -3043,11 +4143,17 @@ export default function AIInsightPanel({
   showHistory = true,
   chartNodeSelector,
   dashboardCharts,
+  isPublic = false,
 }: Props) {
   const { addDangerToast } = useToasts();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(true);
-  useEffect(() => () => { mountedRef.current = false; }, []);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
 
   const [capabilities, setCapabilities] = useState<AICapabilities | null>(null);
   const [providerId, setProviderId] = useState('');
@@ -3137,7 +4243,9 @@ export default function AIInsightPanel({
   };
   const [martTables, setMartTables] = useState<MartTableInfo[]>([]);
   const [martTablesLoaded, setMartTablesLoaded] = useState(false);
-  const [expandedMartTable, setExpandedMartTable] = useState<string | null>(null);
+  const [expandedMartTable, setExpandedMartTable] = useState<string | null>(
+    null,
+  );
 
   // SQL guided inputs + multiple suggestions (SQL mode)
   const [sqlDatasetId, setSqlDatasetId] = useState<number | null>(null);
@@ -3165,7 +4273,7 @@ export default function AIInsightPanel({
 
   // Load capabilities
   useEffect(() => {
-    fetchAICapabilities(mode)
+    (isPublic ? fetchAICapabilities(mode, true) : fetchAICapabilities(mode))
       .then(data => {
         setCapabilities(data);
         if (data.enabled === false) return;
@@ -3178,11 +4286,11 @@ export default function AIInsightPanel({
           clientError.message || t('Failed to load AI capabilities'),
         );
       });
-  }, [addDangerToast, mode]);
+  }, [addDangerToast, mode, isPublic]);
 
   // Load conversation history
   useEffect(() => {
-    if (!showHistory) return;
+    if (!showHistory || isPublic) return;
     listConversations({
       mode,
       targetId: targetId ? String(targetId) : undefined,
@@ -3190,7 +4298,7 @@ export default function AIInsightPanel({
     })
       .then(setSavedConversations)
       .catch(() => {});
-  }, [mode, targetId, showHistory]);
+  }, [mode, targetId, showHistory, isPublic]);
 
   const selectedProvider = useMemo(
     () => capabilities?.providers.find(p => p.id === providerId),
@@ -3200,7 +4308,9 @@ export default function AIInsightPanel({
   useEffect(() => {
     if (!selectedProvider) return;
     if (!selectedProvider.models.includes(model)) {
-      setModel(selectedProvider.default_model || selectedProvider.models[0] || '');
+      setModel(
+        selectedProvider.default_model || selectedProvider.models[0] || '',
+      );
     }
   }, [model, selectedProvider]);
 
@@ -3250,7 +4360,7 @@ export default function AIInsightPanel({
       setStreamingText('');
 
       // Persist user message
-      const convId = await ensureConversation();
+      const convId = isPublic ? null : await ensureConversation();
       if (convId) {
         appendMessage(convId, {
           role: 'user',
@@ -3271,6 +4381,7 @@ export default function AIInsightPanel({
             context,
             conversation: conversationHistory,
             conversationId: convId,
+            isPublic,
             onChunk: (text: string) => {
               if (mountedRef.current) setStreamingText(text);
             },
@@ -3330,6 +4441,7 @@ export default function AIInsightPanel({
             metric: sqlMetrics[0] || null,
             metrics: sqlMetrics.length ? sqlMetrics : null,
             period: sqlPeriods.length ? sqlPeriods.join(',') : null,
+            isPublic,
           });
           if (!mountedRef.current) return;
           setLastResult(response);
@@ -3400,6 +4512,7 @@ export default function AIInsightPanel({
       sqlMetrics,
       sqlPeriods,
       ensureConversation,
+      isPublic,
       addDangerToast,
     ],
   );
@@ -3478,10 +4591,7 @@ export default function AIInsightPanel({
               </label>
               <label>
                 {t('Model')}
-                <select
-                  value={model}
-                  onChange={e => setModel(e.target.value)}
-                >
+                <select value={model} onChange={e => setModel(e.target.value)}>
                   {(selectedProvider?.models || []).map(m => (
                     <option key={m} value={m}>
                       {m}
@@ -3526,22 +4636,24 @@ export default function AIInsightPanel({
       )}
 
       {/* Dashboard analysis mode selector */}
-      {mode === 'dashboard' && dashboardCharts && dashboardCharts.length > 0 && (
-        <DashboardModeSelector>
-          <ModeTab
-            $active={dashboardAnalysisMode === 'overall'}
-            onClick={() => setDashboardAnalysisMode('overall')}
-          >
-            {t('Overall Summary')}
-          </ModeTab>
-          <ModeTab
-            $active={dashboardAnalysisMode === 'chart_by_chart'}
-            onClick={() => setDashboardAnalysisMode('chart_by_chart')}
-          >
-            {t('Chart by Chart')}
-          </ModeTab>
-        </DashboardModeSelector>
-      )}
+      {mode === 'dashboard' &&
+        dashboardCharts &&
+        dashboardCharts.length > 0 && (
+          <DashboardModeSelector>
+            <ModeTab
+              $active={dashboardAnalysisMode === 'overall'}
+              onClick={() => setDashboardAnalysisMode('overall')}
+            >
+              {t('Overall Summary')}
+            </ModeTab>
+            <ModeTab
+              $active={dashboardAnalysisMode === 'chart_by_chart'}
+              onClick={() => setDashboardAnalysisMode('chart_by_chart')}
+            >
+              {t('Chart by Chart')}
+            </ModeTab>
+          </DashboardModeSelector>
+        )}
 
       <MainLayout>
         {showHistory && savedConversations.length > 0 && (
@@ -3565,8 +4677,7 @@ export default function AIInsightPanel({
                 onClick={() => loadConversation(conv.id)}
                 title={conv.title || `${conv.mode} — ${conv.updated_on}`}
               >
-                {conv.title ||
-                  `${conv.mode} ${conv.message_count} msgs`}
+                {conv.title || `${conv.mode} ${conv.message_count} msgs`}
               </HistoryItem>
             ))}
           </HistorySidebar>
@@ -3613,7 +4724,7 @@ export default function AIInsightPanel({
                       css={css`
                         font-size: 11px;
                         font-weight: 700;
-                        color: #6B7280;
+                        color: #6b7280;
                         text-transform: uppercase;
                         letter-spacing: 0.05em;
                         margin-bottom: 8px;
@@ -3626,9 +4737,9 @@ export default function AIInsightPanel({
                       css={css`
                         max-height: 260px;
                         overflow-y: auto;
-                        border: 1px solid #E5E7EB;
+                        border: 1px solid #e5e7eb;
                         border-radius: 8px;
-                        background: #FAFAFA;
+                        background: #fafafa;
                       `}
                     >
                       {martTables.map(tbl => (
@@ -3657,9 +4768,9 @@ export default function AIInsightPanel({
                               display: flex;
                               justify-content: space-between;
                               align-items: center;
-                              border-bottom: 1px solid #F3F4F6;
+                              border-bottom: 1px solid #f3f4f6;
                               &:hover {
-                                background: #EFF6FF;
+                                background: #eff6ff;
                               }
                             `}
                           >
@@ -3668,8 +4779,8 @@ export default function AIInsightPanel({
                                 css={css`
                                   display: inline-block;
                                   padding: 1px 6px;
-                                  background: #DBEAFE;
-                                  color: #1D4ED8;
+                                  background: #dbeafe;
+                                  color: #1d4ed8;
                                   border-radius: 4px;
                                   font-size: 10px;
                                   font-weight: 700;
@@ -3691,7 +4802,7 @@ export default function AIInsightPanel({
                                 <span
                                   css={css`
                                     font-size: 10px;
-                                    color: #9CA3AF;
+                                    color: #9ca3af;
                                     margin-left: 6px;
                                   `}
                                 >
@@ -3702,7 +4813,7 @@ export default function AIInsightPanel({
                             <span
                               css={css`
                                 font-size: 10px;
-                                color: #9CA3AF;
+                                color: #9ca3af;
                               `}
                             >
                               {tbl.column_count} cols{' '}
@@ -3715,15 +4826,15 @@ export default function AIInsightPanel({
                             <div
                               css={css`
                                 padding: 6px 12px 10px 28px;
-                                background: #F9FAFB;
-                                border-bottom: 1px solid #E5E7EB;
+                                background: #f9fafb;
+                                border-bottom: 1px solid #e5e7eb;
                               `}
                             >
                               {tbl.description && (
                                 <div
                                   css={css`
                                     font-size: 11px;
-                                    color: #6B7280;
+                                    color: #6b7280;
                                     font-style: italic;
                                     margin-bottom: 6px;
                                   `}
@@ -3745,7 +4856,7 @@ export default function AIInsightPanel({
                                       display: inline-block;
                                       padding: 2px 7px;
                                       background: #fff;
-                                      border: 1px solid #E5E7EB;
+                                      border: 1px solid #e5e7eb;
                                       border-radius: 4px;
                                       font-size: 10px;
                                       color: #374151;
@@ -3757,7 +4868,7 @@ export default function AIInsightPanel({
                                     {col.type && (
                                       <span
                                         css={css`
-                                          color: #9CA3AF;
+                                          color: #9ca3af;
                                           margin-left: 3px;
                                         `}
                                       >
@@ -3792,7 +4903,11 @@ export default function AIInsightPanel({
                       {dashboardCharts.map(chart => (
                         <ChartByChartCard key={chart.chartId}>
                           <ChartByChartHeader>
-                            <span css={css`flex: 1;`}>
+                            <span
+                              css={css`
+                                flex: 1;
+                              `}
+                            >
                               {chart.sliceName}
                             </span>
                             <Chip
@@ -3821,7 +4936,7 @@ export default function AIInsightPanel({
                                 css={css`
                                   padding: 20px;
                                   text-align: center;
-                                  color: #9CA3AF;
+                                  color: #9ca3af;
                                   font-size: 12px;
                                 `}
                               >
@@ -3833,7 +4948,9 @@ export default function AIInsightPanel({
                       ))}
                       <Chip
                         onClick={() => {
-                          const chartNames = dashboardCharts!.map(c => c.sliceName);
+                          const chartNames = dashboardCharts!.map(
+                            c => c.sliceName,
+                          );
                           const prompt =
                             'Analyze each chart on this dashboard one at a time within a single report. ' +
                             'For EACH chart, use a level-2 markdown heading with the EXACT chart name ' +
@@ -3855,7 +4972,7 @@ export default function AIInsightPanel({
               </EmptyChat>
             )}
 
-            {messages.map((msg) => {
+            {messages.map(msg => {
               // In chart-by-chart mode, split assistant response by ## headings
               // and insert corresponding chart images before each section
               const isChartByChartAssistant =
@@ -3875,21 +4992,36 @@ export default function AIInsightPanel({
                       const sectionTitle = headingMatch?.[1]?.trim();
                       // Find matching chart by name
                       const matched = sectionTitle
-                        ? dashboardCharts?.find(c =>
-                            sectionTitle.toLowerCase().includes(c.sliceName.toLowerCase()) ||
-                            c.sliceName.toLowerCase().includes(sectionTitle.toLowerCase()),
+                        ? dashboardCharts?.find(
+                            c =>
+                              sectionTitle
+                                .toLowerCase()
+                                .includes(c.sliceName.toLowerCase()) ||
+                              c.sliceName
+                                .toLowerCase()
+                                .includes(sectionTitle.toLowerCase()),
                           )
                         : null;
                       return (
                         <div key={si}>
                           {matched && dashboardChartImages[matched.chartId] && (
-                            <ChartByChartCard css={css`margin: 8px 0;`}>
-                              <ChartByChartHeader>{matched.sliceName}</ChartByChartHeader>
+                            <ChartByChartCard
+                              css={css`
+                                margin: 8px 0;
+                              `}
+                            >
+                              <ChartByChartHeader>
+                                {matched.sliceName}
+                              </ChartByChartHeader>
                               <ChartByChartBody>
                                 <ChartPreviewImage
                                   src={dashboardChartImages[matched.chartId]}
                                   alt={matched.sliceName}
-                                  css={css`border: none; border-radius: 0; max-height: 200px;`}
+                                  css={css`
+                                    border: none;
+                                    border-radius: 0;
+                                    max-height: 200px;
+                                  `}
                                 />
                               </ChartByChartBody>
                             </ChartByChartCard>
@@ -3916,18 +5048,29 @@ export default function AIInsightPanel({
 
               return (
                 <div key={msg.id}>
-                  {matchedChart && dashboardChartImages[matchedChart.chartId] && (
-                    <ChartByChartCard css={css`margin: 8px 0;`}>
-                      <ChartByChartHeader>{matchedChart.sliceName}</ChartByChartHeader>
-                      <ChartByChartBody>
-                        <ChartPreviewImage
-                          src={dashboardChartImages[matchedChart.chartId]}
-                          alt={matchedChart.sliceName}
-                          css={css`border: none; border-radius: 0; max-height: 200px;`}
-                        />
-                      </ChartByChartBody>
-                    </ChartByChartCard>
-                  )}
+                  {matchedChart &&
+                    dashboardChartImages[matchedChart.chartId] && (
+                      <ChartByChartCard
+                        css={css`
+                          margin: 8px 0;
+                        `}
+                      >
+                        <ChartByChartHeader>
+                          {matchedChart.sliceName}
+                        </ChartByChartHeader>
+                        <ChartByChartBody>
+                          <ChartPreviewImage
+                            src={dashboardChartImages[matchedChart.chartId]}
+                            alt={matchedChart.sliceName}
+                            css={css`
+                              border: none;
+                              border-radius: 0;
+                              max-height: 200px;
+                            `}
+                          />
+                        </ChartByChartBody>
+                      </ChartByChartCard>
+                    )}
                   <MessageBubble $isUser={msg.role === 'user'}>
                     {msg.role === 'user' ? (
                       msg.content
@@ -4060,7 +5203,8 @@ export default function AIInsightPanel({
 
             {lastResult?.execution && (
               <MessageBubble $isUser={false}>
-                <strong>{t('Query results')}</strong> ({lastResult.execution.row_count} rows)
+                <strong>{t('Query results')}</strong> (
+                {lastResult.execution.row_count} rows)
                 <SqlBlock>
                   {JSON.stringify(lastResult.execution.sample_rows, null, 2)}
                 </SqlBlock>
@@ -4073,13 +5217,40 @@ export default function AIInsightPanel({
           {messages.filter(m => m.role === 'assistant').length > 0 && (
             <ExportBar>
               <span>{t('Export')}:</span>
-              <ExportButton onClick={() => void exportAsPdf(messages, { chartPreviewUrl, dashboardChartImages, dashboardCharts }, { mode, context }, { provider: selectedProvider?.label || providerId, model })}>
+              <ExportButton
+                onClick={() =>
+                  void exportAsPdf(
+                    messages,
+                    { chartPreviewUrl, dashboardChartImages, dashboardCharts },
+                    { mode, context },
+                    { provider: selectedProvider?.label || providerId, model },
+                  )
+                }
+              >
                 PDF
               </ExportButton>
-              <ExportButton onClick={() => void exportAsDocx(messages, { chartPreviewUrl, dashboardChartImages, dashboardCharts }, { mode, context }, { provider: selectedProvider?.label || providerId, model })}>
+              <ExportButton
+                onClick={() =>
+                  void exportAsDocx(
+                    messages,
+                    { chartPreviewUrl, dashboardChartImages, dashboardCharts },
+                    { mode, context },
+                    { provider: selectedProvider?.label || providerId, model },
+                  )
+                }
+              >
                 DOCX
               </ExportButton>
-              <ExportButton onClick={() => void exportAsPptx(messages, { chartPreviewUrl, dashboardChartImages, dashboardCharts }, { mode, context }, { provider: selectedProvider?.label || providerId, model })}>
+              <ExportButton
+                onClick={() =>
+                  void exportAsPptx(
+                    messages,
+                    { chartPreviewUrl, dashboardChartImages, dashboardCharts },
+                    { mode, context },
+                    { provider: selectedProvider?.label || providerId, model },
+                  )
+                }
+              >
                 PPTX
               </ExportButton>
             </ExportBar>
@@ -4143,7 +5314,9 @@ export default function AIInsightPanel({
                     );
                   })
                   .map(c => ({
-                    label: c.dhis2?.indicator ? `${c.name} (indicator)` : c.name,
+                    label: c.dhis2?.indicator
+                      ? `${c.name} (indicator)`
+                      : c.name,
                     value: c.name,
                   }))}
                 css={{ minWidth: 180, flex: '1 1 200px' }}

@@ -6589,6 +6589,7 @@ class AIInsightService:
         context_payload: dict[str, Any] | None = None,
         mode: str | None = None,
         question: str | None = None,
+        max_tokens_override: int | None = None,
     ):
         """Generate a LocalAI response and retry with stricter guidance when needed."""
         insight_mode = _detect_insight_mode(question or "")
@@ -6620,6 +6621,7 @@ class AIInsightService:
                     messages=attempt_messages,
                     provider_id=provider_id,
                     model=model,
+                    max_tokens_override=max_tokens_override,
                 )
             except AIProviderError as ex:
                 self._raise_provider_error(
@@ -6769,8 +6771,25 @@ class AIInsightService:
     ) -> dict[str, Any]:
         from superset.ai_insights.config import AI_MODE_PUBLIC_DASHBOARD
         self._ensure_mode_access(AI_MODE_PUBLIC_DASHBOARD if public_mode else AI_MODE_DASHBOARD)
-        dashboard = DashboardDAO.get_by_id_or_slug(dashboard_id)
-        dashboard.raise_for_access()
+        if public_mode:
+            # Do not call normal dashboard permissions for an anonymous public
+            # view. A non-published (or missing) dashboard is intentionally a
+            # generic 404 so this endpoint cannot be used for enumeration.
+            from superset import db
+            from superset.models.dashboard import Dashboard
+
+            dashboard = db.session.query(Dashboard).filter(
+                Dashboard.slug == str(dashboard_id)
+            ).one_or_none()
+            if dashboard is None and str(dashboard_id).isdigit():
+                dashboard = db.session.query(Dashboard).filter(
+                    Dashboard.id == int(str(dashboard_id))
+                ).one_or_none()
+            if not dashboard or not dashboard.published:
+                raise AIInsightError("Dashboard not found", 404)
+        else:
+            dashboard = DashboardDAO.get_by_id_or_slug(dashboard_id)
+            dashboard.raise_for_access()
 
         context_payload = _sanitize_context_payload(payload.get("context"))
         if not context_payload:
@@ -6813,6 +6832,11 @@ class AIInsightService:
                     messages=messages,
                     provider_id=provider_id,
                     model=payload.get("model"),
+                    max_tokens_override=(
+                        int(get_ai_insights_config().get("public_ai_max_tokens") or 600)
+                        if public_mode
+                        else None
+                    ),
                 )
             except AIProviderError as ex:
                 self._raise_provider_error(
@@ -7182,8 +7206,22 @@ class AIInsightService:
     ) -> Generator[StreamChunk, None, None]:
         from superset.ai_insights.config import AI_MODE_PUBLIC_DASHBOARD
         self._ensure_mode_access(AI_MODE_PUBLIC_DASHBOARD if public_mode else AI_MODE_DASHBOARD)
-        dashboard = DashboardDAO.get_by_id_or_slug(dashboard_id)
-        dashboard.raise_for_access()
+        if public_mode:
+            from superset import db
+            from superset.models.dashboard import Dashboard
+
+            dashboard = db.session.query(Dashboard).filter(
+                Dashboard.slug == str(dashboard_id)
+            ).one_or_none()
+            if dashboard is None and str(dashboard_id).isdigit():
+                dashboard = db.session.query(Dashboard).filter(
+                    Dashboard.id == int(str(dashboard_id))
+                ).one_or_none()
+            if not dashboard or not dashboard.published:
+                raise AIInsightError("Dashboard not found", 404)
+        else:
+            dashboard = DashboardDAO.get_by_id_or_slug(dashboard_id)
+            dashboard.raise_for_access()
 
         context_payload = _sanitize_context_payload(payload.get("context"))
         if not context_payload:
@@ -7246,6 +7284,11 @@ class AIInsightService:
                     context_payload=context_payload,
                     mode=AI_MODE_DASHBOARD,
                     question=question,
+                    max_tokens_override=(
+                        int(get_ai_insights_config().get("public_ai_max_tokens") or 600)
+                        if public_mode
+                        else None
+                    ),
                 )
                 final_text = _proofread_generated_insight(response.text)
                 accumulated_text = final_text
@@ -7264,6 +7307,11 @@ class AIInsightService:
                     messages=messages,
                     provider_id=provider_id,
                     model=model,
+                    max_tokens_override=(
+                        int(get_ai_insights_config().get("public_ai_max_tokens") or 600)
+                        if public_mode
+                        else None
+                    ),
                 ):
                     cleaned_text = _strip_prompt_leakage(chunk.text)
                     accumulated_text += cleaned_text

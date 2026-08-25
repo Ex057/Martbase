@@ -159,7 +159,9 @@ const ProviderCard = styled(Card, {
     border-radius: ${theme.borderRadiusLG}px;
     border: 2px solid
       ${$active ? theme.colorPrimary : theme.colorBorderSecondary};
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
 
     .ant-card-body {
       padding: ${theme.sizeUnit * 3}px;
@@ -257,12 +259,9 @@ function buildDefaultModelOptions(
   return providerEntries
     .filter(([, p]) => p.enabled)
     .map(([pid, provider, preset]) => {
-      const catalogKey =
-        provider.catalog_key || preset?.catalog_key || '';
+      const catalogKey = provider.catalog_key || preset?.catalog_key || '';
       const catalogItems = modelCatalogs[catalogKey] || [];
-      const catalogMap = new Map(
-        catalogItems.map(ci => [ci.id, ci]),
-      );
+      const catalogMap = new Map(catalogItems.map(ci => [ci.id, ci]));
       return {
         label: provider.label || pid,
         options: provider.models.map(modelId => {
@@ -322,20 +321,23 @@ export default function AIManagement() {
         [string, AIProviderConfig, ProviderPreset | undefined]
       >;
     }
-    return Object.entries(settings.providers).map(([providerId, provider]) => [
-      providerId,
-      normalizeProviderForUI(
-        providerId,
-        provider,
-        providerPresetMap.get(providerId),
-        payload?.model_catalogs?.[
-          provider.catalog_key ||
-            providerPresetMap.get(providerId)?.catalog_key ||
-            ''
-        ],
-      ),
-      providerPresetMap.get(providerId),
-    ] as [string, AIProviderConfig, ProviderPreset | undefined]);
+    return Object.entries(settings.providers).map(
+      ([providerId, provider]) =>
+        [
+          providerId,
+          normalizeProviderForUI(
+            providerId,
+            provider,
+            providerPresetMap.get(providerId),
+            payload?.model_catalogs?.[
+              provider.catalog_key ||
+                providerPresetMap.get(providerId)?.catalog_key ||
+                ''
+            ],
+          ),
+          providerPresetMap.get(providerId),
+        ] as [string, AIProviderConfig, ProviderPreset | undefined],
+    );
   }, [payload, providerPresetMap]);
 
   const enabledProviders = providerEntries.filter(
@@ -345,10 +347,7 @@ export default function AIManagement() {
   const defaultModelOptions = useMemo(
     () =>
       payload
-        ? buildDefaultModelOptions(
-            providerEntries,
-            payload.model_catalogs,
-          )
+        ? buildDefaultModelOptions(providerEntries, payload.model_catalogs)
         : [],
     [providerEntries, payload],
   );
@@ -481,7 +480,10 @@ export default function AIManagement() {
               <Title level={3} style={{ margin: 0 }}>
                 {t('AI Management')}
               </Title>
-              <Paragraph type="secondary" style={{ margin: '4px 0 0', maxWidth: 720 }}>
+              <Paragraph
+                type="secondary"
+                style={{ margin: '4px 0 0', maxWidth: 720 }}
+              >
                 {t(
                   'Manage AI providers, model access, defaults, execution policy, and test connectivity from one admin surface.',
                 )}
@@ -681,14 +683,10 @@ export default function AIManagement() {
                                 min={100}
                                 max={4000}
                                 style={{ width: '100%' }}
-                                value={
-                                  payload.settings.public_ai_max_tokens
-                                }
+                                value={payload.settings.public_ai_max_tokens}
                                 onChange={value =>
                                   updateSettings({
-                                    public_ai_max_tokens: Number(
-                                      value || 600,
-                                    ),
+                                    public_ai_max_tokens: Number(value || 600),
                                   })
                                 }
                               />
@@ -697,9 +695,7 @@ export default function AIManagement() {
                           <Col span={12}>
                             <Form.Item
                               label={t('Rate limit (req/min)')}
-                              extra={t(
-                                'Max requests per minute per public session.',
-                              )}
+                              extra={t('Max requests per minute per IP.')}
                             >
                               <InputNumber
                                 min={1}
@@ -737,9 +733,7 @@ export default function AIManagement() {
                                 min={5}
                                 max={180}
                                 style={{ width: '100%' }}
-                                value={
-                                  payload.settings.request_timeout_seconds
-                                }
+                                value={payload.settings.request_timeout_seconds}
                                 onChange={value =>
                                   updateSettings({
                                     request_timeout_seconds: Number(
@@ -789,14 +783,10 @@ export default function AIManagement() {
                                 min={1}
                                 max={100}
                                 style={{ width: '100%' }}
-                                value={
-                                  payload.settings.max_dashboard_charts
-                                }
+                                value={payload.settings.max_dashboard_charts}
                                 onChange={value =>
                                   updateSettings({
-                                    max_dashboard_charts: Number(
-                                      value || 12,
-                                    ),
+                                    max_dashboard_charts: Number(value || 12),
                                   })
                                 }
                               />
@@ -829,9 +819,7 @@ export default function AIManagement() {
                                 min={1}
                                 max={5000}
                                 style={{ width: '100%' }}
-                                value={
-                                  payload.settings.max_generated_sql_rows
-                                }
+                                value={payload.settings.max_generated_sql_rows}
                                 onChange={value =>
                                   updateSettings({
                                     max_generated_sql_rows: Number(
@@ -850,14 +838,10 @@ export default function AIManagement() {
                                 min={1}
                                 max={100}
                                 style={{ width: '100%' }}
-                                value={
-                                  payload.settings.max_context_columns
-                                }
+                                value={payload.settings.max_context_columns}
                                 onChange={value =>
                                   updateSettings({
-                                    max_context_columns: Number(
-                                      value || 25,
-                                    ),
+                                    max_context_columns: Number(value || 25),
                                   })
                                 }
                               />
@@ -869,14 +853,10 @@ export default function AIManagement() {
                                 min={1}
                                 max={20}
                                 style={{ width: '100%' }}
-                                value={
-                                  payload.settings.max_follow_up_messages
-                                }
+                                value={payload.settings.max_follow_up_messages}
                                 onChange={value =>
                                   updateSettings({
-                                    max_follow_up_messages: Number(
-                                      value || 6,
-                                    ),
+                                    max_follow_up_messages: Number(value || 6),
                                   })
                                 }
                               />
@@ -917,40 +897,33 @@ export default function AIManagement() {
                     </Col>
                     <Col xs={24} lg={12}>
                       <Row gutter={[12, 12]}>
-                        {(['chart', 'dashboard', 'sql'] as const).map(
-                          mode => (
-                            <Col xs={24} key={mode}>
-                              <Form layout="vertical">
-                                <Form.Item
-                                  label={t('%s mode roles', mode)}
-                                >
-                                  <Select
-                                    mode="multiple"
-                                    value={
-                                      payload.settings.mode_roles?.[mode] ||
-                                      []
-                                    }
-                                    options={payload.role_names.map(
-                                      role => ({
-                                        label: role,
-                                        value: role,
-                                      }),
-                                    )}
-                                    onChange={value => {
-                                      const selectedRoles = toStringArray(value);
-                                      updateSettings({
-                                        mode_roles: {
-                                          ...payload.settings.mode_roles,
-                                          [mode]: selectedRoles,
-                                        },
-                                      });
-                                    }}
-                                  />
-                                </Form.Item>
-                              </Form>
-                            </Col>
-                          ),
-                        )}
+                        {(['chart', 'dashboard', 'sql'] as const).map(mode => (
+                          <Col xs={24} key={mode}>
+                            <Form layout="vertical">
+                              <Form.Item label={t('%s mode roles', mode)}>
+                                <Select
+                                  mode="multiple"
+                                  value={
+                                    payload.settings.mode_roles?.[mode] || []
+                                  }
+                                  options={payload.role_names.map(role => ({
+                                    label: role,
+                                    value: role,
+                                  }))}
+                                  onChange={value => {
+                                    const selectedRoles = toStringArray(value);
+                                    updateSettings({
+                                      mode_roles: {
+                                        ...payload.settings.mode_roles,
+                                        [mode]: selectedRoles,
+                                      },
+                                    });
+                                  }}
+                                />
+                              </Form.Item>
+                            </Form>
+                          </Col>
+                        ))}
                       </Row>
                     </Col>
                   </Row>
@@ -971,248 +944,226 @@ export default function AIManagement() {
                   }
                 >
                   <ProviderGrid>
-                    {providerEntries.map(
-                      ([providerId, provider, preset]) => {
-                        const catalogItems =
-                          payload.model_catalogs[
-                            provider.catalog_key ||
-                              preset?.catalog_key ||
-                              ''
-                          ] || [];
-                        const catalogOptions =
-                          catalogItems.length > 0
-                            ? buildGroupedOptions(catalogItems)
-                            : [];
-                        // Ensure every selected model appears in the
-                        // options so rc-select never triggers an
-                        // internal setState during render reconciliation.
-                        const knownValues = new Set(
-                          catalogItems.map(ci => ci.id),
-                        );
-                        const extraModels = provider.models.filter(
-                          m => !knownValues.has(m),
-                        );
-                        const modelOptions = [
-                          ...catalogOptions,
-                          ...(extraModels.length > 0
-                            ? [
-                                {
-                                  label: t('Custom'),
-                                  options: extraModels.map(m => ({
-                                    label: m,
-                                    value: m,
-                                  })),
-                                },
-                              ]
-                            : []),
-                        ];
-                        return (
-                          <ProviderCard
-                            key={providerId}
-                            $active={provider.enabled}
-                          >
-                            <ProviderHeader>
-                              <div>
-                                <Space align="center" size={8} wrap>
-                                  <Text strong>
-                                    {provider.label || providerId}
-                                  </Text>
-                                  <Tag
-                                    color={
-                                      provider.is_local ? 'gold' : 'blue'
-                                    }
-                                  >
-                                    {provider.type}
-                                  </Tag>
-                                  {provider.enabled && (
-                                    <Tag
-                                      color="green"
-                                      icon={
-                                        <Icons.CheckCircleOutlined />
-                                      }
-                                    >
-                                      {t('Enabled')}
-                                    </Tag>
-                                  )}
-                                </Space>
-                                <Paragraph
-                                  type="secondary"
-                                  style={{
-                                    marginTop: 8,
-                                    marginBottom: 0,
-                                  }}
+                    {providerEntries.map(([providerId, provider, preset]) => {
+                      const catalogItems =
+                        payload.model_catalogs[
+                          provider.catalog_key || preset?.catalog_key || ''
+                        ] || [];
+                      const catalogOptions =
+                        catalogItems.length > 0
+                          ? buildGroupedOptions(catalogItems)
+                          : [];
+                      // Ensure every selected model appears in the
+                      // options so rc-select never triggers an
+                      // internal setState during render reconciliation.
+                      const knownValues = new Set(
+                        catalogItems.map(ci => ci.id),
+                      );
+                      const extraModels = provider.models.filter(
+                        m => !knownValues.has(m),
+                      );
+                      const modelOptions = [
+                        ...catalogOptions,
+                        ...(extraModels.length > 0
+                          ? [
+                              {
+                                label: t('Custom'),
+                                options: extraModels.map(m => ({
+                                  label: m,
+                                  value: m,
+                                })),
+                              },
+                            ]
+                          : []),
+                      ];
+                      return (
+                        <ProviderCard
+                          key={providerId}
+                          $active={provider.enabled}
+                        >
+                          <ProviderHeader>
+                            <div>
+                              <Space align="center" size={8} wrap>
+                                <Text strong>
+                                  {provider.label || providerId}
+                                </Text>
+                                <Tag
+                                  color={provider.is_local ? 'gold' : 'blue'}
                                 >
-                                  {preset?.description ||
-                                    t('Configured AI provider')}
-                                </Paragraph>
-                              </div>
-                              <Switch
-                                checked={provider.enabled}
-                                onChange={checked =>
+                                  {provider.type}
+                                </Tag>
+                                {provider.enabled && (
+                                  <Tag
+                                    color="green"
+                                    icon={<Icons.CheckCircleOutlined />}
+                                  >
+                                    {t('Enabled')}
+                                  </Tag>
+                                )}
+                              </Space>
+                              <Paragraph
+                                type="secondary"
+                                style={{
+                                  marginTop: 8,
+                                  marginBottom: 0,
+                                }}
+                              >
+                                {preset?.description ||
+                                  t('Configured AI provider')}
+                              </Paragraph>
+                            </div>
+                            <Switch
+                              checked={provider.enabled}
+                              onChange={checked =>
+                                updateProvider(providerId, {
+                                  enabled: checked,
+                                })
+                              }
+                            />
+                          </ProviderHeader>
+
+                          <Form layout="vertical">
+                            <Form.Item label={t('Display label')}>
+                              <Input
+                                value={provider.label || ''}
+                                onChange={event =>
                                   updateProvider(providerId, {
-                                    enabled: checked,
+                                    label: event.target.value,
                                   })
                                 }
                               />
-                            </ProviderHeader>
-
-                            <Form layout="vertical">
-                              <Form.Item label={t('Display label')}>
+                            </Form.Item>
+                            {preset?.supports_base_url !== false && (
+                              <Form.Item label={t('Base URL')}>
                                 <Input
-                                  value={provider.label || ''}
+                                  value={provider.base_url || ''}
                                   onChange={event =>
                                     updateProvider(providerId, {
-                                      label: event.target.value,
+                                      base_url: event.target.value,
                                     })
                                   }
                                 />
                               </Form.Item>
-                              {preset?.supports_base_url !== false && (
-                                <Form.Item label={t('Base URL')}>
-                                  <Input
-                                    value={provider.base_url || ''}
-                                    onChange={event =>
-                                      updateProvider(providerId, {
-                                        base_url: event.target.value,
-                                      })
-                                    }
-                                  />
-                                </Form.Item>
-                              )}
-                              {provider.type === 'openai' && (
-                                <Form.Item label={t('Organization ID')}>
-                                  <Input
-                                    value={provider.organization_id || ''}
-                                    onChange={event =>
-                                      updateProvider(providerId, {
-                                        organization_id:
-                                          event.target.value,
-                                      })
-                                    }
-                                  />
-                                </Form.Item>
-                              )}
-                              {preset?.supports_api_key !== false && (
-                                <Form.Item
-                                  label={t('API key')}
-                                  extra={
-                                    provider.has_api_key
-                                      ? t(
-                                          'A key is already stored securely. Replace it to update it.',
-                                        )
-                                      : undefined
+                            )}
+                            {provider.type === 'openai' && (
+                              <Form.Item label={t('Organization ID')}>
+                                <Input
+                                  value={provider.organization_id || ''}
+                                  onChange={event =>
+                                    updateProvider(providerId, {
+                                      organization_id: event.target.value,
+                                    })
                                   }
-                                >
-                                  <Input.Password
-                                    value={provider.api_key || ''}
-                                    placeholder={
-                                      provider.has_api_key
-                                        ? '**********'
-                                        : ''
-                                    }
-                                    onChange={event =>
-                                      updateProvider(providerId, {
-                                        api_key: event.target.value,
-                                        clear_api_key:
-                                          event.target.value === '',
-                                      })
-                                    }
-                                  />
-                                </Form.Item>
-                              )}
-                              {preset?.supports_api_key_env !== false && (
-                                <Form.Item
-                                  label={t(
-                                    'API key environment variable',
-                                  )}
-                                >
-                                  <Input
-                                    value={provider.api_key_env || ''}
-                                    onChange={event =>
-                                      updateProvider(providerId, {
-                                        api_key_env: event.target.value,
-                                      })
-                                    }
-                                  />
-                                </Form.Item>
-                              )}
+                                />
+                              </Form.Item>
+                            )}
+                            {preset?.supports_api_key !== false && (
                               <Form.Item
-                                label={t('Allowed models')}
+                                label={t('API key')}
                                 extra={
-                                  catalogItems.length > 0
+                                  provider.has_api_key
                                     ? t(
-                                        'Includes the current official model catalog for this provider.',
+                                        'A key is already stored securely. Replace it to update it.',
                                       )
-                                    : t(
-                                        'Enter the locally available model ids for this provider.',
-                                      )
+                                    : undefined
                                 }
                               >
-                                <Select
-                                  mode="multiple"
-                                  value={provider.models}
-                                  options={
-                                    Array.isArray(modelOptions)
-                                      ? modelOptions
-                                      : []
+                                <Input.Password
+                                  value={provider.api_key || ''}
+                                  placeholder={
+                                    provider.has_api_key ? '**********' : ''
                                   }
-                                  onChange={value => {
-                                    // Defer state update to avoid React
-                                    // "setState during render" warning
-                                    // triggered by Ant Design Select
-                                    // reconciling tags internally.
-                                    const valueArray = toStringArray(value);
-                                    queueMicrotask(() =>
-                                      updateProvider(providerId, {
-                                        models: valueArray,
-                                        default_model: valueArray.includes(
-                                          provider.default_model || '',
-                                        )
-                                          ? provider.default_model
-                                          : valueArray[0] || null,
-                                      }),
-                                    );
-                                  }}
+                                  onChange={event =>
+                                    updateProvider(providerId, {
+                                      api_key: event.target.value,
+                                      clear_api_key: event.target.value === '',
+                                    })
+                                  }
                                 />
                               </Form.Item>
-                              <Form.Item label={t('Default model')}>
-                                <Select
-                                  value={
-                                    provider.default_model || undefined
+                            )}
+                            {preset?.supports_api_key_env !== false && (
+                              <Form.Item
+                                label={t('API key environment variable')}
+                              >
+                                <Input
+                                  value={provider.api_key_env || ''}
+                                  onChange={event =>
+                                    updateProvider(providerId, {
+                                      api_key_env: event.target.value,
+                                    })
                                   }
-                                  options={provider.models.map(
-                                    modelId => ({
-                                      label: modelId,
-                                      value: modelId,
-                                    }),
-                                  )}
-                                  onChange={value =>
-                                    queueMicrotask(() =>
-                                      updateProvider(providerId, {
-                                        default_model:
-                                          typeof value === 'string'
-                                            ? value
-                                            : null,
-                                      }),
+                                />
+                              </Form.Item>
+                            )}
+                            <Form.Item
+                              label={t('Allowed models')}
+                              extra={
+                                catalogItems.length > 0
+                                  ? t(
+                                      'Includes the current official model catalog for this provider.',
                                     )
-                                  }
-                                />
-                              </Form.Item>
-                              <Button
-                                onClick={() =>
-                                  testProvider(providerId, provider)
+                                  : t(
+                                      'Enter the locally available model ids for this provider.',
+                                    )
+                              }
+                            >
+                              <Select
+                                mode="multiple"
+                                value={provider.models}
+                                options={
+                                  Array.isArray(modelOptions)
+                                    ? modelOptions
+                                    : []
                                 }
-                                loading={
-                                  testingProviderId === providerId
+                                onChange={value => {
+                                  // Defer state update to avoid React
+                                  // "setState during render" warning
+                                  // triggered by Ant Design Select
+                                  // reconciling tags internally.
+                                  const valueArray = toStringArray(value);
+                                  queueMicrotask(() =>
+                                    updateProvider(providerId, {
+                                      models: valueArray,
+                                      default_model: valueArray.includes(
+                                        provider.default_model || '',
+                                      )
+                                        ? provider.default_model
+                                        : valueArray[0] || null,
+                                    }),
+                                  );
+                                }}
+                              />
+                            </Form.Item>
+                            <Form.Item label={t('Default model')}>
+                              <Select
+                                value={provider.default_model || undefined}
+                                options={provider.models.map(modelId => ({
+                                  label: modelId,
+                                  value: modelId,
+                                }))}
+                                onChange={value =>
+                                  queueMicrotask(() =>
+                                    updateProvider(providerId, {
+                                      default_model:
+                                        typeof value === 'string'
+                                          ? value
+                                          : null,
+                                    }),
+                                  )
                                 }
-                              >
-                                {t('Test Provider')}
-                              </Button>
-                            </Form>
-                          </ProviderCard>
-                        );
-                      },
-                    )}
+                              />
+                            </Form.Item>
+                            <Button
+                              onClick={() => testProvider(providerId, provider)}
+                              loading={testingProviderId === providerId}
+                            >
+                              {t('Test Provider')}
+                            </Button>
+                          </Form>
+                        </ProviderCard>
+                      );
+                    })}
                   </ProviderGrid>
                   <Divider />
                   <Text type="secondary">

@@ -1240,14 +1240,15 @@ class ProviderRegistry:
         messages: list[dict[str, str]],
         provider_id: str | None = None,
         model: str | None = None,
+        max_tokens_override: int | None = None,
     ) -> ProviderResponse:
         provider = self._resolve_provider(provider_id)
         selected_model = model or self._default_model
-        max_tokens = self._max_tokens
+        max_tokens = max_tokens_override or self._max_tokens
         timeout = self._resolve_timeout(provider)
-        if provider.provider_type == "localai":
+        if max_tokens_override is None and provider.provider_type == "localai":
             max_tokens = min(max(max_tokens, 8192), 16384)
-        elif provider.is_local:
+        elif max_tokens_override is None and provider.is_local:
             max_tokens = max(max_tokens, 8192)
         return provider.generate(
             messages=messages,
@@ -1263,15 +1264,16 @@ class ProviderRegistry:
         messages: list[dict[str, str]],
         provider_id: str | None = None,
         model: str | None = None,
+        max_tokens_override: int | None = None,
     ) -> Generator[StreamChunk, None, None]:
         provider = self._resolve_provider(provider_id)
         selected_model = model or self._default_model
         # Local models: give LocalAI a larger generation budget for full insight reports.
-        max_tokens = self._max_tokens
+        max_tokens = max_tokens_override or self._max_tokens
         timeout = self._resolve_timeout(provider)
-        if provider.provider_type == "localai":
+        if max_tokens_override is None and provider.provider_type == "localai":
             max_tokens = min(max(max_tokens, 8192), 16384)
-        elif provider.is_local:
+        elif max_tokens_override is None and provider.is_local:
             max_tokens = max(max_tokens, 8192)
         yield from provider.generate_stream(
             messages=messages,

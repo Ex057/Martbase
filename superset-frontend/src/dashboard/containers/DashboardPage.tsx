@@ -313,6 +313,7 @@ export const DashboardPage: FC<PageProps> = ({
                 dashboardTitle={dashboard_title}
                 charts={charts ?? []}
                 activeFilters={activeFilters}
+                isPublicView={isPublicView}
               />
             </CrudThemeProvider>
           </DashboardPageIdContext.Provider>
