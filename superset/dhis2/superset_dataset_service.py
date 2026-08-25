@@ -356,27 +356,46 @@ def _normalize_dhis2_dimension_controls(payload: Any) -> bool:
     if not isinstance(payload, dict):
         return False
     changed = False
-    filters = payload.get("adhoc_filters")
-    if isinstance(filters, list):
+    for filter_key in ("adhoc_filters", "filters"):
+        filters = payload.get(filter_key)
+        if not isinstance(filters, list):
+            continue
         for filter_item in filters:
             if not isinstance(filter_item, dict):
                 continue
             candidates = (
+                filter_item.get("col"),
                 filter_item.get("subject"),
                 filter_item.get("sqlExpression"),
                 filter_item.get("expression"),
             )
-            if any(
+            aggregate_on_ou_level = (
+                str(filter_item.get("col") or filter_item.get("subject") or "")
+                .strip("`\" ")
+                .casefold()
+                == "ou_level"
+                and str(filter_item.get("aggregate") or "").casefold() == "sum"
+            )
+            if not aggregate_on_ou_level and not any(
                 isinstance(candidate, str)
                 and _DHIS2_SUM_OU_LEVEL_RE.match(candidate)
                 for candidate in candidates
             ):
-                filter_item.update(
-                    {"expressionType": "SIMPLE", "subject": "ou_level", "clause": "WHERE"}
-                )
-                filter_item.pop("sqlExpression", None)
-                filter_item.pop("expression", None)
-                changed = True
+                continue
+
+            # ``adhoc_filters`` use ``subject`` while live QueryObjects use
+            # ``col``. Normalize whichever representation was supplied.
+            if "col" in filter_item:
+                filter_item["col"] = "ou_level"
+            if "subject" in filter_item or filter_key == "adhoc_filters":
+                filter_item["subject"] = "ou_level"
+            if filter_key == "adhoc_filters":
+                filter_item["expressionType"] = "SIMPLE"
+                filter_item["clause"] = "WHERE"
+            filter_item.pop("aggregate", None)
+            filter_item.pop("sqlExpression", None)
+            filter_item.pop("expression", None)
+            changed = True
     for value in payload.values():
         changed = _normalize_dhis2_dimension_controls(value) or changed
     return changed

@@ -26,12 +26,31 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.session import Session
 
 from superset.commands.dataset.refresh import RefreshDatasetCommand
-from superset.connectors.sqla.models import SqlaTable, TableColumn
+from superset.connectors.sqla.models import (
+    SqlaTable,
+    TableColumn,
+    _repair_dhis2_ou_level_query_filters,
+)
 from superset.daos.dataset import DatasetDAO
 from superset.exceptions import OAuth2RedirectError
 from superset.models.core import Database
 from superset.sql.parse import Table
 from superset.superset_typing import QueryObjectDict
+
+
+def test_live_query_repair_removes_sum_from_ou_level_filter() -> None:
+    query_obj: QueryObjectDict = {
+        "filter": [
+            {"col": "SUM(ou_level)", "op": "==", "val": 1},
+            {"col": "region", "op": "==", "val": "Kigezi"},
+        ]
+    }
+
+    assert _repair_dhis2_ou_level_query_filters(query_obj) is True
+    assert query_obj["filter"] == [
+        {"col": "ou_level", "op": "==", "val": 1},
+        {"col": "region", "op": "==", "val": "Kigezi"},
+    ]
 
 
 def test_query_bubbles_errors(mocker: MockerFixture) -> None:

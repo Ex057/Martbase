@@ -857,6 +857,39 @@ def test_normalize_chart_payload_does_not_rewrite_period_controls() -> None:
     assert repaired["time_grain_sqla"] == "P1D"
 
 
+def test_normalize_chart_payload_repairs_ou_level_in_all_filter_shapes() -> None:
+    datasource = SimpleNamespace(
+        id=23,
+        datasource_type="table",
+        columns=[],
+        column_names=["ou_level"],
+    )
+    params, _, unresolved, _ = normalize_dhis2_chart_payload(
+        json.dumps(
+            {
+                "filters": [{"col": "SUM(ou_level)", "op": "==", "val": 1}],
+                "adhoc_filters": [
+                    {
+                        "expressionType": "SQL",
+                        "sqlExpression": "SUM(`ou_level`)",
+                        "operator": "==",
+                        "comparator": 1,
+                    }
+                ],
+            }
+        ),
+        None,
+        datasource,
+    )
+
+    repaired = json.loads(params or "{}")
+    assert unresolved == {}
+    assert repaired["filters"] == [{"col": "ou_level", "op": "==", "val": 1}]
+    assert repaired["adhoc_filters"][0]["subject"] == "ou_level"
+    assert repaired["adhoc_filters"][0]["expressionType"] == "SIMPLE"
+    assert "sqlExpression" not in repaired["adhoc_filters"][0]
+
+
 def test_period_rollback_removes_only_injected_period_controls() -> None:
     payload = {
         "groupby": ["region", "period_variant", "period"],
