@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from typing import Any, Iterator
 
@@ -27,6 +28,18 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--chart-id", action="append", type=int, dest="chart_ids")
     return parser.parse_args()
+
+
+def _load_production_environment() -> None:
+    """Load production settings when this utility is run outside Superset CLI."""
+    env_file = "/etc/superset/superset.env"
+    if os.path.exists(env_file):
+        with open(env_file, encoding="utf-8") as env_handle:
+            for line in env_handle:
+                if line.strip() and not line.startswith("#") and "=" in line:
+                    key, value = line.strip().split("=", 1)
+                    os.environ.setdefault(key, value.strip("\"'"))
+    os.environ.setdefault("DHIS2_DISABLE_STARTUP_BACKFILL", "true")
 
 
 def _loads(raw: Any, field: str, chart_id: int, errors: list[dict[str, Any]]) -> dict[str, Any]:
@@ -167,6 +180,7 @@ def _is_dhis2_chart(chart: Any) -> bool:
 
 def main() -> int:
     args = _parse_args()
+    _load_production_environment()
     app = create_app()
     with app.app_context():
         from superset import db
