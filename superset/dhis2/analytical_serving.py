@@ -1639,23 +1639,14 @@ def prune_empty_hierarchy_columns(
 def dataset_columns_payload(columns: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Convert manifest column specs into Superset TableColumn-compatible dicts.
 
-    Aggregation defaults
-    --------------------
-    * **Data elements / numeric variables** → ``SUM``.  Correct when aggregating
-      across orgUnits or periods because values are additive counts/volumes.
-    * **Indicators (rates, percentages, program indicators)** → ``NONE``.
-      Indicators are *already correctly computed per (period, orgUnit)* by
-      DHIS2 before staging.  The mart stores these final per-OU values.
-      Applying AVG or SUM across OUs would produce a plain arithmetic mean of
-      district values, which does **not** equal the DHIS2-calculated national
-      indicator (which divides the aggregate numerator by the aggregate
-      denominator).  Using NONE means charts get the mart's stored value
-      directly — correct when filtered to a specific OU, and giving an
-      arbitrary single-group value (ClickHouse ``any()``) when grouped at a
-      higher level.  Users who need a cross-OU summary for indicators should
-      add an explicit ``AVG`` metric in the chart editor with the understanding
-      that it is a simple mean, not the DHIS2 recalculated indicator.
-    * **String columns** → no expression (dimension-only).
+    Aggregation hints
+    -----------------
+    Numeric data elements retain a ``SUM`` *hint* and indicators retain a
+    ``NONE`` hint in ``extra``.  Crucially, these hints are never installed as
+    ``TableColumn.expression`` values: physical serving columns must remain
+    bare references.  Otherwise Superset can wrap an already-selected metric
+    or a WHERE dimension in a second aggregate (for example
+    ``SUM(SUM(cases))`` or ``WHERE SUM(ou_level) = 3``).
     """
     payload = []
     for column in columns:
@@ -1682,17 +1673,10 @@ def dataset_columns_payload(columns: list[dict[str, Any]]) -> list[dict[str, Any
         )
         is_numeric = column["type"] in ("FLOAT", "INTEGER", "NUMBER")
 
+        expression = None
         if is_numeric:
-            if is_indicator:
-                # Bare column reference — no double-averaging.
-                # See docstring above for the rationale.
-                expression: str | None = f"`{column['column_name']}`"
-                default_agg = "NONE"
-            else:
-                expression = f"SUM(`{column['column_name']}`)"
-                default_agg = "SUM"
+            default_agg = "NONE" if is_indicator else "SUM"
         else:
-            expression = None
             default_agg = None
 
         # Annotate the extra JSON with the recommended aggregation so the

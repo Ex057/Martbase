@@ -2076,37 +2076,32 @@ def _dcp_col(
     }
 
 
-def test_dataset_columns_payload_data_element_uses_sum():
-    """Numeric data elements must produce SUM(col) expressions."""
+def test_dataset_columns_payload_data_element_has_no_sql_expression():
+    """Numeric data elements carry an aggregation hint, never SUM(col)."""
     import json
     from superset.dhis2.analytical_serving import dataset_columns_payload
 
     result = dataset_columns_payload([_dcp_col("bcg_doses", "FLOAT")])
-    assert result[0]["expression"] == "SUM(`bcg_doses`)"
+    assert result[0]["expression"] is None
     extra = json.loads(result[0]["extra"])
     assert extra["dhis2_default_agg"] == "SUM"
 
 
-def test_dataset_columns_payload_indicator_uses_bare_column():
-    """Indicators must NOT be wrapped in AVG/SUM — bare column reference only."""
+def test_dataset_columns_payload_indicator_has_no_sql_expression():
+    """Indicators must never become a virtual SQL column."""
     import json
     from superset.dhis2.analytical_serving import dataset_columns_payload
 
     result = dataset_columns_payload([_dcp_col("malaria_incidence_rate", is_indicator=True)])
-    expr = result[0]["expression"]
-    assert expr == "`malaria_incidence_rate`", f"Expected bare col, got: {expr}"
-    assert "AVG" not in expr
-    assert "SUM" not in expr
+    assert result[0]["expression"] is None
     extra = json.loads(result[0]["extra"])
     assert extra["dhis2_default_agg"] == "NONE"
 
 
 def test_dataset_columns_payload_indicator_detected_via_variable_type_when_marker_drifts():
     """Regression: the dhis2_is_indicator boolean can be lost on a dataset
-    rebuild/metadata refresh while dhis2_variable_type survives.  The guard
-    must still classify the column as an indicator (bare column, NONE agg) —
-    otherwise a proportion would be SUMmed across org units (e.g. facility
-    percentages summed into a district → ~2,800%)."""
+    rebuild/metadata refresh while dhis2_variable_type survives. The guard
+    must still classify the column as an indicator (NONE aggregation hint)."""
     import json
     from superset.dhis2.analytical_serving import dataset_columns_payload
 
@@ -2116,9 +2111,7 @@ def test_dataset_columns_payload_indicator_detected_via_variable_type_when_marke
         extra={"dhis2_variable_type": "indicator"},
     )
     result = dataset_columns_payload([col])
-    expr = result[0]["expression"]
-    assert expr == "`mal_proportion_receiving_llins`", f"Expected bare col, got: {expr}"
-    assert "SUM" not in expr and "AVG" not in expr
+    assert result[0]["expression"] is None
     assert json.loads(result[0]["extra"])["dhis2_default_agg"] == "NONE"
 
 
@@ -2129,26 +2122,25 @@ def test_dataset_columns_payload_program_indicator_variable_type_is_not_summed()
 
     col = _dcp_col("pi_something", extra={"dhis2_variable_type": "programIndicator"})
     result = dataset_columns_payload([col])
-    assert result[0]["expression"] == "`pi_something`"
+    assert result[0]["expression"] is None
     assert json.loads(result[0]["extra"])["dhis2_default_agg"] == "NONE"
 
 
-def test_dataset_columns_payload_data_element_variable_type_still_sums():
-    """The resilient indicator check must NOT misclassify data elements:
-    a dhis2_variable_type of 'dataElement' still gets SUM."""
+def test_dataset_columns_payload_data_element_variable_type_keeps_sum_hint():
+    """Data elements retain the SUM hint without a virtual expression."""
     import json
     from superset.dhis2.analytical_serving import dataset_columns_payload
 
     col = _dcp_col("anc_1st_visit", extra={"dhis2_variable_type": "dataElement"})
     result = dataset_columns_payload([col])
-    assert result[0]["expression"] == "SUM(`anc_1st_visit`)"
+    assert result[0]["expression"] is None
     assert json.loads(result[0]["extra"])["dhis2_default_agg"] == "SUM"
 
 
 def test_dataset_columns_payload_mixed_indicators_and_data_elements():
     """A dataset mixing indicators and data elements (the real DHIS2 case)
-    must classify each column independently in the same call — indicators
-    bare/NONE, data elements SUM — regardless of which marker each carries."""
+    must classify each column independently in the same call without adding
+    virtual SQL expressions."""
     import json
     from superset.dhis2.analytical_serving import dataset_columns_payload
 
@@ -2166,13 +2158,11 @@ def test_dataset_columns_payload_mixed_indicators_and_data_elements():
     ]
     by_name = {r["column_name"]: r for r in dataset_columns_payload(cols)}
 
-    # Data elements are summed …
-    assert by_name["anc_1st_visit"]["expression"] == "SUM(`anc_1st_visit`)"
-    assert by_name["babies_received_llin"]["expression"] == "SUM(`babies_received_llin`)"
-    # … indicators are never summed, in the very same payload …
-    assert by_name["mal_ipt2_coverage"]["expression"] == "`mal_ipt2_coverage`"
-    assert by_name["incidence_rate"]["expression"] == "`incidence_rate`"
-    # … and the dimension is expression-less.
+    # All physical serving columns are expression-less.
+    assert by_name["anc_1st_visit"]["expression"] is None
+    assert by_name["babies_received_llin"]["expression"] is None
+    assert by_name["mal_ipt2_coverage"]["expression"] is None
+    assert by_name["incidence_rate"]["expression"] is None
     assert by_name["district_name"].get("expression") is None
 
     assert json.loads(by_name["mal_ipt2_coverage"]["extra"])["dhis2_default_agg"] == "NONE"
@@ -2225,9 +2215,9 @@ def test_dataset_columns_payload_multiple_types():
     assert len(result) == 4
 
     by_name = {r["column_name"]: r for r in result}
-    assert by_name["de_float"]["expression"] == "SUM(`de_float`)"
-    assert by_name["de_int"]["expression"] == "SUM(`de_int`)"
-    assert by_name["ind_rate"]["expression"] == "`ind_rate`"
+    assert by_name["de_float"]["expression"] is None
+    assert by_name["de_int"]["expression"] is None
+    assert by_name["ind_rate"]["expression"] is None
     assert by_name["ou_name"].get("expression") is None
 
     assert json.loads(by_name["de_float"]["extra"])["dhis2_default_agg"] == "SUM"
