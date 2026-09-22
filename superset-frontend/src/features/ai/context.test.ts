@@ -5,6 +5,17 @@ import {
 } from './context';
 
 describe('AI insight context helpers', () => {
+  test('derives columns when chart response omits colnames', () => {
+    const summary = buildQueryResponseSummary({
+      data: [{ period: '2026Q1', malaria_cases: 42 }],
+    });
+
+    expect(summary.columns).toEqual(['period', 'malaria_cases']);
+    expect(summary.sample_rows).toEqual([
+      { period: '2026Q1', malaria_cases: 42 },
+    ]);
+  });
+
   test('buildQueryResponseSummary trims rows and columns and preserves filter metadata', () => {
     const summary = buildQueryResponseSummary(
       {
@@ -55,7 +66,10 @@ describe('AI insight context helpers', () => {
       viz_type: 'echarts_timeseries_bar',
       form_data: { groupby: ['region'] },
     });
-    expect(context.datasource).toEqual({ id: 7, table_name: 'admissions_mart' });
+    expect(context.datasource).toEqual({
+      id: 7,
+      table_name: 'admissions_mart',
+    });
     expect(context.query_result.sample_rows).toEqual([
       { region: 'Kampala', value: 12 },
     ]);

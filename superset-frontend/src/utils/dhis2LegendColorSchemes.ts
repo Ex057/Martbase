@@ -373,6 +373,11 @@ export function collectDHIS2SourceDatabaseIds(
  */
 export function registerDHIS2SchemesForDatasources(
   datasources: Record<string, any> | null | undefined,
+  options: {
+    isPublicView?: boolean;
+    chartId?: number;
+    dashboardId?: number;
+  } = {},
 ): void {
   const dbIds = collectDHIS2SourceDatabaseIds(datasources);
   if (dbIds.length === 0) return;
@@ -387,7 +392,7 @@ export function registerDHIS2SchemesForDatasources(
     }
     // Fire-and-forget network refresh; it repaints on its own if it registers
     // something new.
-    syncDHIS2LegendSchemesForDatabase(dbId).catch(() => {});
+    syncDHIS2LegendSchemesForDatabase(dbId, options).catch(() => {});
   });
   if (changedFromCache) {
     nudgeChartColorRepaint();

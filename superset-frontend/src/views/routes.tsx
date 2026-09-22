@@ -161,6 +161,10 @@ const AIManagement = lazy(
   () => import(/* webpackChunkName: "AIManagement" */ 'src/pages/AIManagement'),
 );
 
+const ExpertEngine = lazy(
+  () => import(/* webpackChunkName: "ExpertEngine" */ 'src/pages/ExpertEngine'),
+);
+
 const Chart = lazy(
   () => import(/* webpackChunkName: "Chart" */ 'src/pages/Chart'),
 );
@@ -403,6 +407,8 @@ export const routes: Routes = [
     ? [
         { path: '/superset/ai-management/', Component: AIManagement },
         { path: '/ai-management/', Component: AIManagement },
+        { path: '/superset/expert/', Component: ExpertEngine },
+        { path: '/expert/', Component: ExpertEngine },
       ]
     : []),
   {

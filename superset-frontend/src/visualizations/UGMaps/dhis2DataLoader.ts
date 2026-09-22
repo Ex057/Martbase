@@ -51,6 +51,12 @@ interface CacheEntry {
   data: DHIS2Data;
 }
 
+interface DHIS2MetadataRequestContext {
+  chartId?: number;
+  dashboardId?: number;
+  isPublicView?: boolean;
+}
+
 export class DHIS2DataLoader {
   private static readonly CACHE_PREFIX = 'DHIS2_DATA_CACHE_';
   private static readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache TTL
@@ -117,18 +123,94 @@ export class DHIS2DataLoader {
       console.warn('[DHIS2DataLoader] Failed to clear cache', e);
     }
   }
+  private static shouldTryPublicChartFallback(
+    error: unknown,
+    chartId?: number,
+  ): boolean {
+    if (!chartId) {
+      return false;
+    }
+    const status = Number((error as any)?.status);
+    const message = String(
+      (error as any)?.message ||
+        (error as any)?.error ||
+        (error as any)?.response?.statusText ||
+        '',
+    ).toLowerCase();
+    return (
+      [400, 401, 403, 404].includes(status) ||
+      !Number.isFinite(status) ||
+      message.includes('missing authorization') ||
+      message.includes('unexpected token') ||
+      message.includes('<!doctype') ||
+      message.includes('<html')
+    );
+  }
+
+  private static buildMetadataSearchParams(
+    params: Record<string, string | undefined>,
+  ): Record<string, string> {
+    return Object.entries(params).reduce<Record<string, string>>(
+      (result, [key, value]) => {
+        if (value !== undefined) {
+          result[key] = value;
+        }
+        return result;
+      },
+      {},
+    );
+  }
+
+  private static async fetchMetadataWithPublicFallback(
+    databaseId: number,
+    params: Record<string, string | undefined>,
+    context: DHIS2MetadataRequestContext = {},
+  ) {
+    const searchParams = this.buildMetadataSearchParams({
+      ...params,
+      slice_id: context.chartId ? String(context.chartId) : undefined,
+      dashboard_id: context.dashboardId
+        ? String(context.dashboardId)
+        : undefined,
+    });
+
+    try {
+      return await SupersetClient.get({
+        endpoint: `/api/v1/database/${databaseId}/dhis2_metadata/`,
+        searchParams,
+        ignoreUnauthorized: true,
+      });
+    } catch (error) {
+      if (!this.shouldTryPublicChartFallback(error, context.chartId)) {
+        throw error;
+      }
+
+      return SupersetClient.get({
+        endpoint: `/api/v1/database/${databaseId}/dhis2_metadata_public/`,
+        searchParams,
+        ignoreUnauthorized: true,
+      });
+    }
+  }
+
   private static async fetchOrgUnitMetadata(
     databaseId: number,
     ids: string[],
+    context: DHIS2MetadataRequestContext = {},
   ): Promise<OrgUnitMetadata[]> {
     if (ids.length === 0) return [];
 
     const promises = ids.map(async id => {
       try {
-        const response = await SupersetClient.get({
-          endpoint: `/api/v1/database/${databaseId}/dhis2_metadata/?type=organisationUnits&search=${id}&staged=true`,
-          ignoreUnauthorized: true,
-        });
+        const response = await this.fetchMetadataWithPublicFallback(
+          databaseId,
+          {
+            type: 'organisationUnits',
+            search: id,
+            staged: 'true',
+          },
+          context,
+        );
         const items = response.json?.result || [];
         const item = items.find((i: any) => i.id === id);
         if (item) {
@@ -153,6 +235,7 @@ export class DHIS2DataLoader {
     databaseId: number,
     ids: string[],
     type: 'dataElements' | 'organisationUnits',
+    context: DHIS2MetadataRequestContext = {},
   ): Promise<Record<string, string>> {
     if (ids.length === 0) return {};
 
@@ -169,10 +252,15 @@ export class DHIS2DataLoader {
         for (const dxType of dxTypes) {
           try {
             // eslint-disable-next-line no-await-in-loop
-            const response = await SupersetClient.get({
-              endpoint: `/api/v1/database/${databaseId}/dhis2_metadata/?type=${dxType}&search=${id}&staged=true`,
-              ignoreUnauthorized: true,
-            });
+            const response = await this.fetchMetadataWithPublicFallback(
+              databaseId,
+              {
+                type: dxType,
+                search: id,
+                staged: 'true',
+              },
+              context,
+            );
             const items = response.json?.result || [];
             const item = items.find((i: any) => i.id === id);
             if (item && item.displayName) {
@@ -260,6 +348,7 @@ export class DHIS2DataLoader {
     limit: number = 10000,
     boundaryLevel?: number,
     parentId?: string | null,
+    context: DHIS2MetadataRequestContext = {},
   ): Promise<DHIS2Data | null> {
     // Check cache first - use base SQL as key since we always fetch full hierarchy
     // Level filtering happens on the returned data rows, not on the API call
@@ -272,6 +361,7 @@ export class DHIS2DataLoader {
           cachedData.rows,
           boundaryLevel,
           parentId,
+          context,
         );
         return {
           ...cachedData,
@@ -328,10 +418,12 @@ export class DHIS2DataLoader {
         databaseId,
         params.dataElements,
         'dataElements',
+        context,
       );
       const ouMetadataList = await this.fetchOrgUnitMetadata(
         databaseId,
         params.orgUnits,
+        context,
       );
 
       const columnsPayload = {
@@ -387,6 +479,7 @@ export class DHIS2DataLoader {
             rows,
             boundaryLevel,
             parentId,
+            context,
           );
         } catch (error: any) {
           // eslint-disable-next-line no-console
@@ -418,6 +511,7 @@ export class DHIS2DataLoader {
     rows: Record<string, any>[],
     targetLevel: number,
     parentId?: string | null,
+    context: DHIS2MetadataRequestContext = {},
   ): Promise<Record<string, any>[]> {
     if (!rows || rows.length === 0) {
       return rows;
@@ -463,6 +557,7 @@ export class DHIS2DataLoader {
       const orgUnitMetadata = await this.fetchOrgUnitMetadata(
         databaseId,
         Array.from(orgUnitIds),
+        context,
       );
 
       // Create a map of org unit ID to level (derived from path depth)

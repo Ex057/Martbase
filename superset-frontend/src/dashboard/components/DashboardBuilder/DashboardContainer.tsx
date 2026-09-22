@@ -119,14 +119,21 @@ const DashboardContainer: FC<DashboardContainerProps> = ({ topLevelTabs }) => {
     state => (state as any).datasources,
   );
   const chartIds = useChartIds();
+  const isPublicView = !dashboardInfo?.userId;
+  const dashboardId = dashboardInfo?.id;
+  const primaryChartId = chartIds[0];
 
   // Register DHIS2 legend color schemes for this dashboard's datasources before
   // its charts paint, so a chart saved with a `dhis2_legendset_*` scheme
   // resolves real colors instead of an empty palette. Nothing else under
   // src/dashboard registers these, and non-map charts have no self-registration.
   useEffect(() => {
-    registerDHIS2SchemesForDatasources(datasources);
-  }, [datasources]);
+    registerDHIS2SchemesForDatasources(datasources, {
+      isPublicView,
+      chartId: primaryChartId,
+      dashboardId,
+    });
+  }, [dashboardId, datasources, isPublicView, primaryChartId]);
 
   const renderedChartIds = useRenderedChartIds();
 

@@ -53,6 +53,9 @@ interface PreloadRequest {
   datasetId: number;
   formData: Record<string, any>;
   priority: 'high' | 'normal' | 'low';
+  chartId?: number;
+  dashboardId?: number;
+  isPublicView?: boolean;
   callback?: (data: any) => void;
 }
 
@@ -371,7 +374,7 @@ class DHIS2DataPreloader {
    * Fetch dataset from API
    */
   private async fetchDataset(request: PreloadRequest): Promise<any> {
-    const { datasetId, formData } = request;
+    const { datasetId, formData, dashboardId } = request;
     const key = this.generateCacheKey(datasetId, formData);
 
     // Create abort controller for this request
@@ -381,16 +384,21 @@ class DHIS2DataPreloader {
     try {
       console.log(`[DHIS2Preloader] Fetching dataset ${datasetId}...`);
 
+      const endpoint = dashboardId
+        ? `/api/v1/chart/data?dashboard_id=${dashboardId}`
+        : `/api/v1/chart/data`;
+      const queryPayload = {
+        ...formData,
+        dashboard_id: dashboardId ?? formData.dashboard_id,
+        dashboardId: dashboardId ?? formData.dashboardId,
+        row_limit: formData.row_limit || 10000,
+      };
+
       const response = await SupersetClient.post({
-        endpoint: `/api/v1/chart/data`,
+        endpoint,
         jsonPayload: {
           datasource: { id: datasetId, type: 'table' },
-          queries: [
-            {
-              ...formData,
-              row_limit: formData.row_limit || 10000,
-            },
-          ],
+          queries: [queryPayload],
         },
         signal: abortController.signal,
       });
@@ -425,6 +433,10 @@ class DHIS2DataPreloader {
   async getDataWithSWR(
     datasetId: number,
     formData: Record<string, any>,
+    requestContext?: Pick<
+      PreloadRequest,
+      'chartId' | 'dashboardId' | 'isPublicView'
+    >,
     forceRefresh = false,
   ): Promise<{
     data: any[];
@@ -451,6 +463,7 @@ class DHIS2DataPreloader {
       this.queuePreload({
         datasetId,
         formData,
+        ...requestContext,
         priority: 'low',
       });
 
@@ -466,6 +479,7 @@ class DHIS2DataPreloader {
     const result = await this.fetchDataset({
       datasetId,
       formData,
+      ...requestContext,
       priority: 'high',
     });
 

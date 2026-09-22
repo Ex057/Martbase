@@ -30,15 +30,19 @@ SESSION_TIMEOUT_IDLE_SECONDS = 3600
 # Note that the connection information to connect to the datasources
 # you want to explore are managed directly in the web UI
 _METADATA_DB_PATH = os.path.join(os.path.dirname(__file__), "superset.db")
-SQLALCHEMY_DATABASE_URI = (
-    f"sqlite:///{_METADATA_DB_PATH}?check_same_thread=false&timeout=60"
+SQLALCHEMY_DATABASE_URI = os.environ.get(
+    "SUPERSET_METADATA_DB_URI",
+    f"sqlite:///{_METADATA_DB_PATH}?check_same_thread=false&timeout=60",
 )
-SQLALCHEMY_ENGINE_OPTIONS = {
-    "connect_args": {
-        "check_same_thread": False,
-        "timeout": 60,
-    },
-}
+# ``check_same_thread`` and SQLite's busy timeout are invalid libpq options.
+# Keep them only for an explicitly selected SQLite metadata database.
+SQLALCHEMY_ENGINE_OPTIONS = (
+    {
+        "connect_args": {"check_same_thread": False, "timeout": 60},
+    }
+    if SQLALCHEMY_DATABASE_URI.startswith("sqlite")
+    else {}
+)
 
 # Flask-WTF flag for CSRF
 WTF_CSRF_ENABLED = True
@@ -130,11 +134,11 @@ _AI_INSIGHTS_PROVIDERS["localai"] = {
         model.strip()
         for model in os.environ.get(
             "LOCALAI_MODELS",
-            "qwen3.5-4b-dflash,deepseek-r1-distill-qwen-7b",
+            "deepseek-r1-distill-qwen-7b",
         ).split(",")
         if model.strip()
     ],
-    "default_model": os.environ.get("LOCALAI_DEFAULT_MODEL", "qwen3.5-4b-dflash"),
+    "default_model": os.environ.get("LOCALAI_DEFAULT_MODEL", "deepseek-r1-distill-qwen-7b"),
     "is_local": True,
 }
 
@@ -156,7 +160,7 @@ if os.environ.get("OPENAI_API_KEY"):
 
 ollama_base_url = os.environ.get("OLLAMA_BASE_URL") or os.environ.get(
     "OLLAMA_HOST",
-)
+) or "http://127.0.0.1:11434"
 if ollama_base_url:
     _AI_INSIGHTS_PROVIDERS["ollama"] = {
         "enabled": True,
@@ -165,10 +169,10 @@ if ollama_base_url:
         "base_url": ollama_base_url,
         "models": [
             model.strip()
-            for model in os.environ.get("OLLAMA_MODELS", "llama3.1:8b").split(",")
+            for model in os.environ.get("OLLAMA_MODELS", "dhis2-expert").split(",")
             if model.strip()
         ],
-        "default_model": os.environ.get("OLLAMA_DEFAULT_MODEL", "llama3.1:8b"),
+        "default_model": os.environ.get("OLLAMA_DEFAULT_MODEL", "dhis2-expert"),
         "is_local": True,
     }
 

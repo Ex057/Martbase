@@ -36,6 +36,10 @@ DEFAULT_AI_INSIGHTS_CONFIG: dict[str, Any] = {
     "default_model": "deepseek-r1-distill-qwen-7b",
     "allowed_roles": [],
     "allow_public_dashboard_ai": False,
+    # Expert Engine artifacts are generated from reviewed, local CSV research.
+    # The dashboard report consumes only the explicitly activated JSON bundle.
+    "expert_engine_enabled": True,
+    "expert_engine_artifact_dir": "/var/lib/superset/expert-engine",
     "public_ai_max_tokens": 600,
     "public_ai_rate_limit_per_minute": 10,
     "mode_roles": {

@@ -6,7 +6,13 @@ import pytest
 from flask import g
 
 from superset.ai_insights.providers import AIProviderError
-from superset.ai_insights.service import AIInsightError, AIInsightService
+from superset.ai_insights.service import (
+    AIInsightError,
+    AIInsightService,
+    _build_text_messages,
+    _build_complete_report,
+    _proofread_generated_insight,
+)
 from tests.conftest import with_config
 
 
@@ -52,6 +58,84 @@ def make_localai_config() -> dict[str, object]:
             }
         },
     }
+
+
+@with_config({"AI_INSIGHTS_CONFIG": make_ai_config()})
+def test_program_officer_memo_uses_dashboard_evidence(app_context: None) -> None:
+    del app_context
+    context = {
+        "dashboard": {"title": "Malaria Dashboard"},
+        "charts": [{
+            "chart": {"name": "Malaria positivity"},
+            "query_result": {
+                "columns": ["period", "positivity"],
+                "sample_rows": [
+                    {"period": str(202401 + index), "positivity": 5 + index}
+                    for index in range(6)
+                ],
+            },
+        }],
+    }
+    report = _build_complete_report(context, "dashboard", "Summary")
+    assert "Epidemiological Assessment & Forecast Memo" in report
+    assert "Malaria positivity" in report
+    assert "Evidence window: 6 observations" in report
+
+
+@with_config({"AI_INSIGHTS_CONFIG": make_ai_config()})
+def test_program_officer_memo_connects_climate_outcome_and_denominator_artifact(
+    app_context: None,
+) -> None:
+    del app_context
+    rows = [{"period": str(202401 + index), "rainfall_mm": 30 - index, "positivity": 5 + index, "anc_coverage": 112.3} for index in range(6)]
+    context = {
+        "dashboard": {"title": "District malaria"},
+        "charts": [
+            {"chart": {"name": "CHIRPS rainfall"}, "query_result": {"columns": ["period", "rainfall_mm"], "sample_rows": [{"period": row["period"], "rainfall_mm": row["rainfall_mm"]} for row in rows]}},
+            {"chart": {"name": "Malaria positivity"}, "query_result": {"columns": ["period", "positivity"], "sample_rows": [{"period": row["period"], "positivity": row["positivity"]} for row in rows]}},
+            {"chart": {"name": "ANC coverage"}, "query_result": {"columns": ["period", "anc_coverage"], "sample_rows": [{"period": row["period"], "anc_coverage": row["anc_coverage"]} for row in rows]}},
+        ],
+    }
+    report = _build_complete_report(context, "dashboard", "Summary")
+    assert "Transmission context" in report
+    assert "14–21 days" in report
+    assert "Denominator audit" in report
+    assert "continued movement in the same direction" not in report
+
+
+@with_config({"AI_INSIGHTS_CONFIG": make_ai_config()})
+def test_program_officer_memo_reports_displayed_charts_without_data(app_context: None) -> None:
+    del app_context
+    report = _build_complete_report(
+        {"dashboard": {"title": "Dashboard"}, "charts": [{"chart": {"name": "Rainfall"}}]},
+        "dashboard",
+        "Summary",
+    )
+    assert "1 displayed chart(s)" in report
+    assert "no chart returned usable numeric query results" in report
+
+
+def test_proofreader_rejoins_fragmented_common_words() -> None:
+    repaired = _proofread_generated_insight(
+        "per for m an ce Overview. Continue routine m on it or in g."
+    )
+    assert "performance Overview" in repaired
+    assert "routine monitoring" in repaired
+
+
+def test_ollama_dashboard_uses_model_messages_not_direct_report(app_context: None) -> None:
+    del app_context
+    messages = _build_text_messages(
+        mode="dashboard",
+        question="Summary",
+        context_payload={"dashboard": {"title": "Malaria"}, "charts": []},
+        conversation=[],
+        is_local_provider=True,
+        provider_type="ollama",
+    )
+    assert messages
+    assert messages[0]["role"] == "system"
+    assert all(message["role"] != "__direct_report__" for message in messages)
 
 
 @with_config({"AI_INSIGHTS_CONFIG": make_ai_config()})

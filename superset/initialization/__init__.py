@@ -267,9 +267,15 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
                 ai_management_alias_blueprint,
                 ai_management_frontend_blueprint,
             )
+            from superset.expert_engine.views import (
+                expert_alias_blueprint,
+                expert_frontend_blueprint,
+            )
 
             self.superset_app.register_blueprint(ai_management_frontend_blueprint)
             self.superset_app.register_blueprint(ai_management_alias_blueprint)
+            self.superset_app.register_blueprint(expert_frontend_blueprint)
+            self.superset_app.register_blueprint(expert_alias_blueprint)
         self.superset_app.register_blueprint(dhis2_frontend_blueprint)
         self.superset_app.register_blueprint(local_staging_blueprint)
         self.superset_app.register_blueprint(cms_frontend_blueprint)
@@ -292,6 +298,7 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
             from superset.ai_insights.admin_api import AIManagementRestApi
             from superset.ai_insights.conversation_api import AIConversationRestApi
             from superset.ai_insights.push_analysis_api import AIPushAnalysisRestApi
+            from superset.expert_engine.api import ExpertEngineRestApi
 
             appbuilder.add_api(AIChartRestApi)
             appbuilder.add_api(AIChartGenerateRestApi)
@@ -301,6 +308,7 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
             appbuilder.add_api(AIManagementRestApi)
             appbuilder.add_api(AIConversationRestApi)
             appbuilder.add_api(AIPushAnalysisRestApi)
+            appbuilder.add_api(ExpertEngineRestApi)
         appbuilder.add_api(AdvancedDataTypeRestApi)
         appbuilder.add_api(AvailableDomainsRestApi)
         appbuilder.add_api(CacheRestApi)
@@ -560,6 +568,16 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
                     # which maps "list" -> "read"; can_list is never created.
                     or appbuilder.sm.can_access("can_read", "AIManagement")
                 ),
+            )
+            appbuilder.add_link(
+                "Expert Engine",
+                label=_("Expert Engine"),
+                href="/superset/expert/",
+                icon="fa-flask",
+                category="",
+                category_icon="",
+                cond=lambda: feature_flag_manager.is_feature_enabled("AI_INSIGHTS")
+                and (appbuilder.sm.is_admin() or appbuilder.sm.can_access("can_read", "AIManagement")),
             )
 
         #

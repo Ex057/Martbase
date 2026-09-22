@@ -29,6 +29,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { getDataPreloader, PreloadState } from './dataPreloader';
 
+interface PreloadRequestContext {
+  chartId?: number;
+  dashboardId?: number;
+  isPublicView?: boolean;
+}
+
 interface UsePreloadedDataOptions {
   /** Dataset ID to preload */
   datasetId?: number;
@@ -38,6 +44,10 @@ interface UsePreloadedDataOptions {
   enabled?: boolean;
   /** Force refresh even if cached */
   forceRefresh?: boolean;
+  /** Optional public chart request context */
+  chartId?: number;
+  dashboardId?: number;
+  isPublicView?: boolean;
   /** Callback when data is loaded */
   onDataLoaded?: (data: any[], fromCache: boolean) => void;
 }
@@ -73,8 +83,17 @@ export function usePreloadedData(
     formData,
     enabled = true,
     forceRefresh = false,
+    chartId,
+    dashboardId,
+    isPublicView,
     onDataLoaded,
   } = options;
+
+  const requestContext: PreloadRequestContext = {
+    chartId,
+    dashboardId,
+    isPublicView,
+  };
 
   const [isLoading, setIsLoading] = useState(false);
   const [fromCache, setFromCache] = useState(false);
@@ -119,6 +138,7 @@ export function usePreloadedData(
         const result = await preloader.current.getDataWithSWR(
           datasetId,
           formData,
+          requestContext,
           force || forceRefresh,
         );
 
@@ -148,7 +168,16 @@ export function usePreloadedData(
         loadingRef.current = false;
       }
     },
-    [datasetId, formData, enabled, forceRefresh, onDataLoaded],
+    [
+      datasetId,
+      formData,
+      enabled,
+      forceRefresh,
+      chartId,
+      dashboardId,
+      isPublicView,
+      onDataLoaded,
+    ],
   );
 
   // Update status periodically
@@ -189,11 +218,12 @@ export function usePreloadedData(
         preloader.current.queuePreload({
           datasetId: id,
           formData: fd,
+          ...requestContext,
           priority: 'low',
         });
       });
     },
-    [],
+    [chartId, dashboardId, isPublicView],
   );
 
   return {
@@ -215,6 +245,7 @@ export function usePreloadedData(
  */
 export function usePrefetchDatasets(
   datasets: Array<{ id: number; formData: Record<string, any> }>,
+  requestContext: PreloadRequestContext = {},
   enabled = true,
 ): void {
   const preloader = useRef(getDataPreloader());
@@ -232,11 +263,12 @@ export function usePrefetchDatasets(
         preloader.current.queuePreload({
           datasetId: id,
           formData,
+          ...requestContext,
           priority: index < 3 ? 'high' : 'normal', // First 3 are high priority
         });
       }, index * 100);
     });
-  }, [datasets, enabled]);
+  }, [datasets, enabled, requestContext]);
 }
 
 /**

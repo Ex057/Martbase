@@ -866,6 +866,13 @@ class OllamaProvider(BaseProvider):
             raise AIProviderError(f"Provider {self.provider_id} has no configured model")
         return selected_model
 
+    @staticmethod
+    def _completion_prompt(messages: list[dict[str, str]]) -> str:
+        return "\n\n".join(
+            f"<{message.get('role', 'user')}>\n{message.get('content', '')}"
+            for message in messages
+        ) + "\n<assistant>\n"
+
     def generate(
         self,
         *,
@@ -892,6 +899,20 @@ class OllamaProvider(BaseProvider):
             },
             timeout=timeout,
         )
+        if response.status_code == 400:
+            # Some GGUF imports expose only completion capability (and no chat
+            # template). Retry with Ollama's generate API, which is also the
+            # endpoint used by the local smoke test.
+            response = requests.post(
+                f"{base_url}/api/generate",
+                json={
+                    "model": selected_model,
+                    "prompt": self._completion_prompt(messages),
+                    "stream": False,
+                    "options": {"temperature": temperature, "num_predict": max_tokens},
+                },
+                timeout=timeout,
+            )
         try:
             response.raise_for_status()
         except requests.exceptions.HTTPError as ex:
@@ -909,7 +930,7 @@ class OllamaProvider(BaseProvider):
 
         payload = response.json()
         try:
-            text = str(payload["message"]["content"])
+            text = str(payload.get("message", {}).get("content") or payload["response"])
         except (KeyError, TypeError) as ex:
             raise AIProviderError(
                 f"Provider {self.provider_id} returned an unexpected response"
@@ -948,6 +969,19 @@ class OllamaProvider(BaseProvider):
             timeout=timeout,
             stream=True,
         )
+        if response.status_code == 400:
+            response.close()
+            response = requests.post(
+                f"{base_url}/api/generate",
+                json={
+                    "model": selected_model,
+                    "prompt": self._completion_prompt(messages),
+                    "stream": True,
+                    "options": {"temperature": temperature, "num_predict": max_tokens},
+                },
+                timeout=timeout,
+                stream=True,
+            )
         try:
             response.raise_for_status()
         except requests.exceptions.HTTPError as ex:
@@ -960,7 +994,7 @@ class OllamaProvider(BaseProvider):
                 chunk = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            content = chunk.get("message", {}).get("content", "")
+            content = chunk.get("message", {}).get("content", "") or chunk.get("response", "")
             if content:
                 yield StreamChunk(text=content)
             if chunk.get("done"):

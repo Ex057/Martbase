@@ -1971,6 +1971,11 @@ function DHIS2Map({
       10000,
       effectiveDataBoundaryLevel,
       effectiveDataParentId,
+      {
+        chartId,
+        dashboardId,
+        isPublicView: dashboardId != null,
+      },
     )
       .then(result => {
         if (result && result.rows.length > 0) {

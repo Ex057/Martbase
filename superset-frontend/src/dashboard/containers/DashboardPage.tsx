@@ -16,7 +16,15 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { createContext, lazy, FC, useEffect, useMemo, useRef } from 'react';
+import {
+  createContext,
+  lazy,
+  FC,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Global } from '@emotion/react';
 import { useHistory } from 'react-router-dom';
 import { t, useTheme } from '@superset-ui/core';
@@ -50,6 +58,8 @@ import {
 import DashboardContainer from 'src/dashboard/containers/Dashboard';
 import CrudThemeProvider from 'src/components/CrudThemeProvider';
 import DashboardInsightsButton from 'src/features/ai/DashboardInsightsButton';
+import setupClient from 'src/setup/setupClient';
+import { fetchGuestToken } from 'src/utils/guestToken';
 
 import { nanoid } from 'nanoid';
 import { RootState } from '../types';
@@ -134,6 +144,8 @@ export const DashboardPage: FC<PageProps> = ({
     (state: RootState) => state.dashboardInfo.theme,
   );
   const { addDangerToast } = useToasts();
+  const [publicGuestReady, setPublicGuestReady] = useState(!isPublicView);
+  const [publicGuestError, setPublicGuestError] = useState<Error | null>(null);
   const publicDashboardResource = usePublicDashboard(idOrSlug, !!isPublicView);
   const privateDashboardResource = useDashboard(idOrSlug, !isPublicView);
   const publicChartsResource = usePublicDashboardCharts(
@@ -154,9 +166,64 @@ export const DashboardPage: FC<PageProps> = ({
   } = useDashboardDatasets(idOrSlug, !isPublicView);
   const isDashboardHydrated = useRef(false);
 
-  const error = dashboardApiError || chartsApiError;
-  const readyToRender = Boolean(dashboard && charts);
+  const error = publicGuestError || dashboardApiError || chartsApiError;
+  const readyToRender = Boolean(dashboard && charts && publicGuestReady);
   const { dashboard_title, id = 0 } = dashboard || {};
+  const publicDashboardId = dashboard?.id;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!isPublicView) {
+      setPublicGuestError(null);
+      setPublicGuestReady(true);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!publicDashboardId) {
+      setPublicGuestError(null);
+      setPublicGuestReady(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setPublicGuestReady(false);
+    setPublicGuestError(null);
+
+    async function configurePublicGuestClient() {
+      try {
+        const guestToken = await fetchGuestToken(String(publicDashboardId));
+        if (cancelled) {
+          return;
+        }
+        setupClient({ guestToken });
+        setPublicGuestReady(true);
+      } catch (guestTokenError) {
+        if (cancelled) {
+          return;
+        }
+        addDangerToast(
+          t(
+            'Error preparing public dashboard access. Please reload the page.',
+          ),
+        );
+        setPublicGuestError(
+          guestTokenError instanceof Error
+            ? guestTokenError
+            : new Error(String(guestTokenError)),
+        );
+      }
+    }
+
+    configurePublicGuestClient();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [addDangerToast, isPublicView, publicDashboardId]);
 
   // Get CSS from dashboardInfo (unified properties location)
   const css =

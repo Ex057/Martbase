@@ -77,9 +77,19 @@ export function buildQueryResponseSummary(
   maxColumns = DEFAULT_MAX_COLUMNS,
 ): QueryResponseSummary {
   const typedResponse = (queryResponse || {}) as QueryData;
-  const columns =
-    (Array.isArray(typedResponse.colnames) ? typedResponse.colnames : []) ||
-    [];
+  const responseRows = Array.isArray(typedResponse.data)
+    ? (typedResponse.data as Record<string, unknown>[])
+    : [];
+  // Some dashboard/public chart responses omit `colnames` even though they
+  // include object-shaped data rows. Derive the columns so AI context retains
+  // the quantitative evidence visible in the rendered chart.
+  const columns = Array.isArray(typedResponse.colnames)
+    ? typedResponse.colnames
+    : responseRows.length > 0 &&
+        responseRows[0] &&
+        typeof responseRows[0] === 'object'
+      ? Object.keys(responseRows[0])
+      : [];
   const trimmedColumns = columns.slice(0, maxColumns);
 
   const summary: QueryResponseSummary = {
@@ -171,4 +181,3 @@ export function buildDashboardInsightContext(input: {
     ),
   };
 }
-

@@ -38,7 +38,7 @@ export default function DashboardInsightsButton({
   const chartStates = useSelector((state: RootState) => state.charts);
 
   useEffect(() => {
-    if (!isPublicView) return;
+    if (!isPublicView) return undefined;
     let active = true;
     fetchAICapabilities('dashboard', true)
       .then(
@@ -60,13 +60,21 @@ export default function DashboardInsightsButton({
         dashboardId,
         dashboardTitle,
         activeFilters,
-        charts: charts.map(chart => ({
-          id: chart.id,
-          slice_name: chart.slice_name,
-          viz_type: chart.viz_type,
-          form_data: chart.form_data,
-          queryResponse: chartStates[chart.id]?.queriesResponse?.[0],
-        })),
+        charts: charts.map(chart => {
+          // Public chart metadata may expose slice_id while dashboard Redux
+          // state is keyed by the slice identifier. Support both API shapes
+          // so rendered charts retain their query evidence in AI context.
+          const sliceId = (chart as any).slice_id;
+          const chartId = chart.id ?? sliceId;
+          const chartState = chartStates[chartId] || chartStates[sliceId];
+          return {
+            id: chartId,
+            slice_name: chart.slice_name,
+            viz_type: chart.viz_type,
+            form_data: chart.form_data,
+            queryResponse: chartState?.queriesResponse?.[0],
+          };
+        }),
       }),
     [activeFilters, chartStates, charts, dashboardId, dashboardTitle],
   );

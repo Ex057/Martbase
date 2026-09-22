@@ -32,7 +32,7 @@ LOCALAI_SERVICE_BASE_URL = os.environ.get(
 OLLAMA_SERVICE_BASE_URL = (
     os.environ.get("OLLAMA_BASE_URL")
     or os.environ.get("OLLAMA_HOST")
-    or "http://ollama:11434"
+    or "http://127.0.0.1:11434"
 )
 
 OPENAI_TEXT_MODEL_CATALOG: list[dict[str, Any]] = [
@@ -481,7 +481,7 @@ PROVIDER_PRESETS: list[dict[str, Any]] = [
         "description": "Local model runtime for self-hosted AI testing and offline use.",
         "catalog_key": None,
         "default_base_url": OLLAMA_SERVICE_BASE_URL,
-        "default_model": "llama3.1:8b",
+        "default_model": "dhis2-expert",
         "is_local": True,
         "supports_base_url": True,
         "supports_api_key": False,

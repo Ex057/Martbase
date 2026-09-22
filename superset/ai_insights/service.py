@@ -1061,6 +1061,64 @@ def _proofread_generated_insight(text: str) -> str:
     return cleaned.strip()
 
 
+def _format_model_insight(text: str) -> str:
+    """Normalise weak local-model prose into readable Markdown."""
+    cleaned = _proofread_generated_insight(text)
+    # Repair punctuation that a completion-only GGUF commonly concatenates.
+    cleaned = re.sub(r"([.!?,;:])(?=[A-Za-z])", r"\1 ", cleaned)
+    cleaned = re.sub(r"([a-z])([A-Z])", r"\1 \2", cleaned)
+    replacements = {
+        "normalbaselinefor": "normal baseline for",
+        "historicalmedianfor": "historical median for",
+        "exceedingbaseline": "exceeding baseline",
+        "indicatessurveillancealert": "indicates surveillance alert",
+        "severee pidemic": "severe epidemic",
+        "severee pidemic": "severe epidemic",
+        "extremeepidemic": "extreme epidemic",
+        "acrosssamples": "across samples",
+    }
+    for source, target in replacements.items():
+        cleaned = re.sub(source, target, cleaned, flags=re.IGNORECASE)
+    # Turn repeated monthly clauses into readable period sections.
+    cleaned = re.sub(r"\s+(?=For\s+\d{6}\s*,)", "\n\n", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bFor\s+(\d{6})\s*,", r"### Period \1\n", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def _historical_evidence_markdown(context_payload: dict[str, Any]) -> str:
+    """Render reviewed Expert Engine evidence without changing live metrics."""
+    try:
+        from superset.expert_engine.service import historical_evidence
+
+        matches = historical_evidence(context_payload)
+    except Exception:  # pylint: disable=broad-except
+        logger.debug("Expert Engine evidence unavailable", exc_info=True)
+        return ""
+    if not matches:
+        return ""
+    lines = [
+        "## Historical evidence",
+        "",
+        "Evidence is matched from the approved research bundle; it does not replace current dashboard values.",
+        "",
+    ]
+    for item in matches:
+        base = item["baseline"]
+        completeness = base.get("avg_reporting_rate")
+        confidence = "high" if base.get("sample_count", 0) >= 5 and (completeness is None or completeness >= 80) else "moderate"
+        lines.extend([
+            f"### {item['metric']} — {item['status']}",
+            f"- Current value: **{_format_number(item['current'])}**; same-season median: **{_format_number(base['median'])}**; Q3: **{_format_number(base['q3_alert'])}**; action limit: **{_format_number(base['action_limit'])}**.",
+            f"- Historical sample: {base['sample_count']} observations; confidence: **{confidence}**" + (f"; average reporting completeness: **{_format_number(completeness)}%**." if completeness is not None else "."),
+            f"- Recommended surveillance action: {item['action']}",
+            f"- Research bundle: `{item['bundle_version']}`.",
+            "",
+        ])
+    return "\n".join(lines).strip()
+
+
 # ── System prompts ──────────────────────────────────────────────────
 # Kept terse to minimize input tokens while retaining instruction quality.
 
@@ -2006,7 +2064,7 @@ _SYSTEM_PROMPT_CHART_GENERATE = (
 
 
 _SYSTEM_PROMPT_LOCAL_CHART = (
-    "You are the LocalAI chart-insight writer.\n"
+    "You are the local chart-insight writer.\n"
     "Write a professional markdown report from the supplied evidence only.\n"
     "Use clear English with correct word spacing. Never split words or merge words.\n"
     "Follow the report plan in the user message exactly.\n"
@@ -2020,7 +2078,7 @@ _SYSTEM_PROMPT_LOCAL_CHART = (
 )
 
 _SYSTEM_PROMPT_LOCAL_DASHBOARD = (
-    "You are the LocalAI dashboard-insight writer.\n"
+    "You are the local dashboard-insight writer.\n"
     "Write a professional markdown report from the supplied evidence only.\n"
     "This is a dashboard report, so synthesize across charts instead of listing raw chart-by-chart metadata.\n"
     "Use clear English with correct word spacing. Never split words or merge words.\n"
@@ -2936,7 +2994,7 @@ def _prose_trend(name: str, stats: dict, label_col: str | None, rows: list[dict]
     return " ".join(lines)
 
 
-def _build_complete_report(
+def _build_complete_report_base(
     context_payload: dict[str, Any],
     mode: str,
     question: str = "Summary",
@@ -4429,7 +4487,11 @@ def _build_complete_report(
                 "numeric_cols": numeric_cols, "label_col": label_col, "metrics": metrics,
             })
 
-        n_charts = len(chart_data)
+        # Count the dashboard's actual chart entries separately from charts
+        # that yielded usable rows.  Previously charts without a query result
+        # were discarded before counting, producing the misleading "0 charts"
+        # report even when the dashboard visibly contained charts.
+        n_charts = len(charts[:12])
         n_with_data = sum(1 for cd in chart_data if cd["metrics"])
 
         # ── Shared dashboard helpers ──────────────────────────────────
@@ -4701,11 +4763,154 @@ def _build_complete_report(
             blk.append("")
             return blk
 
+        def _program_officer_memo() -> str:
+            """Render an evidence-led disease-programme officer memo.
+
+            This is intentionally a transparent synthesis of computed chart
+            statistics. It presents hypotheses as hypotheses and never claims
+            causality from a dashboard snapshot.
+            """
+            title = dash_name or "This dashboard"
+            lines = ["## Epidemiological Assessment & Forecast Memo", ""]
+            if not chart_data:
+                lines.extend([
+                    f"**Current situation:** {title} contains {n_charts} displayed chart(s), but no chart returned usable numeric query results.",
+                    "The dashboard context is incomplete for epidemiological interpretation. Verify chart queries, filters, and data-source permissions before making a programme decision.",
+                    "",
+                    "### Confidence and limitations",
+                    "Overall decision confidence: **Low** — no quantitative evidence was available to assess trends or cross-domain relationships.",
+                    "",
+                    "### Field action items",
+                    "- Verify that dashboard chart query results are available and that active filters are not excluding all rows.",
+                    "- Re-run the assessment after quantitative results are present.",
+                ])
+                return "\n".join(lines)
+
+            metrics = [
+                (cd, metric)
+                for cd in chart_data
+                for metric in cd["metrics"]
+            ]
+            metrics.sort(key=lambda item: abs(item[1]["stats"].get("pct_change") or 0), reverse=True)
+            lines.extend(["**Current situation:**", ""])
+            for cd, metric in metrics[:4]:
+                stats = metric["stats"]
+                pct = stats.get("pct_change")
+                change = f"{('+' if pct > 0 else '')}{pct}% {stats.get('trend', 'stable').lower()}" if pct is not None else "stable"
+                lines.append(
+                    f"- **{metric['name']}** ({cd['cname']}): average {_format_number(stats['avg'])}, "
+                    f"range {_format_number(stats['min'])}–{_format_number(stats['max'])}; {change}."
+                )
+            lines.extend(["", "### Analytical basis", ""])
+            lines.append(
+                f"The assessment covers **{n_charts} displayed chart(s)**, of which **{n_with_data}** supplied quantitative metrics. "
+                "Patterns below describe co-occurrence and reporting signals; they do not establish causation."
+            )
+
+            role_keywords = {
+                "outcome": ("case", "positivity", "death", "mortality", "opd", "ipd", "treated"),
+                "climate": ("rain", "precip", "temperature", "climate", "vegetation", "land cover", "elevation"),
+                "intervention": ("irs", "itn", "llin", "smc", "vaccine", "ipt", "coverage", "entomology"),
+                "service continuity": ("stock", "wastage", "report", "testing", "rdt", "microscopy"),
+            }
+            grouped: dict[str, list[str]] = {role: [] for role in role_keywords}
+            for cd, metric in metrics:
+                label = f"{metric['name']} ({cd['cname']})"
+                lowered = label.lower()
+                for role, keywords in role_keywords.items():
+                    if any(keyword in lowered for keyword in keywords):
+                        grouped[role].append(label)
+            lines.extend(["", "### Cross-domain interpretation", ""])
+            associations = 0
+            for role, labels in grouped.items():
+                if labels:
+                    associations += 1
+                    lines.append(f"- **{role.title()} signal:** {', '.join(labels[:3])}.")
+            if associations < 2:
+                lines.append("- No cross-domain association can be assessed from the currently supplied chart metrics.")
+            outcome_labels = grouped["outcome"]
+            climate_labels = grouped["climate"]
+            intervention_labels = grouped["intervention"]
+            service_labels = grouped["service continuity"]
+            if outcome_labels and climate_labels:
+                lines.append(
+                    "- **Transmission context:** The observed climate signal and malaria outcome signal co-occur in the supplied period. "
+                    "Review rainfall, temperature, standing-water conditions, testing volume, and vector surveillance together before attributing a change to transmission."
+                )
+            if outcome_labels and intervention_labels:
+                lines.append(
+                    "- **Programme protection:** Outcome movement should be interpreted alongside IRS, ITN/LLIN, SMC, vaccine, and IPT coverage; a coverage gap or reporting delay can alter apparent case risk."
+                )
+            if outcome_labels and service_labels:
+                lines.append(
+                    "- **Continuity check:** Compare case and positivity signals with testing, stock, and reporting continuity to separate a true epidemiological change from a service-delivery artifact."
+                )
+            lines.extend(["", "### 3-week risk trajectory", ""])
+            forecastable = [(cd, m) for cd, m in metrics if m["stats"].get("count", 0) >= 6 and m["stats"].get("pct_change") is not None]
+            if forecastable:
+                cd, metric = forecastable[0]
+                stats = metric["stats"]
+                direction = "increase" if stats["pct_change"] > 0 else "decline"
+                metric_name = metric["name"].lower()
+                if climate_labels and outcome_labels:
+                    trajectory = (
+                        "A sustained climate anomaly alongside the observed malaria signal warrants intensified fever surveillance and vector-site checks over the next 14–21 days; "
+                        "the dashboard does not establish that climate caused the change."
+                    )
+                elif any(word in metric_name for word in ("case", "positivity", "death", "treated")):
+                    trajectory = (
+                        f"The observed {direction} in **{metric['name']}** supports heightened facility and community surveillance over the next 2–4 weeks, "
+                        "with testing volume and reporting completeness checked before escalation."
+                    )
+                else:
+                    trajectory = (
+                        f"The observed {direction} in **{metric['name']}** is likely to persist into the next reporting cycle if current conditions hold; "
+                        "use this as a planning signal, not a disease forecast."
+                    )
+                lines.append(f"{trajectory} Evidence window: {stats['count']} observations.")
+            else:
+                lines.append("A 3-week forecast is not justified: no metric has at least six ordered observations with a measurable trend in the supplied context.")
+            lines.extend(["", "### Field action items", ""])
+            action_count = 0
+            for cd, metric in metrics:
+                stats = metric["stats"]
+                pct = stats.get("pct_change")
+                if pct is None or abs(pct) < 10:
+                    continue
+                action_count += 1
+                if any(k in metric["name"].lower() for k in ("rain", "precip", "climate", "vegetation")):
+                    action = "Review local vector-risk and rainfall conditions with surveillance teams and VHTs."
+                elif any(k in metric["name"].lower() for k in ("stock", "wastage", "received")):
+                    action = "Verify stock records, consumption, and resupply continuity before interpreting the movement as a service change."
+                elif any(k in metric["name"].lower() for k in ("case", "positivity", "death", "treated")):
+                    action = "Validate the signal against testing volume, reporting completeness, and facility line lists."
+                else:
+                    action = "Ask the responsible programme team to validate the movement against source registers and denominator quality."
+                lines.append(f"- **{metric['name']} ({cd['cname']}):** {action}")
+                if action_count >= 4:
+                    break
+            if not action_count:
+                lines.append("- Maintain routine surveillance and review the dashboard at the next reporting cycle.")
+            denominator_flags = [
+                (cd, metric) for cd, metric in metrics
+                if metric["stats"].get("avg", 0) > 100
+                and any(word in metric["name"].lower() for word in ("coverage", "anc", "ipt", "proportion", "rate", "%"))
+            ]
+            if denominator_flags:
+                for cd, metric in denominator_flags[:2]:
+                    lines.append(
+                        f"- **Denominator audit — {metric['name']} ({cd['cname']}):** The average exceeds 100% ({_format_number(metric['stats']['avg'])}). "
+                        "Reconcile the catchment denominator, reporting period, and cross-border/out-of-area service use before interpreting this as over-service."
+                    )
+            lines.extend(["", "### Confidence and limitations", "", f"Overall decision confidence: **{'Moderate' if n_with_data >= 2 else 'Low'}**. Historical bundle evidence should be checked for matching organisation unit and period before escalation."])
+            return "\n".join(lines)
+
         # ════════════════════════════════════════════════════════════════
         # DASHBOARD MODE DISPATCH
         # ════════════════════════════════════════════════════════════════
 
         if insight_mode == "summary":
+            return _program_officer_memo()
             crit = [cd for cd in chart_data if any(abs(m["stats"].get("pct_change", 0)) > 30 for m in cd["metrics"])]
             warn = [cd for cd in chart_data if any(10 < abs(m["stats"].get("pct_change", 0)) <= 30 for m in cd["metrics"]) and cd not in crit]
             parts.append("## Executive Summary")
@@ -5467,6 +5672,90 @@ def _build_complete_report(
     return "\n".join(parts)
 
 
+def _build_complete_report(
+    context_payload: dict[str, Any],
+    mode: str,
+    question: str = "Summary",
+) -> str:
+    """Build a mode-specific report with a shared DSO evidence layer."""
+    report = _build_complete_report_base(context_payload, mode, question)
+    if mode != "dashboard" or _detect_insight_mode(question) == "summary":
+        return report
+
+    charts = (context_payload or {}).get("charts") or []
+    signals: list[dict[str, Any]] = []
+    for entry in charts[:12]:
+        chart = entry.get("chart") or {}
+        result = entry.get("query_result") or {}
+        rows = result.get("sample_rows") or result.get("data") or []
+        columns = result.get("columns") or (list(rows[0]) if rows and isinstance(rows[0], dict) else [])
+        for column in columns:
+            values = []
+            for row in rows:
+                try:
+                    value = float(row.get(column))
+                    if value == value:
+                        values.append(value)
+                except (TypeError, ValueError):
+                    continue
+            if len(values) < 2:
+                continue
+            change = round((values[-1] - values[0]) / values[0] * 100, 1) if values[0] else None
+            signals.append({
+                "chart": chart.get("name") or "Unnamed chart",
+                "metric": str(column).replace("_", " ").strip().title(),
+                "values": values,
+                "change": change,
+            })
+    signals.sort(key=lambda item: abs(item["change"] or 0), reverse=True)
+    if not signals:
+        return f"{report}\n\n## DSO Evidence Note\n\nNo quantitative chart signal was available for epidemiological interpretation."
+
+    def role(metric: str) -> str:
+        name = metric.lower()
+        if any(word in name for word in ("rain", "precip", "temperature", "climate", "vegetation", "elevation")):
+            return "climate/vector context"
+        if any(word in name for word in ("case", "positivity", "death", "mortality", "treated")):
+            return "health outcome"
+        if any(word in name for word in ("stock", "wastage", "testing", "report")):
+            return "service continuity"
+        if any(word in name for word in ("irs", "itn", "llin", "smc", "vaccine", "ipt", "coverage")):
+            return "prevention/programme protection"
+        return "programme indicator"
+
+    overlay: list[str] = ["## DSO Epidemiological Interpretation", ""]
+    overlay.append(
+        "The following interpretation links dashboard signals by timing and programme role. "
+        "It describes associations to investigate, not proven causal relationships."
+    )
+    overlay.append("")
+    for item in signals[:6]:
+        change = item["change"]
+        direction = "increased" if change is not None and change > 0 else "declined" if change is not None else "varied"
+        change_text = f"{abs(change)}%" if change is not None else "with no calculable percentage change"
+        overlay.append(
+            f"- **{item['metric']}** ({item['chart']}) is a {role(item['metric'])} signal and {direction} "
+            f"{change_text} across {len(item['values'])} observations."
+        )
+    climate = [s for s in signals if role(s["metric"]) == "climate/vector context"]
+    outcomes = [s for s in signals if role(s["metric"]) == "health outcome"]
+    if climate and outcomes:
+        overlay.extend([
+            "",
+            "**Transmission interpretation:** Climate and health-outcome signals co-occur in the supplied context. Review rainfall, temperature, standing-water conditions, testing volume, and vector surveillance together; the dashboard alone cannot establish transmission causality.",
+        ])
+    overlay.extend(["", "### Operational implication", ""])
+    if outcomes:
+        overlay.append("Validate outcome movements against testing volume, reporting completeness, facility line lists, and local surveillance before escalation.")
+    elif climate:
+        overlay.append("Use the climate signal to focus vector surveillance and community fever monitoring, while confirming local ecological conditions.")
+    else:
+        overlay.append("Ask the responsible programme team to validate the leading signal against source registers and denominator quality.")
+    overlay.extend(["", "### DSO confidence", "", f"Evidence window: {max(len(s['values']) for s in signals)} observations for the leading signal. Interpretations are suitable for operational review, not a standalone clinical or outbreak declaration."])
+    overlay_text = "\n".join(overlay)
+    return f"{report}\n\n{overlay_text}"
+
+
 def _truncate_context_for_local(
     context_payload: dict[str, Any],
     system_prompt: str,
@@ -5624,8 +5913,13 @@ def _build_text_messages(
             "Return only the finished markdown insight report.\n\n"
         )
         user_content += f"EVIDENCE SUMMARY:\n{evidence_digest}"
-    elif is_local_provider and mode in (AI_MODE_CHART, AI_MODE_DASHBOARD):
-        # Non-LocalAI local providers still use the deterministic Python report path.
+    elif (
+        is_local_provider
+        and provider_type != "ollama"
+        and mode in (AI_MODE_CHART, AI_MODE_DASHBOARD)
+    ):
+        # The mock provider uses the deterministic Python report path. Ollama
+        # is a real local LLM and must receive the grounded context below.
         complete_report = _build_complete_report(context_payload, mode, question)
         logger.info(
             "LOCAL __direct_report__: provider=%s mode=%s insight_mode=%s report_len=%d",
@@ -6826,6 +7120,7 @@ class AIInsightService:
                 model="python-report",
                 duration_ms=int((perf_counter() - started_at_dash) * 1000),
             )
+            insight_text = _format_model_insight(response.text)
         else:
             try:
                 response = self.registry.generate(
@@ -6844,6 +7139,10 @@ class AIInsightService:
                     provider_id=provider_id,
                     model=payload.get("model"),
                 )
+            insight_text = _format_model_insight(response.text)
+        historical = _historical_evidence_markdown(context_payload)
+        if historical:
+            insight_text = f"{insight_text}\n\n{historical}"
         _audit(
             AuditMetadata(
                 mode=AI_MODE_DASHBOARD,
@@ -6859,7 +7158,7 @@ class AIInsightService:
         return {
             "mode": AI_MODE_DASHBOARD,
             "question": question,
-            "insight": _proofread_generated_insight(response.text),
+            "insight": insight_text,
             "provider": response.provider_id,
             "model": response.model,
             "duration_ms": response.duration_ms,
@@ -7136,7 +7435,7 @@ class AIInsightService:
             )
 
             if messages and messages[0].get("role") == "__direct_report__":
-                report = messages[0]["content"]
+                report = _proofread_generated_insight(messages[0]["content"])
                 logger.info(
                     "stream_chart_insight: __direct_report__ len=%d",
                     len(report),
@@ -7159,7 +7458,7 @@ class AIInsightService:
                     mode=AI_MODE_CHART,
                     question=question,
                 )
-                final_text = _proofread_generated_insight(response.text)
+                final_text = _format_model_insight(response.text)
                 accumulated_text = final_text
                 for paragraph in final_text.split("\n\n"):
                     chunk_text = paragraph.strip()
@@ -7172,14 +7471,19 @@ class AIInsightService:
                     "stream_chart_insight: streaming from model, "
                     "is_local=%s msgs=%d", _is_local, len(messages),
                 )
+                model_chunks = []
                 for chunk in self.registry.generate_stream(
                     messages=messages,
                     provider_id=provider_id,
                     model=model,
                 ):
-                    cleaned_text = _strip_prompt_leakage(chunk.text)
-                    accumulated_text += cleaned_text
-                    yield StreamChunk(text=cleaned_text, done=chunk.done)
+                    model_chunks.append(chunk.text)
+                final_text = _format_model_insight("".join(model_chunks))
+                accumulated_text = final_text
+                for paragraph in final_text.split("\n\n"):
+                    if paragraph.strip():
+                        yield StreamChunk(text=paragraph.strip() + "\n\n")
+                yield StreamChunk(text="", done=True)
         except Exception as exc:
             error_msg = str(exc)[:500]
             raise
@@ -7263,6 +7567,9 @@ class AIInsightService:
 
             if messages and messages[0].get("role") == "__direct_report__":
                 report = messages[0]["content"]
+                historical = _historical_evidence_markdown(context_payload)
+                if historical:
+                    report = f"{report}\n\n{historical}"
                 logger.info(
                     "stream_dashboard_insight: __direct_report__ len=%d",
                     len(report),
@@ -7290,7 +7597,7 @@ class AIInsightService:
                         else None
                     ),
                 )
-                final_text = _proofread_generated_insight(response.text)
+                final_text = _format_model_insight(response.text)
                 accumulated_text = final_text
                 for paragraph in final_text.split("\n\n"):
                     chunk_text = paragraph.strip()
@@ -7303,6 +7610,7 @@ class AIInsightService:
                     "stream_dashboard_insight: streaming from model, "
                     "is_local=%s msgs=%d", _is_local, len(messages),
                 )
+                model_chunks = []
                 for chunk in self.registry.generate_stream(
                     messages=messages,
                     provider_id=provider_id,
@@ -7313,9 +7621,13 @@ class AIInsightService:
                         else None
                     ),
                 ):
-                    cleaned_text = _strip_prompt_leakage(chunk.text)
-                    accumulated_text += cleaned_text
-                    yield StreamChunk(text=cleaned_text, done=chunk.done)
+                    model_chunks.append(chunk.text)
+                final_text = _format_model_insight("".join(model_chunks))
+                accumulated_text = final_text
+                for paragraph in final_text.split("\n\n"):
+                    if paragraph.strip():
+                        yield StreamChunk(text=paragraph.strip() + "\n\n")
+                yield StreamChunk(text="", done=True)
         except Exception as exc:
             error_msg = str(exc)[:500]
             raise
