@@ -796,16 +796,21 @@ test('renders full-bleed heroes with configurable hero panel and action surfaces
     { useTheme: true },
   );
 
-  const heroTitle = screen.getByRole('heading', { name: 'Blended landing page' });
+  const heroTitle = screen.getByRole('heading', {
+    name: 'Blended landing page',
+  });
   const heroSection = heroTitle.closest('section');
   const heroButton = screen.getByRole('button', { name: 'Browse dashboards' });
   const actions = heroButton.parentElement;
 
   expect(heroSection).toHaveStyle({
-    width: 'calc(100vw + 6px)',
-    maxWidth: 'calc(100vw + 6px)',
+    width: '100%',
+    maxWidth: '100%',
     borderRadius: '0',
     border: '0',
+  });
+  expect(heroSection).not.toHaveStyle({
+    minHeight: 'calc(100vh - var(--portal-header-height, 0px))',
   });
   expect(actions).toHaveStyle({ justifyContent: 'center' });
   expect(heroButton).toHaveStyle({
@@ -814,6 +819,44 @@ test('renders full-bleed heroes with configurable hero panel and action surfaces
   });
   expect(heroSection?.lastElementChild).toHaveStyle({
     background: 'rgba(255, 255, 255, 0.18)',
+  });
+});
+
+test('only makes a hero viewport-height when explicitly enabled', () => {
+  render(
+    <RenderBlockTree
+      blocks={[
+        {
+          uid: 'hero_full_viewport',
+          block_type: 'hero',
+          slot: 'hero',
+          sort_order: 0,
+          is_container: true,
+          visibility: 'public',
+          status: 'active',
+          schema_version: 1,
+          style_bundle_id: null,
+          content: { title: 'Full screen hero' },
+          settings: { fullBleed: true, fullViewport: true },
+          styles: {},
+          metadata: {},
+          children: [],
+        },
+      ]}
+      charts={[]}
+      dashboards={[]}
+      page={page}
+      navigation={{ header: [], footer: [] }}
+    />,
+    { useTheme: true },
+  );
+
+  expect(
+    screen
+      .getByRole('heading', { name: 'Full screen hero' })
+      .closest('section'),
+  ).toHaveStyle({
+    minHeight: 'calc(100vh - var(--portal-header-height, 0px))',
   });
 });
 
@@ -964,11 +1007,15 @@ test('renders hero content-placement button blocks under the text column', () =>
     { useTheme: true },
   );
 
-  const heroTitle = screen.getByRole('heading', { name: 'Hero with moved button' });
+  const heroTitle = screen.getByRole('heading', {
+    name: 'Hero with moved button',
+  });
   const heroButton = screen.getByRole('button', { name: 'Open Dashboard' });
   const heroSection = heroTitle.closest('section');
 
-  expect(heroSection?.textContent).toContain('Button should sit under the text column.');
+  expect(heroSection?.textContent).toContain(
+    'Button should sit under the text column.',
+  );
   expect(heroButton).toBeInTheDocument();
 });
 
@@ -1026,7 +1073,9 @@ test('keeps hero button blocks with the text column on public pages', () => {
     { useTheme: true },
   );
 
-  expect(screen.getByRole('button', { name: 'Open Dashboard' })).toBeInTheDocument();
+  expect(
+    screen.getByRole('button', { name: 'Open Dashboard' }),
+  ).toBeInTheDocument();
   expect(
     screen.getByText('Public hero buttons should stay under the copy.'),
   ).toBeInTheDocument();

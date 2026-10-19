@@ -44,6 +44,10 @@ const Section = styled.section`
   flex-direction: column;
   gap: var(--portal-section-gap, 8px);
   margin-bottom: var(--portal-section-margin, 12px);
+
+  &:last-child {
+    margin-bottom: 0;
+  }
 `;
 
 const SectionHeader = styled.div`
@@ -871,7 +875,9 @@ function applyBackgroundImageOpacity(
 }
 
 /** The media asset a block's background points at, if any. */
-function backgroundAssetId(block: PortalPageBlock): number | string | undefined {
+function backgroundAssetId(
+  block: PortalPageBlock,
+): number | string | undefined {
   return (
     block.settings?.background_asset_ref?.id ||
     block.settings?.backgroundAssetRef?.id ||
@@ -1250,8 +1256,10 @@ function generatedChartTitleFromFormData(
       .join(', ')
       .trim();
   } else {
-    const periodValue = formData.dhis2_period_label || formData.time_range || '';
-    period = formatDHIS2Period(String(periodValue)) || String(periodValue).trim();
+    const periodValue =
+      formData.dhis2_period_label || formData.time_range || '';
+    period =
+      formatDHIS2Period(String(periodValue)) || String(periodValue).trim();
   }
 
   const metric = summarizeMetricLabel(formData);
@@ -2204,16 +2212,21 @@ export function RenderBlockTree({
           block.slot === 'hero' &&
           block.settings?.fullBleed !== false;
         if (fullBleed) {
-          heroStyle.width = 'calc(100vw + 6px)';
-          heroStyle.maxWidth = 'calc(100vw + 6px)';
-          heroStyle.marginLeft = 'calc(50% - 50vw - 3px)';
-          heroStyle.marginRight = 'calc(50% - 50vw - 3px)';
+          /*
+           * Hero placement is already handled by the page region renderer.
+           * Using 100vw here made a hero escape the narrower Studio canvas
+           * and render underneath both inspector panels. A normal 100% width
+           * also avoids the small horizontal scrollbar caused by the old
+           * +6px viewport compensation.
+           */
+          heroStyle.width = '100%';
+          heroStyle.maxWidth = '100%';
           heroStyle.borderRadius = 0;
           heroStyle.border = 0;
-          if (block.settings?.fullViewport !== false) {
-            heroStyle.minHeight =
-              'calc(100vh - var(--portal-header-height, 0px))';
-          }
+        }
+        if (block.slot === 'hero' && block.settings?.fullViewport === true) {
+          heroStyle.minHeight =
+            'calc(100vh - var(--portal-header-height, 0px))';
         }
         const heroSectionGap =
           normalizedSpacingValue(
@@ -3111,33 +3124,33 @@ export function RenderBlockTree({
                   ) ||
                   undefined;
                 return (
-              <PublicChartContainer
-                title={chart.slice_name}
-                url={chart.url}
-                height={blockFrameHeight(block, 360)}
-                surfacePreset={surfacePreset}
-                legendPreset={legendPreset}
-                vizType={chart.viz_type}
-                accessMode={chartEmbedAccess}
-                formDataOverrides={mapFormDataOverrides}
-                frameOpacity={
-                  chartIsMapLike
-                    ? Number(block.settings?.frameOpacity) || 0
-                    : undefined
-                }
-                chartBackgroundImage={chartBackgroundImage}
-                chartBackgroundImageOpacity={Math.min(
-                  1,
-                  Math.max(
-                    0,
-                    Number(
-                      block.settings?.chartBackgroundImageOpacity ??
-                        block.settings?.chart_background_image_opacity ??
-                        0.2,
-                    ),
-                  ),
-                )}
-              />
+                  <PublicChartContainer
+                    title={chart.slice_name}
+                    url={chart.url}
+                    height={blockFrameHeight(block, 360)}
+                    surfacePreset={surfacePreset}
+                    legendPreset={legendPreset}
+                    vizType={chart.viz_type}
+                    accessMode={chartEmbedAccess}
+                    formDataOverrides={mapFormDataOverrides}
+                    frameOpacity={
+                      chartIsMapLike
+                        ? Number(block.settings?.frameOpacity) || 0
+                        : undefined
+                    }
+                    chartBackgroundImage={chartBackgroundImage}
+                    chartBackgroundImageOpacity={Math.min(
+                      1,
+                      Math.max(
+                        0,
+                        Number(
+                          block.settings?.chartBackgroundImageOpacity ??
+                            block.settings?.chart_background_image_opacity ??
+                            0.2,
+                        ),
+                      ),
+                    )}
+                  />
                 );
               })()
             ) : (

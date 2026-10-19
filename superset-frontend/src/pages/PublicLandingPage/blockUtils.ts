@@ -391,6 +391,7 @@ export function createEmptyBlock(blockType = 'paragraph'): PortalPageBlock {
       base.settings = {
         ...base.settings,
         fullBleed: true,
+        fullViewport: false,
         heroActionsAlign: 'start',
         heroPanelOpacity: 0,
         heroButtonOpacity: 1,

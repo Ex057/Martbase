@@ -18,7 +18,7 @@
  */
 /* eslint-disable no-restricted-imports, theme-colors/no-literal-colors, import/no-extraneous-dependencies */
 
-import { useEffect, useMemo, useState } from 'react';
+import { type CSSProperties, useEffect, useMemo, useState } from 'react';
 import {
   AppstoreOutlined,
   BarChartOutlined,
@@ -119,9 +119,14 @@ import AIPageGenerator from './AIPageGenerator';
 const StudioRoot = styled.div`
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 76px);
+  height: min(72vh, calc(100vh - 360px));
+  min-height: min(460px, calc(100vh - 240px));
   overflow: hidden;
   background: #f1f5f9;
+
+  @media (max-height: 760px) {
+    height: calc(100vh - 320px);
+  }
 `;
 
 const StudioHeader = styled.header`
@@ -170,17 +175,24 @@ const HeaderRight = styled.div`
   justify-content: flex-end;
 `;
 
-const StudioWorkspace = styled.div<{ $leftCollapsed?: boolean }>`
+const StudioWorkspace = styled.div<{
+  $leftCollapsed?: boolean;
+  $rightCollapsed?: boolean;
+}>`
   display: grid;
-  grid-template-columns: ${({ $leftCollapsed }) =>
-    $leftCollapsed ? '56px 1fr 280px' : '260px 1fr 280px'};
+  grid-template-columns: ${({ $leftCollapsed, $rightCollapsed }) =>
+    `${$leftCollapsed ? '56px' : '260px'} minmax(0, 1fr) ${
+      $rightCollapsed ? '0' : '320px'
+    }`};
   flex: 1;
   overflow: hidden;
   transition: grid-template-columns 0.2s ease;
 
   @media (max-width: 1200px) {
-    grid-template-columns: ${({ $leftCollapsed }) =>
-      $leftCollapsed ? '56px 1fr 260px' : '220px 1fr 260px'};
+    grid-template-columns: ${({ $leftCollapsed, $rightCollapsed }) =>
+      `${$leftCollapsed ? '56px' : '220px'} minmax(0, 1fr) ${
+        $rightCollapsed ? '0' : '280px'
+      }`};
   }
 
   @media (max-width: 900px) {
@@ -216,7 +228,8 @@ const LibraryHeader = styled.div<{ $collapsed?: boolean }>`
   background: #ffffff;
   display: flex;
   align-items: center;
-  justify-content: ${({ $collapsed }) => ($collapsed ? 'center' : 'space-between')};
+  justify-content: ${({ $collapsed }) =>
+    $collapsed ? 'center' : 'space-between'};
   flex-shrink: 0;
 `;
 
@@ -255,15 +268,20 @@ const LibraryIconTabs = styled.div<{ $collapsed?: boolean }>`
   flex-direction: ${({ $collapsed }) => ($collapsed ? 'column' : 'row')};
   gap: ${({ $collapsed }) => ($collapsed ? '8px' : '6px')};
   padding: ${({ $collapsed }) => ($collapsed ? '16px 8px' : '14px 16px')};
-  border-bottom: ${({ $collapsed }) => ($collapsed ? 'none' : '1px solid #e2e8f0')};
+  border-bottom: ${({ $collapsed }) =>
+    $collapsed ? 'none' : '1px solid #e2e8f0'};
   background: ${({ $collapsed }) => ($collapsed ? 'transparent' : '#fafbfc')};
   align-items: center;
-  justify-content: ${({ $collapsed }) => ($collapsed ? 'flex-start' : 'flex-start')};
+  justify-content: ${({ $collapsed }) =>
+    $collapsed ? 'flex-start' : 'flex-start'};
   flex: ${({ $collapsed }) => ($collapsed ? '1' : '0 0 auto')};
   overflow-y: ${({ $collapsed }) => ($collapsed ? 'auto' : 'visible')};
 `;
 
-const LibraryIconTab = styled.button<{ $active?: boolean; $collapsed?: boolean }>`
+const LibraryIconTab = styled.button<{
+  $active?: boolean;
+  $collapsed?: boolean;
+}>`
   width: ${({ $collapsed }) => ($collapsed ? '40px' : '42px')};
   height: ${({ $collapsed }) => ($collapsed ? '40px' : '42px')};
   border-radius: 10px;
@@ -321,7 +339,11 @@ const ComponentCategoryLabel = styled.h4`
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #0f766e;
-  background: linear-gradient(90deg, rgba(15, 118, 110, 0.08) 0%, transparent 100%);
+  background: linear-gradient(
+    90deg,
+    rgba(15, 118, 110, 0.08) 0%,
+    transparent 100%
+  );
   border-radius: 8px;
   border-left: 3px solid #0f766e;
 `;
@@ -449,6 +471,8 @@ const PropertiesPanel = styled.aside<{ $collapsed?: boolean }>`
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   border-left: 1px solid #e2e8f0;
   overflow: hidden;
+  visibility: ${({ $collapsed }) => ($collapsed ? 'hidden' : 'visible')};
+  border-left-width: ${({ $collapsed }) => ($collapsed ? '0' : '1px')};
 
   @media (max-width: 900px) {
     position: absolute;
@@ -523,7 +547,9 @@ const PropertySectionHeader = styled.button<{ $expanded?: boolean }>`
   width: 100%;
   padding: 10px 12px;
   background: ${({ $expanded }) =>
-    $expanded ? 'linear-gradient(90deg, rgba(15, 118, 110, 0.06) 0%, transparent 100%)' : '#f8fafc'};
+    $expanded
+      ? 'linear-gradient(90deg, rgba(15, 118, 110, 0.06) 0%, transparent 100%)'
+      : '#f8fafc'};
   border: none;
   border-radius: 8px;
   cursor: pointer;
@@ -579,7 +605,11 @@ const SavePresetButton = styled.button`
   width: 100%;
   border-radius: 10px;
   border: 1px dashed #0f766e;
-  background: linear-gradient(135deg, rgba(15, 118, 110, 0.06) 0%, rgba(15, 118, 110, 0.02) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(15, 118, 110, 0.06) 0%,
+    rgba(15, 118, 110, 0.02) 100%
+  );
   color: #0f766e;
   font-weight: 600;
   font-size: 13px;
@@ -707,6 +737,93 @@ const RegionCard = styled.section`
   gap: 12px;
   padding: 18px 0;
   border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+`;
+
+const PreviewOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  flex-direction: column;
+  background: #e2e8f0;
+`;
+
+const PreviewToolbar = styled.div`
+  min-height: 52px;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #0f172a;
+  color: #f8fafc;
+  flex-shrink: 0;
+`;
+
+const PreviewStage = styled.div`
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+`;
+
+const PreviewPage = styled.div<{ $mode: 'desktop' | 'tablet' | 'mobile' }>`
+  width: 100%;
+  max-width: ${({ $mode }) =>
+    $mode === 'mobile' ? '430px' : $mode === 'tablet' ? '820px' : '100%'};
+  min-height: 100%;
+  background: var(--portal-bg, #ffffff);
+  color: var(--portal-text, #0f172a);
+  overflow-x: hidden;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+
+  @media (max-width: 980px) {
+    .cms-preview-content-grid {
+      grid-template-columns: 1fr !important;
+    }
+  }
+`;
+
+const PreviewHeader = styled.header`
+  min-height: 56px;
+  padding: 10px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--portal-header-bg, #0f3e65);
+  color: var(--portal-header-text, #ffffff);
+  font-family: var(--portal-font-heading, inherit);
+`;
+
+const PreviewHeaderLinks = styled.nav`
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 13px;
+`;
+
+const PreviewFooter = styled.footer`
+  min-height: 52px;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--portal-footer-bg, #0f3e65);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+`;
+
+const PreviewContent = styled.div<{ $padding: string; $maxWidth: string }>`
+  width: 100%;
+  max-width: ${({ $maxWidth }) => $maxWidth};
+  margin: 0 auto;
+  padding: ${({ $padding }) => $padding};
 `;
 
 const SlotLabel = styled.div`
@@ -935,8 +1052,11 @@ const AUTO_GENERATE_TEMPLATES = [
       {
         block_type: 'hero',
         slot: 'hero',
-        content: { title: 'Dashboard Title', text: 'Add your dashboard description here...' },
-        settings: { showButton: false },
+        content: {
+          title: 'Dashboard Title',
+          text: 'Add your dashboard description here...',
+        },
+        settings: { showButton: false, fullViewport: false },
       },
       {
         block_type: 'section',
@@ -947,16 +1067,32 @@ const AUTO_GENERATE_TEMPLATES = [
             block_type: 'columns',
             settings: { columns: 2 },
             children: [
-              { block_type: 'chart', content: { title: 'Chart 1' }, settings: { chart_id: null, placeholder: true } },
-              { block_type: 'chart', content: { title: 'Chart 2' }, settings: { chart_id: null, placeholder: true } },
+              {
+                block_type: 'chart',
+                content: { title: 'Chart 1' },
+                settings: { chart_id: null, placeholder: true },
+              },
+              {
+                block_type: 'chart',
+                content: { title: 'Chart 2' },
+                settings: { chart_id: null, placeholder: true },
+              },
             ],
           },
           {
             block_type: 'columns',
             settings: { columns: 2 },
             children: [
-              { block_type: 'chart', content: { title: 'Chart 3' }, settings: { chart_id: null, placeholder: true } },
-              { block_type: 'chart', content: { title: 'Chart 4' }, settings: { chart_id: null, placeholder: true } },
+              {
+                block_type: 'chart',
+                content: { title: 'Chart 3' },
+                settings: { chart_id: null, placeholder: true },
+              },
+              {
+                block_type: 'chart',
+                content: { title: 'Chart 4' },
+                settings: { chart_id: null, placeholder: true },
+              },
             ],
           },
         ],
@@ -1011,13 +1147,30 @@ const AUTO_GENERATE_TEMPLATES = [
         slot: 'content',
         settings: { columns: 2, ratio: '2:1' },
         children: [
-          { block_type: 'chart', content: { title: 'Map View' }, settings: { chart_id: null, placeholder: true, surface: 'map_focus' } },
+          {
+            block_type: 'chart',
+            content: { title: 'Map View' },
+            settings: {
+              chart_id: null,
+              placeholder: true,
+              surface: 'map_focus',
+            },
+          },
           {
             block_type: 'group',
             children: [
-              { block_type: 'statistic', content: { title: 'Total', value: '...' } },
-              { block_type: 'statistic', content: { title: 'Average', value: '...' } },
-              { block_type: 'statistic', content: { title: 'Trend', value: '...' } },
+              {
+                block_type: 'statistic',
+                content: { title: 'Total', value: '...' },
+              },
+              {
+                block_type: 'statistic',
+                content: { title: 'Average', value: '...' },
+              },
+              {
+                block_type: 'statistic',
+                content: { title: 'Trend', value: '...' },
+              },
             ],
           },
         ],
@@ -1037,7 +1190,12 @@ const AUTO_GENERATE_TEMPLATES = [
           title: 'Welcome to Your Portal',
           text: 'Add a compelling description here...',
         },
-        settings: { showButton: true, buttonLabel: 'Get Started', buttonUrl: '#' },
+        settings: {
+          showButton: true,
+          buttonLabel: 'Get Started',
+          buttonUrl: '#',
+          fullViewport: false,
+        },
       },
       {
         block_type: 'section',
@@ -1048,9 +1206,18 @@ const AUTO_GENERATE_TEMPLATES = [
             block_type: 'columns',
             settings: { columns: 3 },
             children: [
-              { block_type: 'card', content: { title: 'Feature 1', text: 'Description...' } },
-              { block_type: 'card', content: { title: 'Feature 2', text: 'Description...' } },
-              { block_type: 'card', content: { title: 'Feature 3', text: 'Description...' } },
+              {
+                block_type: 'card',
+                content: { title: 'Feature 1', text: 'Description...' },
+              },
+              {
+                block_type: 'card',
+                content: { title: 'Feature 2', text: 'Description...' },
+              },
+              {
+                block_type: 'card',
+                content: { title: 'Feature 3', text: 'Description...' },
+              },
             ],
           },
         ],
@@ -1065,8 +1232,14 @@ const AUTO_GENERATE_TEMPLATES = [
   },
 ] as const;
 
-type PropertiesTabType = 'design' | 'config' | 'interactions';
-type LibraryCategoryType = 'essentials' | 'layout' | 'media' | 'data' | 'advanced' | 'saved';
+type PropertiesTabType = 'design' | 'config';
+type LibraryCategoryType =
+  | 'essentials'
+  | 'layout'
+  | 'media'
+  | 'data'
+  | 'advanced'
+  | 'saved';
 
 function blockKey(block: PortalPageBlock) {
   return block.uid || String(block.id);
@@ -1712,6 +1885,19 @@ export default function BlockStudio({
     reusableLibrary.find(
       reusableBlock => reusableBlock.id === selectedReusableId,
     ) || null;
+
+  useEffect(() => {
+    if (canvasMode !== 'preview') {
+      return undefined;
+    }
+    const closePreviewOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setCanvasMode('compose');
+      }
+    };
+    window.addEventListener('keydown', closePreviewOnEscape);
+    return () => window.removeEventListener('keydown', closePreviewOnEscape);
+  }, [canvasMode]);
   const reusableBlockOptions = useMemo(
     () =>
       reusableLibrary.map(reusableBlock => ({
@@ -1789,17 +1975,19 @@ export default function BlockStudio({
       settings: block.settings || {},
       styles: block.styles || {},
       metadata: block.metadata || {},
-      children: (block.children || []).map((child: any, childIndex: number) => ({
-        ...child,
-        uid: child.uid || makeUid(),
-        sort_order: childIndex,
-        is_container: child.is_container ?? false,
-        content: child.content || {},
-        settings: child.settings || {},
-        styles: child.styles || {},
-        metadata: child.metadata || {},
-        children: child.children || [],
-      })),
+      children: (block.children || []).map(
+        (child: any, childIndex: number) => ({
+          ...child,
+          uid: child.uid || makeUid(),
+          sort_order: childIndex,
+          is_container: child.is_container ?? false,
+          content: child.content || {},
+          settings: child.settings || {},
+          styles: child.styles || {},
+          metadata: child.metadata || {},
+          children: child.children || [],
+        }),
+      ),
     }));
     pushBlocks([...blocks, ...normalizedBlocks]);
   }
@@ -3144,6 +3332,31 @@ export default function BlockStudio({
                 />
               </FieldBlock>
               <FieldBlock>
+                <FieldLabel>{t('Hero Height')}</FieldLabel>
+                <Select
+                  disabled={isPublishedPage}
+                  value={
+                    selectedBlock.settings?.fullViewport === true
+                      ? 'viewport'
+                      : 'content'
+                  }
+                  options={[
+                    { value: 'content', label: t('Fit content') },
+                    { value: 'viewport', label: t('Full screen') },
+                  ]}
+                  onChange={value =>
+                    updateSelectedBlockSettings({
+                      fullViewport: value === 'viewport',
+                    })
+                  }
+                />
+                <TinyMeta>
+                  {t(
+                    'Fit content removes unused space. Full screen fills the visible browser height.',
+                  )}
+                </TinyMeta>
+              </FieldBlock>
+              <FieldBlock>
                 <FieldLabel>{t('Hero Actions Align')}</FieldLabel>
                 <Select
                   disabled={isPublishedPage}
@@ -3954,8 +4167,7 @@ export default function BlockStudio({
                 onChange={event =>
                   updateSelectedBlockSettings({
                     chartBackgroundImageUrl: event.target.value || undefined,
-                    chart_background_image_url:
-                      event.target.value || undefined,
+                    chart_background_image_url: event.target.value || undefined,
                   })
                 }
               />
@@ -5113,6 +5325,7 @@ export default function BlockStudio({
 
   function handleSelectBlock(block: PortalPageBlock) {
     setSelection({ type: 'block', uid: blockKey(block) });
+    setActivePropertiesTab('design');
   }
 
   function renderSlotRegion(
@@ -5579,7 +5792,8 @@ export default function BlockStudio({
     // Append after whatever is already on the page, keeping existing order.
     const existingBlocks = draftPage.blocks || [];
     const nextSortOrder = existingBlocks.reduce(
-      (highest, existing) => Math.max(highest, Number(existing.sort_order) || 0),
+      (highest, existing) =>
+        Math.max(highest, Number(existing.sort_order) || 0),
       -1,
     );
     const newBlocks = template.blocks.map((blockDef: any, index: number) =>
@@ -5594,9 +5808,9 @@ export default function BlockStudio({
   }
 
   function renderLibraryPanel() {
-    const categoryBlocks: readonly string[] = LIBRARY_CATEGORIES.find(
-      cat => cat.id === activeLibraryCategory,
-    )?.blocks || [];
+    const categoryBlocks: readonly string[] =
+      LIBRARY_CATEGORIES.find(cat => cat.id === activeLibraryCategory)
+        ?.blocks || [];
     const filteredBlocks = insertableBlockTypes.filter(def =>
       categoryBlocks.includes(def.type),
     );
@@ -5604,7 +5818,9 @@ export default function BlockStudio({
     return (
       <LibraryPanel $collapsed={leftPanelCollapsed}>
         <LibraryHeader $collapsed={leftPanelCollapsed}>
-          <LibraryTitle $collapsed={leftPanelCollapsed}>{t('Library')}</LibraryTitle>
+          <LibraryTitle $collapsed={leftPanelCollapsed}>
+            {t('Library')}
+          </LibraryTitle>
           <LibraryCollapseBtn
             onClick={() => setLeftPanelCollapsed(!leftPanelCollapsed)}
             title={leftPanelCollapsed ? t('Expand') : t('Collapse')}
@@ -5682,7 +5898,9 @@ export default function BlockStudio({
         </LibraryIconTabs>
         <LibraryContent $collapsed={leftPanelCollapsed}>
           <ComponentCategory>
-            <ComponentCategoryLabel>{t('Auto Generate')}</ComponentCategoryLabel>
+            <ComponentCategoryLabel>
+              {t('Auto Generate')}
+            </ComponentCategoryLabel>
             <ComponentGrid>
               {AUTO_GENERATE_TEMPLATES.map(template => (
                 <ComponentCard
@@ -5700,7 +5918,9 @@ export default function BlockStudio({
 
           {activeLibraryCategory === 'saved' ? (
             <ComponentCategory>
-              <ComponentCategoryLabel>{t('Reusable Sections')}</ComponentCategoryLabel>
+              <ComponentCategoryLabel>
+                {t('Reusable Sections')}
+              </ComponentCategoryLabel>
               {reusableLibrary.length ? (
                 <ComponentGrid>
                   {reusableLibrary.map(reusable => (
@@ -5726,7 +5946,9 @@ export default function BlockStudio({
           ) : (
             <ComponentCategory>
               <ComponentCategoryLabel>
-                {LIBRARY_CATEGORIES.find(cat => cat.id === activeLibraryCategory)?.label || activeLibraryCategory}
+                {LIBRARY_CATEGORIES.find(
+                  cat => cat.id === activeLibraryCategory,
+                )?.label || activeLibraryCategory}
               </ComponentCategoryLabel>
               <ComponentGrid>
                 {filteredBlocks.map(def => (
@@ -5735,7 +5957,9 @@ export default function BlockStudio({
                     onClick={() => addBlock(def.type)}
                     disabled={isPublishedPage}
                   >
-                    <span className="icon">{blockIcon(def.type, def.icon)}</span>
+                    <span className="icon">
+                      {blockIcon(def.type, def.icon)}
+                    </span>
                     <span className="label">{def.label}</span>
                   </ComponentCard>
                 ))}
@@ -5744,7 +5968,9 @@ export default function BlockStudio({
           )}
           {activeLibraryCategory === 'layout' && (
             <ComponentCategory>
-              <ComponentCategoryLabel>{t('Grid Templates')}</ComponentCategoryLabel>
+              <ComponentCategoryLabel>
+                {t('Grid Templates')}
+              </ComponentCategoryLabel>
               <ComponentGrid>
                 {GRID_TEMPLATE_OPTIONS.map(option => (
                   <ComponentCard
@@ -5787,12 +6013,6 @@ export default function BlockStudio({
           >
             {t('Config')}
           </PropertiesTab>
-          <PropertiesTab
-            $active={activePropertiesTab === 'interactions'}
-            onClick={() => setActivePropertiesTab('interactions')}
-          >
-            {t('Interactions')}
-          </PropertiesTab>
         </PropertiesTabs>
         <PropertiesContent>
           {activePropertiesTab === 'design' && selectedBlock && (
@@ -5821,7 +6041,9 @@ export default function BlockStudio({
                         style={{ width: '100%' }}
                         min={8}
                         max={120}
-                        value={numericStyleValue(selectedBlock.styles?.fontSize)}
+                        value={numericStyleValue(
+                          selectedBlock.styles?.fontSize,
+                        )}
                         onChange={value =>
                           updateSelectedBlockStyles({
                             fontSize: value ? `${value}px` : undefined,
@@ -5910,7 +6132,10 @@ export default function BlockStudio({
                         value={numericStyleValue(selectedBlock.styles?.padding)}
                         onChange={value =>
                           updateSelectedBlockStyles({
-                            padding: value ? `${value}px` : undefined,
+                            padding:
+                              value === null || value === undefined
+                                ? undefined
+                                : `${value}px`,
                           })
                         }
                       />
@@ -5924,7 +6149,10 @@ export default function BlockStudio({
                         value={numericStyleValue(selectedBlock.styles?.margin)}
                         onChange={value =>
                           updateSelectedBlockStyles({
-                            margin: value ? `${value}px` : undefined,
+                            margin:
+                              value === null || value === undefined
+                                ? undefined
+                                : `${value}px`,
                           })
                         }
                       />
@@ -5967,10 +6195,15 @@ export default function BlockStudio({
                         disabled={isPublishedPage}
                         style={{ width: '100%' }}
                         min={0}
-                        value={numericStyleValue(selectedBlock.styles?.borderRadius)}
+                        value={numericStyleValue(
+                          selectedBlock.styles?.borderRadius,
+                        )}
                         onChange={value =>
                           updateSelectedBlockStyles({
-                            borderRadius: value ? `${value}px` : undefined,
+                            borderRadius:
+                              value === null || value === undefined
+                                ? undefined
+                                : `${value}px`,
                           })
                         }
                       />
@@ -6014,7 +6247,9 @@ export default function BlockStudio({
                     <Input
                       disabled={isPublishedPage}
                       style={{ width: 100 }}
-                      value={String(selectedBlock.styles?.backgroundColor || '')}
+                      value={String(
+                        selectedBlock.styles?.backgroundColor || '',
+                      )}
                       placeholder="#fff"
                       onChange={e =>
                         updateSelectedBlockStyles({
@@ -6027,19 +6262,69 @@ export default function BlockStudio({
               </PropertySection>
             </>
           )}
-          {activePropertiesTab === 'design' && !selectedBlock && (
-            <Empty
-              description={t('Select a block to edit its design')}
-              style={{ marginTop: 48 }}
-            />
+          {activePropertiesTab === 'design' && !selectedBlock && draftPage && (
+            <PropertySection>
+              <PropertySectionHeader $expanded>
+                <span>{t('Page Layout')}</span>
+                <span className="chevron">▲</span>
+              </PropertySectionHeader>
+              <PropertySectionContent $expanded>
+                <SectionList>
+                  <FieldBlock>
+                    <FieldLabel>{t('Content Width')}</FieldLabel>
+                    <Input
+                      disabled={isPublishedPage}
+                      value={String(draftPage.settings?.pageMaxWidth || '')}
+                      placeholder={t('1280px, 90rem, or 100%')}
+                      onChange={event =>
+                        updatePageSettings({ pageMaxWidth: event.target.value })
+                      }
+                    />
+                  </FieldBlock>
+                  <FieldBlock>
+                    <FieldLabel>{t('Page Padding')}</FieldLabel>
+                    <Input
+                      disabled={isPublishedPage}
+                      value={String(draftPage.settings?.pagePadding || '')}
+                      placeholder={t('28px 24px 32px')}
+                      onChange={event =>
+                        updatePageSettings({ pagePadding: event.target.value })
+                      }
+                    />
+                    <TinyMeta>
+                      {t('Use 0 to remove outer page spacing.')}
+                    </TinyMeta>
+                  </FieldBlock>
+                  <FieldBlock>
+                    <FieldLabel>{t('Content Gap')}</FieldLabel>
+                    <Input
+                      disabled={isPublishedPage}
+                      value={String(draftPage.settings?.contentAreaGap || '')}
+                      placeholder={t('24px')}
+                      onChange={event =>
+                        updatePageSettings({
+                          contentAreaGap: event.target.value,
+                        })
+                      }
+                    />
+                  </FieldBlock>
+                  <Button
+                    disabled={isPublishedPage}
+                    onClick={() =>
+                      updatePageSettings({
+                        pageMaxWidth: undefined,
+                        pagePadding: undefined,
+                        contentAreaGap: undefined,
+                      })
+                    }
+                  >
+                    {t('Reset page layout')}
+                  </Button>
+                </SectionList>
+              </PropertySectionContent>
+            </PropertySection>
           )}
           {activePropertiesTab === 'config' && renderInspector()}
-          {activePropertiesTab === 'interactions' && (
-            <Empty
-              description={t('Interactions coming soon')}
-              style={{ marginTop: 48 }}
-            />
-          )}
         </PropertiesContent>
         {activePropertiesTab === 'design' && selectedBlock && (
           <SavePresetButton onClick={() => setDocumentOpen(true)}>
@@ -6058,6 +6343,86 @@ export default function BlockStudio({
     path.push(selectedBlock.block_type);
     return path;
   }
+
+  function renderPreviewBlocks(previewBlocks: PortalPageBlock[]) {
+    if (!previewBlocks.length) {
+      return null;
+    }
+    return (
+      <RenderBlockTree
+        blocks={previewBlocks}
+        charts={charts}
+        dashboards={dashboards}
+        chartEmbedAccess="authenticated"
+        mediaAssets={mediaAssets}
+        page={draftPage}
+        navigation={navigationMenus}
+        mode="public"
+        onNavigate={path => {
+          if (path) {
+            window.open(path, '_blank', 'noopener');
+          }
+        }}
+      />
+    );
+  }
+
+  const previewPagePadding = String(
+    draftPage?.settings?.pagePadding || '28px 24px 32px',
+  );
+  const previewMaxWidthValue =
+    draftPage?.settings?.pageMaxWidth || portalLayout.pageMaxWidth || '1280px';
+  const previewMaxWidth =
+    typeof previewMaxWidthValue === 'number'
+      ? `${previewMaxWidthValue}px`
+      : String(previewMaxWidthValue);
+  const previewThemeStyle = {
+    '--portal-bg': portalLayout.pageBackground || '#ffffff',
+    '--portal-text': portalLayout.textColor || '#0f172a',
+    '--portal-muted': portalLayout.mutedColor || '#64748b',
+    '--portal-muted-strong': portalLayout.mutedStrongColor || '#334155',
+    '--portal-surface': portalLayout.surfaceColor || '#ffffff',
+    '--portal-surface-card': portalLayout.cardBackground || '#ffffff',
+    '--portal-border': portalLayout.cardBorderColor || '#e2e8f0',
+    '--portal-accent': portalLayout.accentColor || '#0f766e',
+    '--portal-block-gap': portalLayout.blockGap || '10px',
+    '--portal-section-gap': portalLayout.sectionGap || '8px',
+    '--portal-card-padding': portalLayout.cardPadding || '18px',
+    '--portal-hero-padding': portalLayout.heroPadding || '32px',
+    '--portal-radius-md': portalLayout.radiusMd || '12px',
+    '--portal-radius-lg': portalLayout.radiusLg || '18px',
+    '--portal-header-height': '52px',
+    '--portal-header-bg': portalLayout.headerBackground || '#0f3e65',
+    '--portal-header-text': portalLayout.headerTextColor || '#ffffff',
+    '--portal-footer-bg': portalLayout.footerBackground || '#0f3e65',
+    '--portal-font-body': portalLayout.bodyFontFamily || 'inherit',
+    '--portal-font-heading': portalLayout.headingFontFamily || 'inherit',
+    '--portal-base-font-size': portalLayout.baseFontSize || '16px',
+    ...(draftPage?.rendering?.css_variables || {}),
+    ...(draftPage?.settings?.useFeaturedImageAsBackground &&
+    draftPage.featured_image_url
+      ? {
+          backgroundImage: `linear-gradient(rgba(255,255,255,${
+            1 - Number(draftPage.settings.pageBackgroundImageOpacity ?? 1)
+          }), rgba(255,255,255,${
+            1 - Number(draftPage.settings.pageBackgroundImageOpacity ?? 1)
+          })), url("${draftPage.featured_image_url.replace(/"/g, '\\"')}")`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'fixed',
+        }
+      : {}),
+  } as CSSProperties;
+  const previewHeaderItems = (navigationMenus.header || []).flatMap(menu =>
+    (menu.items || []).filter(item => item.is_visible !== false),
+  );
+  const previewFooterItems = (navigationMenus.footer || []).flatMap(menu =>
+    (menu.items || []).filter(item => item.is_visible !== false),
+  );
+  const previewHasSidebar = Boolean(
+    draftPage?.rendering?.template_structure?.regions?.sidebar?.enabled &&
+      slotGroups.sidebar?.length,
+  );
 
   return (
     <StudioRoot>
@@ -6133,20 +6498,33 @@ export default function BlockStudio({
           )}
           <Button
             type="text"
-            icon={rightPanelCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            icon={
+              rightPanelCollapsed ? (
+                <MenuUnfoldOutlined />
+              ) : (
+                <MenuFoldOutlined />
+              )
+            }
             onClick={() => setRightPanelCollapsed(!rightPanelCollapsed)}
-            title={rightPanelCollapsed ? t('Show Properties') : t('Hide Properties')}
+            title={
+              rightPanelCollapsed ? t('Show Properties') : t('Hide Properties')
+            }
           />
         </HeaderRight>
       </StudioHeader>
 
-      <StudioWorkspace $leftCollapsed={leftPanelCollapsed}>
+      <StudioWorkspace
+        $leftCollapsed={leftPanelCollapsed}
+        $rightCollapsed={rightPanelCollapsed}
+      >
         {renderLibraryPanel()}
 
         <CanvasPanel>
           <CanvasTopBar>
             <Space>
-              <span style={{ fontSize: 12, color: '#64748b' }}>{t('Insert to:')}</span>
+              <span style={{ fontSize: 12, color: '#64748b' }}>
+                {t('Insert to:')}
+              </span>
               <Select
                 size="small"
                 style={{ minWidth: 120 }}
@@ -6162,7 +6540,8 @@ export default function BlockStudio({
             <Space>
               {selection.type === 'block' && selectedBlock && (
                 <Tag color="processing">
-                  {blockIcon(selectedBlock.block_type)} {selectedBlock.block_type}
+                  {blockIcon(selectedBlock.block_type)}{' '}
+                  {selectedBlock.block_type}
                 </Tag>
               )}
             </Space>
@@ -6203,14 +6582,24 @@ export default function BlockStudio({
             <SelectionBreadcrumb>
               {getSelectionBreadcrumb().map((item, index, arr) => (
                 <span key={index}>
-                  <span
-                    className={index === arr.length - 1 ? 'current' : 'item'}
-                    onClick={() => {
-                      if (index === 0) setSelection({ type: 'page' });
-                    }}
-                  >
-                    {item}
-                  </span>
+                  {index === 0 ? (
+                    <button
+                      className="item"
+                      type="button"
+                      onClick={() => {
+                        setSelection({ type: 'page' });
+                        setActivePropertiesTab('design');
+                      }}
+                    >
+                      {item}
+                    </button>
+                  ) : (
+                    <span
+                      className={index === arr.length - 1 ? 'current' : 'item'}
+                    >
+                      {item}
+                    </span>
+                  )}
                   {index < arr.length - 1 && (
                     <span className="separator"> &gt; </span>
                   )}
@@ -6222,6 +6611,136 @@ export default function BlockStudio({
 
         {renderPropertiesPanel()}
       </StudioWorkspace>
+
+      {canvasMode === 'preview' && draftPage ? (
+        <PreviewOverlay role="dialog" aria-label={t('Page preview')}>
+          <PreviewToolbar>
+            <Space>
+              <EyeOutlined />
+              <strong>{t('Preview: %s', draftPage.title)}</strong>
+              <Tag color="blue">{t('Current draft')}</Tag>
+            </Space>
+            <Space>
+              {PREVIEW_VIEWPORTS.map(viewport => (
+                <Button
+                  key={`overlay-${viewport.value}`}
+                  size="small"
+                  type={
+                    previewViewport === viewport.value ? 'primary' : 'default'
+                  }
+                  icon={viewportIcon(viewport.value)}
+                  onClick={() => setPreviewViewport(viewport.value)}
+                  title={viewport.label}
+                />
+              ))}
+              <Button onClick={() => setCanvasMode('compose')}>
+                {t('Close Preview')}
+              </Button>
+            </Space>
+          </PreviewToolbar>
+          <PreviewStage>
+            <PreviewPage
+              $mode={previewViewport}
+              className={draftPage.rendering?.scope_class}
+              style={previewThemeStyle}
+            >
+              {draftPage.rendering?.css_text ? (
+                <style>{draftPage.rendering.css_text}</style>
+              ) : null}
+              <PreviewHeader>
+                <strong>
+                  {portalLayout.portalTitle ||
+                    portalLayout.welcomeBadge ||
+                    t('Public Analytics Portal')}
+                </strong>
+                <PreviewHeaderLinks aria-label={t('Page navigation')}>
+                  {previewHeaderItems.map(item => (
+                    <a
+                      key={String(item.id)}
+                      href={item.path || '#'}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: 'inherit', textDecoration: 'none' }}
+                    >
+                      {item.label}
+                    </a>
+                  ))}
+                </PreviewHeaderLinks>
+              </PreviewHeader>
+              <PreviewContent
+                $padding={previewPagePadding}
+                $maxWidth={previewMaxWidth}
+              >
+                {renderPreviewBlocks(slotGroups.header || [])}
+              </PreviewContent>
+              {(slotGroups.hero || []).map(heroBlock =>
+                heroBlock.settings?.fullBleed === false ? (
+                  <PreviewContent
+                    key={heroBlock.uid || heroBlock.id}
+                    $padding={previewPagePadding}
+                    $maxWidth={previewMaxWidth}
+                  >
+                    {renderPreviewBlocks([heroBlock])}
+                  </PreviewContent>
+                ) : (
+                  <div key={heroBlock.uid || heroBlock.id}>
+                    {renderPreviewBlocks([heroBlock])}
+                  </div>
+                ),
+              )}
+              <PreviewContent
+                $padding={previewPagePadding}
+                $maxWidth={previewMaxWidth}
+              >
+                <div
+                  className="cms-preview-content-grid"
+                  style={
+                    previewHasSidebar
+                      ? {
+                          display: 'grid',
+                          gridTemplateColumns: `minmax(0, 1fr) ${
+                            draftPage?.settings?.sidebarWidth || '320px'
+                          }`,
+                          gap: draftPage?.settings?.contentAreaGap || '24px',
+                          alignItems: 'start',
+                        }
+                      : undefined
+                  }
+                >
+                  <div>{renderPreviewBlocks(slotGroups.content || [])}</div>
+                  {previewHasSidebar ? (
+                    <aside>
+                      {renderPreviewBlocks(slotGroups.sidebar || [])}
+                    </aside>
+                  ) : null}
+                </div>
+                {renderPreviewBlocks(slotGroups.cta || [])}
+                {renderPreviewBlocks(slotGroups.footer || [])}
+              </PreviewContent>
+              <PreviewFooter>
+                <span>
+                  {portalLayout.footerText ||
+                    portalLayout.portalTitle ||
+                    t('Public Analytics Portal')}
+                </span>
+                <PreviewHeaderLinks aria-label={t('Footer navigation')}>
+                  {previewFooterItems.map(item => (
+                    <a
+                      key={String(item.id)}
+                      href={item.path || '#'}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: 'inherit', textDecoration: 'none' }}
+                    >
+                      {item.label}
+                    </a>
+                  ))}
+                </PreviewHeaderLinks>
+              </PreviewFooter>
+            </PreviewPage>
+          </PreviewStage>
+        </PreviewOverlay>
+      ) : null}
 
       <Drawer
         title={t('Document & Reusable Sections')}

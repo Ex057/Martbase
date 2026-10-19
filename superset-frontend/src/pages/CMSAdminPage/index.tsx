@@ -816,20 +816,27 @@ function serializeMenuItems(
   }));
 }
 
-function normalizePortalLayoutConfig(config?: Record<string, any> | null): Record<string, any> {
-  const appearance = (config?.appearance as Record<string, any> | undefined) || {};
-  const branding = (appearance.branding as Record<string, any> | undefined) || {};
+function normalizePortalLayoutConfig(
+  config?: Record<string, any> | null,
+): Record<string, any> {
+  const appearance =
+    (config?.appearance as Record<string, any> | undefined) || {};
+  const branding =
+    (appearance.branding as Record<string, any> | undefined) || {};
   const typography =
     (appearance.typography as Record<string, any> | undefined) || {};
-  const surfaces = (appearance.surfaces as Record<string, any> | undefined) || {};
+  const surfaces =
+    (appearance.surfaces as Record<string, any> | undefined) || {};
   const links = (appearance.links as Record<string, any> | undefined) || {};
 
   return {
     ...(config || {}),
     authenticatedHomeDashboardId: config?.authenticatedHomeDashboardId || null,
-    authenticatedHomeDashboardPath: config?.authenticatedHomeDashboardPath || '',
+    authenticatedHomeDashboardPath:
+      config?.authenticatedHomeDashboardPath || '',
     authenticatedHomeMode: config?.authenticatedHomeMode || 'welcome',
-    authenticatedHomeRoleDashboardPaths: config?.authenticatedHomeRoleDashboardPaths || {},
+    authenticatedHomeRoleDashboardPaths:
+      config?.authenticatedHomeRoleDashboardPaths || {},
     accentColor: config?.accentColor || branding.accentColor || '',
     secondaryColor: config?.secondaryColor || branding.secondaryColor || '',
     surfaceColor: config?.surfaceColor || branding.surfaceColor || '',
@@ -931,50 +938,63 @@ function renderDynamicPagesGuide() {
             <Stack>
               <TinyMeta>
                 {t(
-                  'Use this quick guide to create, style, preview, and publish your own portal pages without code changes.',
+                  'Follow these steps in order. A page is visible to visitors only when its visibility is Public and it has been published.',
                 )}
               </TinyMeta>
               <SectionList>
                 <div>
-                  <strong>{t('1. Start with Pages')}</strong>
+                  <strong>{t('1. Create and save the page')}</strong>
                   <TinyMeta>
                     {t(
-                      'Create a new page, define its title, slug, visibility, and publish state from the Pages workspace.',
+                      'Choose New Page, add a title, then Save Draft. Saving stores your work; it does not make the page public.',
                     )}
                   </TinyMeta>
                 </div>
                 <div>
-                  <strong>{t('2. Build in Page Studio')}</strong>
+                  <strong>{t('2. Set the page address (slug)')}</strong>
                   <TinyMeta>
                     {t(
-                      'Open Page Studio to arrange blocks, choose layouts, attach dashboards or charts, and tune content section by section.',
+                      'Use a short, unique slug such as malaria-trends: lowercase words joined with hyphens. The slug is only the last part of the address. A top-level page is /superset/public/malaria-trends/.',
                     )}
                   </TinyMeta>
                 </div>
                 <div>
-                  <strong>{t('3. Use Portal Settings for shared defaults')}</strong>
+                  <strong>{t('3. Choose visibility before publishing')}</strong>
                   <TinyMeta>
                     {t(
-                      'Set the beginner home dashboard, typography, colors, spacing, and other global defaults once so new pages inherit them.',
+                      'In Page Studio → Config, set Visibility to Public for anyone to view, Authenticated for signed-in users, or leave it as Draft. Only Public pages can be the portal landing page.',
                     )}
                   </TinyMeta>
                 </div>
                 <div>
-                  <strong>{t('4. Link pages from Menus')}</strong>
+                  <strong>{t('4. Build, preview, and publish')}</strong>
                   <TinyMeta>
                     {t(
-                      'Add pages to the header or footer navigation so users can discover them quickly from the live portal.',
+                      'Add and arrange content in Studio, then Preview to check it. Save your changes, choose Public visibility, and click Publish. A draft is not public until it is published.',
                     )}
                   </TinyMeta>
                 </div>
                 <div>
-                  <strong>{t('5. Preview and publish carefully')}</strong>
+                  <strong>{t('5. Make it the landing page (optional)')}</strong>
                   <TinyMeta>
                     {t(
-                      'Save drafts while iterating, preview public pages, and publish only after checking layout, links, and dashboard visibility.',
+                      'From the Pages list, click Set as landing and confirm. This publishes an unpublished Public page and makes it the page visitors see at /superset/public/. It will not change an Authenticated page to Public for you.',
                     )}
                   </TinyMeta>
                 </div>
+                <div>
+                  <strong>{t('6. Understand paths and navigation')}</strong>
+                  <TinyMeta>
+                    {t(
+                      'A child page includes its parent slug in the URL: parent slug updates and changes the path too. Path Label is just the name shown in menus; it does not change the URL. Add the page to a Header or Footer menu if visitors should have a link to it.',
+                    )}
+                  </TinyMeta>
+                </div>
+                <TinyMeta>
+                  {t(
+                    'If a page is already published, unpublish it before changing its title, slug, parent, or visibility. Changing a slug changes the page URL, so update any menu links that use a custom URL.',
+                  )}
+                </TinyMeta>
               </SectionList>
             </Stack>
           ),
@@ -1741,8 +1761,7 @@ export default function CMSAdminPage() {
             portalLayout.authenticatedHomeMode || 'welcome',
           authenticatedHomeDashboardId:
             Number(portalLayout.authenticatedHomeDashboardId) || null,
-          authenticatedHomeDashboardPath:
-            selectedHomeDashboard?.url || '',
+          authenticatedHomeDashboardPath: selectedHomeDashboard?.url || '',
           authenticatedHomeRoleDashboardPaths:
             portalLayout.authenticatedHomeRoleDashboardPaths || {},
         },
@@ -3925,7 +3944,8 @@ export default function CMSAdminPage() {
                 />
               </FieldBlock>
             </FieldGrid>
-            {(portalLayout.authenticatedHomeMode || 'welcome') === 'dashboard' ? (
+            {(portalLayout.authenticatedHomeMode || 'welcome') ===
+            'dashboard' ? (
               <>
                 <TinyMeta>
                   {t(
@@ -3945,11 +3965,14 @@ export default function CMSAdminPage() {
                     <FieldLabel>{t('End User Role Dashboard')}</FieldLabel>
                     <Select
                       value={
-                        portalLayout.authenticatedHomeRoleDashboardPaths?.['End user']
+                        portalLayout.authenticatedHomeRoleDashboardPaths?.[
+                          'End user'
+                        ]
                           ? data?.dashboards.find(
                               d =>
                                 `/superset/dashboard/${d.id}/` ===
-                                portalLayout.authenticatedHomeRoleDashboardPaths?.[
+                                portalLayout
+                                  .authenticatedHomeRoleDashboardPaths?.[
                                   'End user'
                                 ],
                             )?.id
@@ -3964,8 +3987,11 @@ export default function CMSAdminPage() {
                         setPortalLayout(previous => ({
                           ...previous,
                           authenticatedHomeRoleDashboardPaths: {
-                            ...(previous.authenticatedHomeRoleDashboardPaths || {}),
-                            'End user': value ? `/superset/dashboard/${value}/` : '',
+                            ...(previous.authenticatedHomeRoleDashboardPaths ||
+                              {}),
+                            'End user': value
+                              ? `/superset/dashboard/${value}/`
+                              : '',
                           },
                         }));
                       }}
@@ -3975,7 +4001,8 @@ export default function CMSAdminPage() {
                     <FieldLabel>{t('Analytics Role Dashboard')}</FieldLabel>
                     <Select
                       value={
-                        portalLayout.authenticatedHomeRoleDashboardPaths?.Analytics
+                        portalLayout.authenticatedHomeRoleDashboardPaths
+                          ?.Analytics
                           ? data?.dashboards.find(
                               d =>
                                 `/superset/dashboard/${d.id}/` ===
@@ -3993,8 +4020,11 @@ export default function CMSAdminPage() {
                         setPortalLayout(previous => ({
                           ...previous,
                           authenticatedHomeRoleDashboardPaths: {
-                            ...(previous.authenticatedHomeRoleDashboardPaths || {}),
-                            Analytics: value ? `/superset/dashboard/${value}/` : '',
+                            ...(previous.authenticatedHomeRoleDashboardPaths ||
+                              {}),
+                            Analytics: value
+                              ? `/superset/dashboard/${value}/`
+                              : '',
                           },
                         }));
                       }}
@@ -4003,7 +4033,9 @@ export default function CMSAdminPage() {
                 </FieldGrid>
                 <FieldGrid>
                   <FieldBlock>
-                    <FieldLabel>{t('Data Management Role Dashboard')}</FieldLabel>
+                    <FieldLabel>
+                      {t('Data Management Role Dashboard')}
+                    </FieldLabel>
                     <Select
                       value={
                         portalLayout.authenticatedHomeRoleDashboardPaths?.[
@@ -4012,7 +4044,8 @@ export default function CMSAdminPage() {
                           ? data?.dashboards.find(
                               d =>
                                 `/superset/dashboard/${d.id}/` ===
-                                portalLayout.authenticatedHomeRoleDashboardPaths?.[
+                                portalLayout
+                                  .authenticatedHomeRoleDashboardPaths?.[
                                   'Data Management'
                                 ],
                             )?.id
@@ -4027,8 +4060,11 @@ export default function CMSAdminPage() {
                         setPortalLayout(previous => ({
                           ...previous,
                           authenticatedHomeRoleDashboardPaths: {
-                            ...(previous.authenticatedHomeRoleDashboardPaths || {}),
-                            'Data Management': value ? `/superset/dashboard/${value}/` : '',
+                            ...(previous.authenticatedHomeRoleDashboardPaths ||
+                              {}),
+                            'Data Management': value
+                              ? `/superset/dashboard/${value}/`
+                              : '',
                           },
                         }));
                       }}
@@ -4042,7 +4078,8 @@ export default function CMSAdminPage() {
                           ? data?.dashboards.find(
                               d =>
                                 `/superset/dashboard/${d.id}/` ===
-                                portalLayout.authenticatedHomeRoleDashboardPaths?.Admin,
+                                portalLayout.authenticatedHomeRoleDashboardPaths
+                                  ?.Admin,
                             )?.id
                           : undefined
                       }
@@ -4055,7 +4092,8 @@ export default function CMSAdminPage() {
                         setPortalLayout(previous => ({
                           ...previous,
                           authenticatedHomeRoleDashboardPaths: {
-                            ...(previous.authenticatedHomeRoleDashboardPaths || {}),
+                            ...(previous.authenticatedHomeRoleDashboardPaths ||
+                              {}),
                             Admin: value ? `/superset/dashboard/${value}/` : '',
                           },
                         }));
@@ -4758,7 +4796,18 @@ export default function CMSAdminPage() {
           {adminNavItems.map(item => (
             <TabButton
               key={item.key}
-              $active={requestedTab === item.key || (item.key === 'settings' && ['settings', 'portal', 'menus', 'themes', 'templates', 'styles'].includes(requestedTab))}
+              $active={
+                requestedTab === item.key ||
+                (item.key === 'settings' &&
+                  [
+                    'settings',
+                    'portal',
+                    'menus',
+                    'themes',
+                    'templates',
+                    'styles',
+                  ].includes(requestedTab))
+              }
               onClick={() =>
                 setQueryState({
                   pageSlug: draftPage?.slug || requestedPageSlug,
@@ -4771,7 +4820,14 @@ export default function CMSAdminPage() {
               <span>{item.label}</span>
             </TabButton>
           ))}
-          {['settings', 'portal', 'menus', 'themes', 'templates', 'styles'].includes(requestedTab) && (
+          {[
+            'settings',
+            'portal',
+            'menus',
+            'themes',
+            'templates',
+            'styles',
+          ].includes(requestedTab) && (
             <>
               <TabDivider />
               {settingsSubNavItems.map(item => (

@@ -1419,7 +1419,7 @@ export default function PublicLandingPage() {
     currentPage?.settings?.pagePadding === undefined ||
     currentPage?.settings?.pagePadding === null ||
     String(currentPage?.settings?.pagePadding).trim() === ''
-      ? '28px 24px 72px'
+      ? '28px 24px 32px'
       : String(currentPage.settings.pagePadding);
 
   const footerItems = [
@@ -1631,16 +1631,31 @@ export default function PublicLandingPage() {
                       />
                     </Main>
                   ) : null}
-                  <RenderBlockTree
-                    blocks={renderedRegions.hero}
-                    charts={data?.available_charts || []}
-                    dashboards={data?.dashboards || []}
-                    page={currentPage}
-                    navigation={data?.navigation}
-                    highlights={data?.indicator_highlights || []}
-                    onNavigate={navigateToPath}
-                    onOpenDashboard={navigateToPublicDashboard}
-                  />
+                  {renderedRegions.hero.map(heroBlock => {
+                    const heroTree = (
+                      <RenderBlockTree
+                        blocks={[heroBlock]}
+                        charts={data?.available_charts || []}
+                        dashboards={data?.dashboards || []}
+                        page={currentPage}
+                        navigation={data?.navigation}
+                        highlights={data?.indicator_highlights || []}
+                        onNavigate={navigateToPath}
+                        onOpenDashboard={navigateToPublicDashboard}
+                      />
+                    );
+                    return heroBlock.settings?.fullBleed === false ? (
+                      <Main
+                        key={heroBlock.uid || heroBlock.id}
+                        $maxWidth={resolvedContentMaxWidth}
+                        $padding={resolvedPagePadding}
+                      >
+                        {heroTree}
+                      </Main>
+                    ) : (
+                      <div key={heroBlock.uid || heroBlock.id}>{heroTree}</div>
+                    );
+                  })}
                   <Main
                     $maxWidth={resolvedContentMaxWidth}
                     $padding={resolvedPagePadding}
