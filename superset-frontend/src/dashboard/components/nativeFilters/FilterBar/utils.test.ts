@@ -17,15 +17,40 @@
  * under the License.
  */
 
-import { DataMaskStateWithId, Filter } from '@superset-ui/core';
+import {
+  DataMaskStateWithId,
+  Filter,
+  NativeFilterType,
+} from '@superset-ui/core';
 import {
   checkIsApplyDisabled,
   checkIsValidateError,
   checkIsMissingRequiredValue,
+  isNativeFilterControl,
 } from './utils';
 
 // eslint-disable-next-line no-restricted-globals -- TODO: Migrate from describe blocks
 describe('FilterBar Utils - Validation and Apply Logic', () => {
+  test('recognizes current and legacy DHIS2 native filter discriminators', () => {
+    const currentFilter = {
+      id: 'current-filter',
+      type: NativeFilterType.NativeFilter,
+    } as Filter;
+    const legacyFilter = {
+      id: 'legacy-dhis2-filter',
+      type: 'NativeFilter',
+      filterType: 'filter_select',
+    } as unknown as Filter;
+    const divider = {
+      id: 'divider',
+      type: NativeFilterType.Divider,
+    } as any;
+
+    expect(isNativeFilterControl(currentFilter)).toBe(true);
+    expect(isNativeFilterControl(legacyFilter)).toBe(true);
+    expect(isNativeFilterControl(divider)).toBe(false);
+  });
+
   // eslint-disable-next-line no-restricted-globals -- TODO: Migrate from describe blocks
   describe('checkIsValidateError', () => {
     test('should return true when no filters have validation errors', () => {

@@ -207,6 +207,57 @@ describe('SelectFilterPlugin', () => {
     });
   });
 
+  test('Clear all remains empty after cascading options refresh', () => {
+    const onClearAllComplete = jest.fn();
+    const renderPlugin = (
+      clearAllTrigger: boolean,
+      filterState = selectMultipleProps.filterState,
+      data = selectMultipleProps.queriesData[0].data,
+    ) => (
+      <SelectFilterPlugin
+        // @ts-ignore
+        {...transformProps({
+          ...selectMultipleProps,
+          filterState,
+          formData: {
+            ...selectMultipleProps.formData,
+            defaultToFirstItem: true,
+          },
+          queriesData: [{ ...selectMultipleProps.queriesData[0], data }],
+          hooks: { clearAllTrigger, onClearAllComplete },
+        })}
+        setDataMask={setDataMask}
+        showOverflow={false}
+      />
+    );
+
+    const { rerender } = render(renderPlugin(false), { useRedux: true });
+    setDataMask.mockClear();
+
+    rerender(renderPlugin(true, { value: undefined }));
+
+    expect(setDataMask).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filterState: expect.objectContaining({ value: undefined }),
+      }),
+    );
+    expect(onClearAllComplete).toHaveBeenCalledWith('test-filter');
+
+    setDataMask.mockClear();
+    rerender(
+      renderPlugin(false, { value: undefined }, [
+        { gender: 'girl' },
+        { gender: 'boy' },
+      ]),
+    );
+
+    expect(setDataMask).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        filterState: expect.objectContaining({ value: ['girl'] }),
+      }),
+    );
+  });
+
   test('Select single values with inverse', async () => {
     getWrapper({ multiSelect: false, inverseSelection: true });
 

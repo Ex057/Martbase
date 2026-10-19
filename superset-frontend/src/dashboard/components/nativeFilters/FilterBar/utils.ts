@@ -17,12 +17,30 @@
  * under the License.
  */
 
-import { DataMaskStateWithId, Filter, FilterState } from '@superset-ui/core';
+import {
+  DataMaskStateWithId,
+  Divider,
+  Filter,
+  FilterState,
+  isNativeFilter,
+} from '@superset-ui/core';
 import { useSelector } from 'react-redux';
 import { createSelector } from '@reduxjs/toolkit';
 import { areObjectsEqual } from 'src/reduxUtils';
 import { testWithId } from 'src/utils/testUtils';
 import { RootState } from 'src/dashboard/types';
+
+/**
+ * DHIS2-generated filters created by older Martbase builds used the legacy
+ * `NativeFilter` discriminator instead of Superset's `NATIVE_FILTER` value.
+ * Treat both as native filters so existing dashboards keep working while the
+ * persisted configurations are gradually replaced or re-saved.
+ */
+export const isNativeFilterControl = (
+  filter: Filter | Divider,
+): filter is Filter =>
+  isNativeFilter(filter) ||
+  (filter as Filter & { type: string }).type === 'NativeFilter';
 
 export const getOnlyExtraFormData = (data: DataMaskStateWithId) =>
   Object.values(data).reduce(

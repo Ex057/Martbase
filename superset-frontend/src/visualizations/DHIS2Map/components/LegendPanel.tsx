@@ -187,36 +187,37 @@ function getPositionStyle(position: MapCornerPosition): React.CSSProperties {
     position: 'absolute',
     zIndex: 800,
     maxWidth: 220,
-    maxHeight: '70%',
+    maxHeight: '55%',
     overflowY: 'auto',
     overflowX: 'hidden',
-    pointerEvents: 'none',
+    pointerEvents: 'auto',
+    overscrollBehavior: 'contain',
     // Scrollbar styling falls back gracefully
   };
 
   switch (position) {
     case 'topleft':
-      return { ...base, top: 8, left: 8 };
+      return { ...base, top: 116, left: 12 };
     case 'top':
-      return { ...base, top: 8, left: '50%', transform: 'translateX(-50%)' };
+      return { ...base, top: 12, left: '50%', transform: 'translateX(-50%)' };
     case 'topright':
-      return { ...base, top: 8, right: 8 };
+      return { ...base, top: 52, right: 12 };
     case 'left':
-      return { ...base, top: '50%', left: 8, transform: 'translateY(-50%)' };
+      return { ...base, top: '50%', left: 12, transform: 'translateY(-50%)' };
     case 'right':
-      return { ...base, top: '50%', right: 8, transform: 'translateY(-50%)' };
+      return { ...base, top: '50%', right: 12, transform: 'translateY(-50%)' };
     case 'bottomleft':
-      return { ...base, bottom: 36, left: 8 };
+      return { ...base, bottom: 76, left: 12 };
     case 'bottom':
       return {
         ...base,
-        bottom: 36,
+        bottom: 76,
         left: '50%',
         transform: 'translateX(-50%)',
       };
     case 'bottomright':
     default:
-      return { ...base, bottom: 36, right: 8 };
+      return { ...base, bottom: 76, right: 12 };
   }
 }
 
@@ -309,7 +310,10 @@ function LegendPanel({
       ? `${Math.round(4 * scale)}px ${Math.round(7 * scale)}px`
       : `${Math.round(7 * scale)}px ${Math.round(10 * scale)}px`,
     minWidth: Math.round((isCompact ? 100 : 120) * scale),
-    maxWidth: Math.min(360, Math.round(220 * scale)),
+    maxWidth: `min(${Math.min(
+      360,
+      Math.round(220 * scale),
+    )}px, calc(100% - 24px))`,
   };
 
   // Title style

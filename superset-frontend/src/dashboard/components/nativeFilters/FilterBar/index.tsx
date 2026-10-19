@@ -34,7 +34,6 @@ import {
   DataMaskWithId,
   Filter,
   DataMask,
-  isNativeFilter,
   usePrevious,
   styled,
 } from '@superset-ui/core';
@@ -62,7 +61,7 @@ import { logEvent } from 'src/logger/actions';
 import { LOG_ACTIONS_CHANGE_DASHBOARD_FILTER } from 'src/logger/LogUtils';
 import { FilterBarOrientation, RootState } from 'src/dashboard/types';
 import { UserWithPermissionsAndRoles } from 'src/types/bootstrapTypes';
-import { checkIsApplyDisabled } from './utils';
+import { checkIsApplyDisabled, isNativeFilterControl } from './utils';
 import { FiltersBarProps } from './types';
 import {
   useNativeFiltersDataMask,
@@ -168,7 +167,7 @@ const FilterBar: FC<FiltersBarProps> = ({
   const previousFilters = usePrevious(filters);
   const filterValues = useMemo(() => Object.values(filters), [filters]);
   const nativeFilterValues = useMemo(
-    () => filterValues.filter(isNativeFilter),
+    () => filterValues.filter(isNativeFilterControl),
     [filterValues],
   );
   const dashboardId = useSelector<any, number>(
@@ -398,7 +397,11 @@ const FilterBar: FC<FiltersBarProps> = ({
     const newClearAllTriggers = { ...clearAllTriggers };
     const clearedFilters: Record<string, DataMaskWithId> = {};
 
-    filtersInScope.filter(isNativeFilter).forEach(filter => {
+    // "Clear all" applies to the whole filter bar, including filters that are
+    // currently out of scope because the user is viewing another dashboard
+    // tab. Leaving those masks applied makes the button appear to do nothing
+    // when the selected value belongs to an out-of-scope filter.
+    nativeFilterValues.forEach(filter => {
       const { id } = filter;
       clearedFilters[id] = getInitialDataMask(id) as DataMaskWithId;
       newClearAllTriggers[id] = true;
@@ -451,10 +454,11 @@ const FilterBar: FC<FiltersBarProps> = ({
   }, [
     dataMaskSelected,
     dataMaskApplied,
-    filtersInScope,
+    nativeFilterValues,
     chartCustomizationItems,
     clearAllTriggers,
     dispatch,
+    setDataMaskSelected,
   ]);
 
   const handleClearAllComplete = useCallback((filterId: string) => {
@@ -500,7 +504,7 @@ const FilterBar: FC<FiltersBarProps> = ({
     (checkIsApplyDisabled(
       dataMaskSelected,
       dataMaskApplied,
-      filtersInScope.filter(isNativeFilter),
+      filtersInScope.filter(isNativeFilterControl),
     ) &&
       !hasPendingChartCustomizations &&
       !hasClearedChartCustomizations) ||

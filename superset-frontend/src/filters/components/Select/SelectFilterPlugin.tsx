@@ -592,15 +592,14 @@ const buildFixedPeriodsForYear = (
 
 const buildRelativePeriodOptions = (
   categories: RelativePeriodCategory[],
-): RelativePeriodOption[] => {
-  return categories.flatMap(category =>
+): RelativePeriodOption[] =>
+  categories.flatMap(category =>
     RELATIVE_PERIOD_CATEGORIES[category].options.map(option => ({
       key: option.key,
       label: option.label,
       values: [option.key],
     })),
   );
-};
 
 type DataMaskAction =
   | { type: 'ownState'; ownState: JsonObject }
@@ -793,6 +792,11 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
   // effects must not re-apply a value, otherwise an async options refetch would
   // resurrect the just-cleared selection.
   const pendingClearRef = useRef(false);
+  // Keep automatic defaults suppressed after the parent acknowledges the
+  // clear. Cascading filters can receive fresh option data after that point;
+  // without this guard, defaultToFirstItem/defaultValue selects a value again.
+  // A real user selection or an externally supplied value releases the guard.
+  const suppressDefaultsAfterClearRef = useRef(false);
   const [dataMask, dispatchDataMask] = useImmerReducer(reducer, {
     extraFormData: {},
     filterState,
@@ -1029,6 +1033,7 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
 
   const handleChange = useCallback(
     (value?: SelectValue | number | string) => {
+      suppressDefaultsAfterClearRef.current = false;
       const rawValues = value === null ? [null] : ensureIsArray(value);
       const values = rawValues.reduce<(number | string | null)[]>(
         (acc, selectedValue) => {
@@ -1224,6 +1229,7 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
   }, []);
 
   const handleApplyPeriodPicker = useCallback(() => {
+    suppressDefaultsAfterClearRef.current = false;
     const nextValues = [...draftPeriodValues].sort((a, b) => {
       const parsedA = parsePeriodValue(a);
       const parsedB = parsePeriodValue(b);
@@ -1349,8 +1355,13 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
     }
 
     if (filterState.value !== undefined) {
+      suppressDefaultsAfterClearRef.current = false;
       // Set the filter state value if it is defined
       updateDataMask(filterState.value);
+      return;
+    }
+
+    if (suppressDefaultsAfterClearRef.current) {
       return;
     }
 
@@ -1401,7 +1412,7 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
 
   useEffect(() => {
     // Don't re-default a value while a Clear all is being processed.
-    if (pendingClearRef.current) {
+    if (pendingClearRef.current || suppressDefaultsAfterClearRef.current) {
       return;
     }
 
@@ -1440,19 +1451,26 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
 
   useEffect(() => {
     setDataMask(dataMask);
-    // Complete the clear only once the cleared (undefined) value has actually
-    // been written back. Firing onClearAllComplete earlier (e.g. in the same
-    // tick as the trigger) lets the parent delete the trigger before cascade
-    // children have cleared, leaving stale selections behind.
+  }, [JSON.stringify(dataMask)]);
+
+  useEffect(() => {
+    // Complete the clear only after the cleared value comes back through the
+    // parent-owned filterState. The local reducer clears synchronously, but the
+    // parent write-back is asynchronous and may be followed by a cascade fetch.
     if (
       pendingClearRef.current &&
-      (dataMask.filterState?.value === undefined ||
-        dataMask.filterState?.value === null)
+      (filterState.value === undefined || filterState.value === null)
     ) {
       pendingClearRef.current = false;
       onClearAllComplete?.(formData.nativeFilterId);
     }
-  }, [JSON.stringify(dataMask)]);
+  }, [
+    clearAllTrigger,
+    dataMask.filterState?.value,
+    filterState.value,
+    formData.nativeFilterId,
+    onClearAllComplete,
+  ]);
 
   useEffect(() => {
     if (clearAllTrigger) {
@@ -1460,6 +1478,7 @@ export default function PluginFilterSelect(props: PluginFilterSelectProps) {
       // completion callback fires from the write-back effect above once the
       // cleared value is confirmed, so it can't race the async cascade refetch.
       pendingClearRef.current = true;
+      suppressDefaultsAfterClearRef.current = true;
       dispatchDataMask({ type: 'reset' });
       setSearch('');
     }

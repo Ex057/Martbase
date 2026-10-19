@@ -22,11 +22,12 @@ import {
   SupersetClient,
   Filter,
   Filters,
-  isNativeFilter,
+  NativeFilterType,
 } from '@superset-ui/core';
 import { nanoid } from 'nanoid';
 import { DASHBOARD_ROOT_ID } from 'src/dashboard/util/constants';
 import { getInitialDataMask } from 'src/dataMask/reducer';
+import { isNativeFilterControl } from './utils';
 
 const NATIVE_FILTER_PREFIX = 'NATIVE_FILTER-';
 
@@ -85,7 +86,8 @@ export function blueprintToNativeFilters(
   const existingColumnNames = new Set(
     Object.values(existingFilters)
       .filter(
-        (f): f is Filter => isNativeFilter(f) && !!f?.targets?.[0]?.column?.name,
+        (f): f is Filter =>
+          isNativeFilterControl(f) && !!f?.targets?.[0]?.column?.name,
       )
       .map(f => f.targets[0].column!.name),
   );
@@ -159,7 +161,7 @@ export function blueprintToNativeFilters(
         excluded: [],
       },
       controlValues,
-      type: 'NativeFilter',
+      type: NativeFilterType.NativeFilter,
       description: `Auto-generated DHIS2 ${bf.category.replace(/_/g, ' ')} filter`,
     };
   });

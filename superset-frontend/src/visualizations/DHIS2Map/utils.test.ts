@@ -289,6 +289,7 @@ describe('DHIS2Map Utils', () => {
         maxZoom: 18,
       });
     });
+
   });
 
   describe('strategic legend placement', () => {
