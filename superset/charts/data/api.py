@@ -23,6 +23,7 @@ from typing import Any, TYPE_CHECKING
 from flask import current_app as app, g, make_response, request, Response
 from flask_appbuilder.api import expose, protect
 from flask_babel import gettext as _
+from flask_login import current_user
 from marshmallow import ValidationError
 
 from superset import is_feature_enabled, security_manager
@@ -43,7 +44,8 @@ from superset.common.chart_data import ChartDataResultFormat, ChartDataResultTyp
 from superset.connectors.sqla.models import BaseDatasource
 from superset.daos.exceptions import DatasourceNotFound
 from superset.exceptions import QueryObjectValidationError
-from superset.extensions import event_logger
+from superset.extensions import db, event_logger
+from superset.models.dashboard import Dashboard
 from superset.models.sql_lab import Query
 from superset.utils import json
 from superset.utils.core import (
@@ -64,6 +66,32 @@ logger = logging.getLogger(__name__)
 class ChartDataRestApi(ChartRestApi):
     include_route_methods = {"get_data", "data", "data_from_cache", "get_public_data"}
     csrf_exempt = True
+
+    @staticmethod
+    def _can_export_public_dashboard_chart(query_context: QueryContext) -> bool:
+        """Allow a row-limited export only for a chart on a published dashboard."""
+        if not (
+            security_manager.is_guest_user()
+            or getattr(current_user, "is_anonymous", False)
+        ):
+            return False
+
+        form_data = getattr(query_context, "form_data", None) or {}
+        try:
+            dashboard_id = int(form_data.get("dashboardId"))
+            slice_id = int(form_data.get("slice_id"))
+        except (TypeError, ValueError):
+            return False
+
+        dashboard = (
+            db.session.query(Dashboard)
+            .filter(Dashboard.id == dashboard_id, Dashboard.published.is_(True))
+            .one_or_none()
+        )
+        if dashboard is None:
+            return False
+
+        return any(chart.id == slice_id for chart in dashboard.slices)
 
     @expose("/<int:pk>/data/", methods=("GET",))
     @statsd_metrics
@@ -474,8 +502,30 @@ class ChartDataRestApi(ChartRestApi):
 
         if result_format in ChartDataResultFormat.table_like():
             # Verify user has permission to export file
-            if not security_manager.can_access("can_csv", "Superset"):
+            can_export_with_permission = security_manager.can_access(
+                "can_csv", "Superset"
+            )
+            can_export_public_chart = self._can_export_public_dashboard_chart(
+                result["query_context"]
+            )
+            if not can_export_with_permission and not can_export_public_chart:
+                form_data = getattr(result["query_context"], "form_data", None) or {}
+                logger.warning(
+                    "Denied public chart export format=%s dashboard_id=%s chart_id=%s",
+                    result_format,
+                    form_data.get("dashboardId"),
+                    form_data.get("slice_id"),
+                )
                 return self.response_403()
+
+            if can_export_public_chart and not can_export_with_permission:
+                form_data = getattr(result["query_context"], "form_data", None) or {}
+                logger.info(
+                    "Authorized public chart export format=%s dashboard_id=%s chart_id=%s",
+                    result_format,
+                    form_data.get("dashboardId"),
+                    form_data.get("slice_id"),
+                )
 
             if not result["queries"]:
                 return self.response_400(_("Empty query result"))

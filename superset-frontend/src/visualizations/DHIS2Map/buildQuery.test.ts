@@ -66,6 +66,9 @@ describe('DHIS2Map buildQuery', () => {
       metric: 'SUM(c_105_ep01b_malaria_tested_b_s_rdt)',
       org_unit_column: 'region',
       focus_selected_boundary_with_children: true,
+      extra_form_data: {
+        filters: [{ col: 'region', op: 'IN', val: ['Central'] }],
+      },
       dhis2_staged_local_dataset: 'true',
       dhis2_hierarchy_columns: [
         'national',
@@ -102,6 +105,15 @@ describe('DHIS2Map buildQuery', () => {
       metric: 'SUM(c_105_ep01b_malaria_tested_b_s_rdt)',
       org_unit_column: 'dlg_municipality_city_council',
       focus_selected_boundary_with_children: true,
+      extra_form_data: {
+        filters: [
+          {
+            col: 'dlg_municipality_city_council',
+            op: 'IN',
+            val: ['Kampala'],
+          },
+        ],
+      },
       dhis2_staged_local_dataset: 'true',
       dhis2_hierarchy_columns: [
         'national',
@@ -124,6 +136,9 @@ describe('DHIS2Map buildQuery', () => {
       metric: 'SUM(c_105_ep01b_malaria_tested_b_s_rdt)',
       org_unit_column: 'district_city',
       focus_selected_boundary_with_children: true,
+      extra_form_data: {
+        filters: [{ col: 'district_city', op: 'IN', val: ['Gulu'] }],
+      },
       dhis2_staged_local_dataset: 'true',
       dhis2_hierarchy_columns: [
         'national',
@@ -263,6 +278,9 @@ describe('DHIS2Map buildQuery', () => {
       metric: 'SUM(malaria_cases)',
       org_unit_column: 'region',
       focus_selected_boundary_with_children: true,
+      extra_form_data: {
+        filters: [{ col: 'region', op: 'IN', val: ['Central'] }],
+      },
       dhis2_staged_local_dataset: 'true',
       dhis2_hierarchy_columns: ['national', 'region', 'district_city'],
     } as any);
@@ -274,6 +292,27 @@ describe('DHIS2Map buildQuery', () => {
     expect(nullExclusionFilter).toBeDefined();
     // Focus mode: terminal column is one level below 'region' → 'district_city'
     expect(nullExclusionFilter?.col).toBe('district_city');
+  });
+
+  test('keeps the configured OU level before a dashboard geography filter is selected', () => {
+    const queryContext = buildQuery({
+      datasource: '4__table',
+      viz_type: 'dhis2_map',
+      metric: 'SUM(malaria_cases)',
+      org_unit_column: 'region',
+      focus_selected_boundary_with_children: true,
+      dhis2_staged_local_dataset: 'true',
+      dhis2_hierarchy_columns: ['national', 'region', 'district_city'],
+    } as any);
+
+    const [query] = queryContext.queries;
+    expect(query.extras).toMatchObject({
+      dhis2_selected_org_unit_column: 'region',
+    });
+    expect(
+      (query.filters || []).find((filter: any) => filter.op === 'IS NOT NULL')
+        ?.col,
+    ).toBe('region');
   });
 
   test('does NOT add IS NOT NULL filter when no hierarchy columns are configured', () => {

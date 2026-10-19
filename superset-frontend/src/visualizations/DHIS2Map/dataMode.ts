@@ -167,7 +167,9 @@ export function shouldLoadStagedLocalFocusData({
     Array.isArray(chartColumns) && chartColumns.length > 0
       ? chartColumns
       : Array.from(
-          new Set(chartRows.flatMap(row => Object.keys(row || {})).filter(Boolean)),
+          new Set(
+            chartRows.flatMap(row => Object.keys(row || {})).filter(Boolean),
+          ),
         );
 
   if (requestedChildColumn) {
@@ -182,7 +184,9 @@ export function shouldLoadStagedLocalFocusData({
 
     const hasChildValues = chartRows.some(row => {
       const value = row?.[resolvedChildColumn];
-      return value !== undefined && value !== null && String(value).trim() !== '';
+      return (
+        value !== undefined && value !== null && String(value).trim() !== ''
+      );
     });
     if (!hasChildValues) {
       return true;
@@ -204,7 +208,9 @@ export function shouldLoadStagedLocalFocusData({
       const hasDeeperHierarchyValues = deeperColumns.some(columnName =>
         chartRows.some(row => {
           const value = row?.[columnName];
-          return value !== undefined && value !== null && String(value).trim() !== '';
+          return (
+            value !== undefined && value !== null && String(value).trim() !== ''
+          );
         }),
       );
 
@@ -249,4 +255,45 @@ export function resolveDisplayedBoundaries<T extends { id: string }>({
   }
 
   return boundaries.filter(feature => selectedBoundaryIds.has(feature.id));
+}
+
+export function resolveViewportFocusBoundaries<T extends { id: string }>({
+  displayBoundaries,
+  selectedBoundaryIds,
+  hasActiveBoundaryFilter = false,
+}: {
+  displayBoundaries: T[];
+  selectedBoundaryIds: Set<string>;
+  hasActiveBoundaryFilter?: boolean;
+}): T[] {
+  if (!hasActiveBoundaryFilter || selectedBoundaryIds.size === 0) {
+    return displayBoundaries;
+  }
+
+  const selected = displayBoundaries.filter(feature =>
+    selectedBoundaryIds.has(feature.id),
+  );
+  return selected.length > 0 ? selected : displayBoundaries;
+}
+
+export function hasActiveGeographyFilter({
+  filters,
+  geographyColumns,
+}: {
+  filters: Array<{ col?: string; val?: unknown }>;
+  geographyColumns: string[];
+}): boolean {
+  const normalizedColumns = new Set(
+    geographyColumns.map(column => String(column || '').trim()).filter(Boolean),
+  );
+
+  return filters.some(filter => {
+    const column = String(filter?.col || '').trim();
+    if (!normalizedColumns.has(column)) {
+      return false;
+    }
+    return Array.isArray(filter.val)
+      ? filter.val.length > 0
+      : filter.val !== undefined && filter.val !== null && filter.val !== '';
+  });
 }

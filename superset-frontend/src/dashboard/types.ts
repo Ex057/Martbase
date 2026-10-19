@@ -131,6 +131,7 @@ export type DashboardState = {
 };
 export type DashboardInfo = {
   id: number;
+  isPublicView?: boolean;
   common: {
     conf: JsonObject;
   };

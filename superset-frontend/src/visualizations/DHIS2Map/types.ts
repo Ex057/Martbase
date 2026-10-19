@@ -170,6 +170,8 @@ export interface DHIS2MapProps {
   showLegend: boolean;
   legendPosition: MapCornerPosition;
   legendDisplayType?: LegendDisplayType;
+  legendFontSize?: number;
+  mapDescription?: string;
   legendClasses: number;
   legendType?: LegendType;
   legendMin?: number;
@@ -184,6 +186,11 @@ export interface DHIS2MapProps {
   onDrillDown?: (orgUnitId: string, orgUnitName: string) => void;
   setDataMask?: (dataMask: any) => void;
   activeFilters?: Array<{
+    col: string;
+    op: string;
+    val: any;
+  }>;
+  dashboardFilters?: Array<{
     col: string;
     op: string;
     val: any;

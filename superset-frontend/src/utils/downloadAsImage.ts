@@ -24,6 +24,77 @@ import { SupersetTheme, t } from '@superset-ui/core';
 import { addWarningToast } from 'src/components/MessageToasts/actions';
 
 const IMAGE_DOWNLOAD_QUALITY = 0.95;
+const PNG_RENDER_SCALE = 2;
+const MAX_CANVAS_DIMENSION = 16384;
+const ASSET_READY_TIMEOUT_MS = 10000;
+
+const waitForImage = (image: HTMLImageElement): Promise<void> => {
+  if (image.complete) {
+    return Promise.resolve();
+  }
+  return new Promise(resolve => {
+    const done = () => {
+      image.removeEventListener('load', done);
+      image.removeEventListener('error', done);
+      resolve();
+    };
+    image.addEventListener('load', done, { once: true });
+    image.addEventListener('error', done, { once: true });
+  });
+};
+
+export const waitForDownloadAssets = async (
+  element: Element,
+): Promise<void> => {
+  const fontsReady = document.fonts?.ready ?? Promise.resolve();
+  const imagesReady = Promise.all(
+    Array.from(element.querySelectorAll('img')).map(waitForImage),
+  );
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>(resolve => {
+    timeoutId = setTimeout(resolve, ASSET_READY_TIMEOUT_MS);
+  });
+
+  await Promise.race([
+    Promise.all([fontsReady, imagesReady]).then(() => undefined),
+    timeout,
+  ]);
+  if (timeoutId) {
+    clearTimeout(timeoutId);
+  }
+
+  // Let Leaflet/browser transforms and font metrics settle before cloning.
+  await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+};
+
+export const getPngRenderScale = (width: number, height: number): number => {
+  const safeWidth = Math.max(1, width);
+  const safeHeight = Math.max(1, height);
+  return Math.max(
+    0.1,
+    Math.min(
+      PNG_RENDER_SCALE,
+      MAX_CANVAS_DIMENSION / safeWidth,
+      MAX_CANVAS_DIMENSION / safeHeight,
+    ),
+  );
+};
+
+export const getDownloadDimensions = (
+  element: Element,
+): { width: number; height: number } => {
+  const htmlElement = element as HTMLElement;
+  const rect = element.getBoundingClientRect();
+  return {
+    width: Math.ceil(
+      Math.max(1, htmlElement.scrollWidth || 0, rect.width || 0),
+    ),
+    height: Math.ceil(
+      Math.max(1, htmlElement.scrollHeight || 0, rect.height || 0),
+    ),
+  };
+};
 
 /**
  * generate a consistent file stem from a description and date
@@ -125,13 +196,12 @@ const copyAllComputedStyles = (original: Element, clone: Element) => {
   }
 };
 
-const processCloneForVisibility = (clone: HTMLElement) => {
+export const processCloneForVisibility = (clone: HTMLElement) => {
   const cloneStyle = clone.style;
   cloneStyle.height = 'auto';
   cloneStyle.maxHeight = 'none';
 
   const scrollableSelectors = [
-    '[style*="overflow"]',
     '.scrollable',
     '.table-responsive',
     '.ant-table-body',
@@ -224,7 +294,14 @@ const preserveCanvasContent = (original: Element, clone: Element) => {
 
 const createEnhancedClone = (
   originalElement: Element,
-): { clone: HTMLElement; cleanup: () => void } => {
+): {
+  clone: HTMLElement;
+  cleanup: () => void;
+  originalWidth: number;
+  originalHeight: number;
+} => {
+  const { width: originalWidth, height: originalHeight } =
+    getDownloadDimensions(originalElement);
   const clone = originalElement.cloneNode(true) as HTMLElement;
   copyAllComputedStyles(originalElement, clone);
   preserveCanvasContent(originalElement, clone);
@@ -237,11 +314,20 @@ const createEnhancedClone = (
     visibility: hidden;
     pointer-events: none;
     z-index: -1000;
+    width: ${originalWidth}px;
   `;
   tempContainer.appendChild(clone);
   document.body.appendChild(tempContainer);
 
   processCloneForVisibility(clone);
+  // Percentage-based dashboard/chart heights collapse when the clone is moved
+  // into a detached off-screen layout. Preserve the live dashboard footprint
+  // so a full-page export cannot shrink to a thin strip.
+  clone.style.width = `${originalWidth}px`;
+  clone.style.height = `${originalHeight}px`;
+  clone.style.minWidth = `${originalWidth}px`;
+  clone.style.minHeight = `${originalHeight}px`;
+  clone.style.overflow = 'visible';
 
   const cleanup = () => {
     styleCache.delete?.(originalElement);
@@ -250,7 +336,7 @@ const createEnhancedClone = (
     }
   };
 
-  return { clone, cleanup };
+  return { clone, cleanup, originalWidth, originalHeight };
 };
 
 export type ImageDownloadFormat = 'jpg' | 'png' | 'svg';
@@ -286,7 +372,13 @@ export default function downloadAsImageOptimized(
     let cleanup: (() => void) | null = null;
 
     try {
-      const { clone, cleanup: cleanupFn } = createEnhancedClone(elementToPrint);
+      await waitForDownloadAssets(elementToPrint);
+      const {
+        clone,
+        cleanup: cleanupFn,
+        originalWidth,
+        originalHeight,
+      } = createEnhancedClone(elementToPrint);
       cleanup = cleanupFn;
 
       const filter = (node: Element) =>
@@ -295,13 +387,24 @@ export default function downloadAsImageOptimized(
             !node.className.includes('header-controls')
           : true;
 
+      const sourceWidth = Math.max(originalWidth, clone.scrollWidth);
+      const sourceHeight = Math.max(originalHeight, clone.scrollHeight);
+      const renderScale =
+        format === 'png' ? getPngRenderScale(sourceWidth, sourceHeight) : 1;
       const dataUrl = await RENDERERS[format](clone, {
         bgcolor: theme?.colorBgContainer,
         filter,
         // Only JPEG is lossy; the option is ignored by the other renderers.
         quality: IMAGE_DOWNLOAD_QUALITY,
-        height: clone.scrollHeight,
-        width: clone.scrollWidth,
+        height: Math.ceil(sourceHeight * renderScale),
+        width: Math.ceil(sourceWidth * renderScale),
+        style:
+          renderScale !== 1
+            ? {
+                transform: `scale(${renderScale})`,
+                transformOrigin: 'top left',
+              }
+            : undefined,
         cacheBust: true,
       });
 

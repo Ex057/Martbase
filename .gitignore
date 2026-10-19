@@ -146,6 +146,7 @@ docs/project-documentation/
 Next.md
 
 # Planning and progress tracking documents
+/feedback.md
 ACTION_PLAN.md
 BETTER_APPROACH.md
 COMPONENT_REUSE_ACTION_PLAN.md
@@ -191,6 +192,9 @@ logs/*.log
 .localai/
 
 # Local runtime and diagnostics artifacts
+superset.db-shm
+superset.db-wal
+superset.db.before-*
 cookies.txt
 db_upgrade.log
 superset_backend.log

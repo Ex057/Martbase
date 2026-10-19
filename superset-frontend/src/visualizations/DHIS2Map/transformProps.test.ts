@@ -20,6 +20,56 @@ import { ChartProps } from '@superset-ui/core';
 import transformProps from './transformProps';
 
 describe('DHIS2Map transformProps', () => {
+  test('keeps dashboard filters distinct for geography-triggered map focus', () => {
+    const result = transformProps({
+      width: 800,
+      height: 600,
+      formData: {
+        metric: 'cases',
+        org_unit_column: 'district',
+        boundary_levels: [3],
+        tooltip_columns: [],
+        filters: [{ col: 'period', op: 'IN', val: ['2025'] }],
+        extra_form_data: {
+          filters: [{ col: 'region', op: 'IN', val: ['Central'] }],
+        },
+      },
+      queriesData: [{ data: [] }],
+      datasource: { id: 4, database: { id: 3 }, columns: [] },
+      hooks: {},
+      filterState: {},
+    } as any);
+
+    expect(result.activeFilters).toEqual([
+      { col: 'period', op: 'IN', val: ['2025'] },
+    ]);
+    expect(result.dashboardFilters).toEqual([
+      { col: 'region', op: 'IN', val: ['Central'] },
+    ]);
+  });
+
+  test('maps legend sizing and trims the optional map description', () => {
+    const result = transformProps({
+      width: 800,
+      height: 600,
+      formData: {
+        metric: 'cases',
+        org_unit_column: 'district',
+        boundary_levels: [3],
+        tooltip_columns: [],
+        legend_font_size: 18,
+        map_description: '  District malaria performance.  ',
+      },
+      queriesData: [{ data: [] }],
+      datasource: { id: 4, database: { id: 3 }, columns: [] },
+      hooks: {},
+      filterState: {},
+    } as any);
+
+    expect(result.legendFontSize).toBe(18);
+    expect(result.mapDescription).toBe('District malaria performance.');
+  });
+
   test('uses dhis2_source_database_id for staged-local datasets', () => {
     const chartProps = {
       width: 800,

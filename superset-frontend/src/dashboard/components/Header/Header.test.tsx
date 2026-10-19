@@ -30,6 +30,11 @@ import Header from '.';
 import { DASHBOARD_HEADER_ID } from '../../util/constants';
 import { UPDATE_COMPONENTS } from '../../actions/dashboardLayout';
 
+jest.mock('src/utils/downloadAsPdf', () => ({
+  __esModule: true,
+  default: jest.fn(() => jest.fn()),
+}));
+
 const initialState = {
   dashboardInfo: {
     id: 1,
@@ -120,10 +125,13 @@ const undoState = {
 
 fetchMock.get('glob:*/csstemplateasyncmodelview/api/read', {});
 
-function setup(overrideState: JsonObject = {}) {
+function setup(
+  overrideState: JsonObject = {},
+  headerProps: { isPublicView?: boolean } = {},
+) {
   return render(
     <div className="dashboard">
-      <Header />
+      <Header {...headerProps} />
     </div>,
     {
       useRedux: true,
@@ -209,6 +217,26 @@ beforeEach(() => {
 test('should render', () => {
   const { container } = setup();
   expect(container).toBeInTheDocument();
+});
+
+test('shows PDF and PNG downloads beside filters in the public header', async () => {
+  setup(
+    {
+      dashboardInfo: {
+        ...initialState.dashboardInfo,
+        userId: null,
+      },
+    },
+    { isPublicView: true },
+  );
+
+  expect(screen.getByRole('button', { name: 'Filters' })).toBeInTheDocument();
+  userEvent.click(screen.getByRole('button', { name: 'Download' }));
+
+  expect(await screen.findByText('Export to PDF')).toBeInTheDocument();
+  expect(screen.getByText('Download as PNG')).toBeInTheDocument();
+  expect(screen.queryByText('Download as JPG')).not.toBeInTheDocument();
+  expect(screen.queryByText('Download as SVG')).not.toBeInTheDocument();
 });
 
 test('should render the title', () => {

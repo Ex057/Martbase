@@ -20,6 +20,11 @@ import { render, screen } from 'spec/helpers/testing-library';
 import { Menu, MenuItem } from '@superset-ui/core/components/Menu';
 import { useDownloadMenuItems } from '.';
 
+jest.mock('src/utils/downloadAsPdf', () => ({
+  __esModule: true,
+  default: jest.fn(() => jest.fn()),
+}));
+
 const createProps = () => ({
   pdfMenuItemTitle: 'Export to PDF',
   imageMenuItemTitle: 'Download as Image',
@@ -42,5 +47,5 @@ test('Should render menu items', () => {
   });
 
   expect(screen.getByText('Export to PDF')).toBeInTheDocument();
-  expect(screen.getByText('Download as Image')).toBeInTheDocument();
+  expect(screen.getByText('Download as PNG')).toBeInTheDocument();
 });

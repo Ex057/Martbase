@@ -177,8 +177,10 @@ import {
   getStagedDatasetIdFromSql,
   hasDHIS2SqlComment,
   hasStagedLocalServingSql,
+  hasActiveGeographyFilter,
   resolveDHIS2MapData,
   resolveDisplayedBoundaries,
+  resolveViewportFocusBoundaries,
   shouldLoadStagedLocalFocusData,
   shouldResolveDHIS2DatasetSql,
   shouldUseDHIS2LoaderData,
@@ -1124,7 +1126,11 @@ function buildAggregatedValueMaps(options: {
 
     // Treat NULL/blank metric values as "no data" rather than 0, so a period
     // with no value for an area shows as no-data instead of a misleading zero.
-    if (metricValue === undefined || metricValue === null || metricValue === '') {
+    if (
+      metricValue === undefined ||
+      metricValue === null ||
+      metricValue === ''
+    ) {
       return;
     }
 
@@ -1370,6 +1376,8 @@ function DHIS2Map({
   showLegend,
   legendPosition,
   legendDisplayType = 'vertical_list',
+  legendFontSize = 12,
+  mapDescription,
   legendClasses,
   legendType = 'auto',
   legendMin,
@@ -1385,6 +1393,9 @@ function DHIS2Map({
   tooltipColumns,
   hideQuickFilters = false,
   activeFilters = [],
+  dashboardFilters = [],
+  onDrillDown,
+  setDataMask,
   datasetSql = '',
   isDHIS2Dataset = false,
   datasetId,
@@ -1684,6 +1695,30 @@ function DHIS2Map({
     () => buildHierarchyColumns(boundaryLevelColumns),
     [boundaryLevelColumns],
   );
+  const hasDashboardGeographyFilter = useMemo(() => {
+    const geographyColumns = [
+      orgUnitColumn,
+      parentSelectionColumn,
+      ...Object.values(boundaryLevelColumns),
+    ]
+      .map(column => sanitizeDHIS2ColumnName(String(column || '')))
+      .filter(Boolean);
+    const normalizedFilters = dashboardFilters.map(filter => ({
+      ...filter,
+      col: sanitizeDHIS2ColumnName(String(filter.col || '')),
+    }));
+    return hasActiveGeographyFilter({
+      filters: normalizedFilters,
+      geographyColumns,
+    });
+  }, [
+    boundaryLevelColumns,
+    dashboardFilters,
+    orgUnitColumn,
+    parentSelectionColumn,
+  ]);
+  const shouldFocusSelectedBoundaries =
+    focusSelectedBoundaryWithChildren && hasDashboardGeographyFilter;
   const prefetchFocusedChildLevel = useMemo(() => {
     if (
       activeFocusedBoundaryRequest?.childLevel &&
@@ -1692,7 +1727,7 @@ function DHIS2Map({
       return activeFocusedBoundaryRequest.childLevel;
     }
     if (
-      !focusSelectedBoundaryWithChildren ||
+      !shouldFocusSelectedBoundaries ||
       !Number.isFinite(resolvedPrimaryBoundaryLevel) ||
       resolvedPrimaryBoundaryLevel <= 0
     ) {
@@ -1708,7 +1743,7 @@ function DHIS2Map({
     return resolvedPrimaryBoundaryLevel + 1;
   }, [
     activeFocusedBoundaryRequest,
-    focusSelectedBoundaryWithChildren,
+    shouldFocusSelectedBoundaries,
     maxAvailableBoundaryLevel,
     resolvedPrimaryBoundaryLevel,
   ]);
@@ -2057,7 +2092,7 @@ function DHIS2Map({
     }
     if (
       !effectiveIsStagedLocalDataset ||
-      !focusSelectedBoundaryWithChildren ||
+      !shouldFocusSelectedBoundaries ||
       !parentSelectionColumn ||
       !chartData.length
     ) {
@@ -2086,7 +2121,7 @@ function DHIS2Map({
     chartDataColumns,
     datasourceColumns,
     effectiveIsStagedLocalDataset,
-    focusSelectedBoundaryWithChildren,
+    shouldFocusSelectedBoundaries,
     parentSelectionColumn,
   ]);
 
@@ -2095,7 +2130,7 @@ function DHIS2Map({
       shouldLoadStagedLocalFocusData({
         isStagedLocalDataset: effectiveIsStagedLocalDataset,
         stagedDatasetId: effectiveStagedDatasetId,
-        focusSelectedBoundaryWithChildren,
+        focusSelectedBoundaryWithChildren: shouldFocusSelectedBoundaries,
         focusedChildLevel: prefetchFocusedChildLevel,
         chartRows: chartData,
         chartColumns: chartDataColumns,
@@ -2110,7 +2145,7 @@ function DHIS2Map({
       datasourceColumns,
       effectiveIsStagedLocalDataset,
       effectiveStagedDatasetId,
-      focusSelectedBoundaryWithChildren,
+      shouldFocusSelectedBoundaries,
       hierarchyColumns,
       metric,
       prefetchFocusedChildLevel,
@@ -2924,6 +2959,27 @@ function DHIS2Map({
     getParentSelectionValueRef.current = getParentSelectionValue;
   }, [getParentSelectionValue]);
 
+  // Focused child-boundary requests depend on which parent organisation units
+  // remain after dashboard filters are applied. Values may change for period
+  // filters without changing the selected geography, so key on membership only.
+  const focusedParentSelectionKey = useMemo(() => {
+    if (!shouldFocusSelectedBoundaries) {
+      return '';
+    }
+    return Array.from(
+      new Set([
+        ...parentSelectionDataMap.keys(),
+        ...parentSelectionDataMapByName.keys(),
+      ]),
+    )
+      .sort()
+      .join(',');
+  }, [
+    shouldFocusSelectedBoundaries,
+    parentSelectionDataMap,
+    parentSelectionDataMapByName,
+  ]);
+
   // Aggregate data by OrgUnit using the selected aggregation method
   // Build maps by both ID and name to support different data formats
   const { dataMap, dataMapByName } = useMemo(() => {
@@ -3240,8 +3296,13 @@ function DHIS2Map({
       let selectedParents: BoundaryFeature[] = [];
       let focusedRequest: FocusedBoundaryRequest | null = null;
 
-      if (
-        focusSelectedBoundaryWithChildren &&
+      if (enableDrill && drillState.parentId) {
+        requestedLevels = [drillState.currentLevel];
+        requestedParentIds = [drillState.parentId];
+        setActiveFocusedBoundaryRequest(null);
+        setFocusedParentBoundaries([]);
+      } else if (
+        shouldFocusSelectedBoundaries &&
         resolvedPrimaryBoundaryLevel > 0
       ) {
         const parentResult = await loadBoundaryResult([
@@ -3299,7 +3360,11 @@ function DHIS2Map({
         );
       }
 
-      if (requestedParentIds?.length && result.totalCount === 0) {
+      if (
+        focusedRequest &&
+        requestedParentIds?.length &&
+        result.totalCount === 0
+      ) {
         // eslint-disable-next-line no-console
         console.warn(
           `[DHIS2Map] No child boundaries returned for focused selection. Falling back to selected parent boundaries.`,
@@ -3406,12 +3471,14 @@ function DHIS2Map({
     normalizedSourceInstanceIds,
     effectiveBoundaryLevels,
     boundaryLoadMethod,
-    focusSelectedBoundaryWithChildren,
+    shouldFocusSelectedBoundaries,
+    enableDrill,
+    drillState.currentLevel,
+    drillState.parentId,
     resolvedPrimaryBoundaryLevel,
     maxAvailableBoundaryLevel,
-    // getParentSelectionValue is intentionally excluded — it's accessed via
-    // getParentSelectionValueRef so data changes don't recreate this callback
-    // and retrigger the boundary-load effect (which would set loading=true again).
+    // The getter itself remains behind a ref; the stable membership key above
+    // intentionally retriggers only when the selected geography changes.
   ]);
 
   // Create a stable string representation of boundary levels for change detection
@@ -3436,6 +3503,9 @@ function DHIS2Map({
       databaseId ?? 'none',
       boundaryLevelsKey,
       sourceInstanceIdsKey,
+      shouldFocusSelectedBoundaries ? focusedParentSelectionKey : '',
+      enableDrill ? drillState.currentLevel : '',
+      enableDrill ? drillState.parentId || '' : '',
     ].join('|');
 
     if (lastLoadedBoundaryRequestKeyRef.current === boundaryRequestKey) {
@@ -3489,7 +3559,80 @@ function DHIS2Map({
         boundaryPendingRetryTimerRef.current = null;
       }
     };
-  }, [boundaryLevelsKey, sourceInstanceIdsKey, databaseId, fetchBoundaries]);
+  }, [
+    boundaryLevelsKey,
+    sourceInstanceIdsKey,
+    databaseId,
+    fetchBoundaries,
+    shouldFocusSelectedBoundaries,
+    focusedParentSelectionKey,
+    enableDrill,
+    drillState.currentLevel,
+    drillState.parentId,
+  ]);
+
+  const handleDrillDown = useCallback(
+    (feature: BoundaryFeature) => {
+      const hasReachedLastLevel =
+        Number.isFinite(maxAvailableBoundaryLevel) &&
+        drillState.currentLevel >= Number(maxAvailableBoundaryLevel);
+      if (
+        !enableDrill ||
+        hasReachedLastLevel ||
+        feature.properties.hasChildrenWithCoordinates === false
+      ) {
+        return;
+      }
+
+      const newLevel = drillState.currentLevel + 1;
+      const newBreadcrumbs = [
+        ...drillState.breadcrumbs,
+        {
+          id: feature.id,
+          name: feature.properties.name,
+          level: drillState.currentLevel,
+        },
+      ];
+
+      setDrillState({
+        currentLevel: newLevel,
+        parentId: feature.id,
+        parentName: feature.properties.name,
+        breadcrumbs: newBreadcrumbs,
+      });
+
+      onDrillDown?.(feature.id, feature.properties.name);
+
+      if (setDataMask) {
+        const filterValues = Array.from(
+          new Set([feature.properties.name, feature.id].filter(Boolean)),
+        );
+        setDataMask({
+          extraFormData: {
+            filters: [
+              {
+                col: effectiveOrgUnitDataColumn,
+                op: 'IN',
+                val: filterValues,
+              },
+            ],
+          },
+          filterState: {
+            value: filterValues,
+            label: feature.properties.name,
+          },
+        });
+      }
+    },
+    [
+      drillState,
+      effectiveOrgUnitDataColumn,
+      enableDrill,
+      maxAvailableBoundaryLevel,
+      onDrillDown,
+      setDataMask,
+    ],
+  );
 
   const handleDrillUp = useCallback(
     (toIndex?: number) => {
@@ -3524,8 +3667,45 @@ function DHIS2Map({
         parentName: newParentName,
         breadcrumbs: newBreadcrumbs,
       });
+
+      if (setDataMask) {
+        const parentCrumb = newBreadcrumbs[newBreadcrumbs.length - 1];
+        if (!parentCrumb) {
+          setDataMask({
+            extraFormData: {},
+            filterState: { value: null, label: '' },
+          });
+        } else {
+          const filterValues = Array.from(
+            new Set([parentCrumb.name, parentCrumb.id].filter(Boolean)),
+          );
+          setDataMask({
+            extraFormData: {
+              filters: [
+                {
+                  col:
+                    boundaryLevelColumns[parentCrumb.level] ||
+                    effectiveOrgUnitDataColumn,
+                  op: 'IN',
+                  val: filterValues,
+                },
+              ],
+            },
+            filterState: {
+              value: filterValues,
+              label: parentCrumb.name,
+            },
+          });
+        }
+      }
     },
-    [drillState, resolvedPrimaryBoundaryLevel],
+    [
+      boundaryLevelColumns,
+      drillState,
+      effectiveOrgUnitDataColumn,
+      resolvedPrimaryBoundaryLevel,
+      setDataMask,
+    ],
   );
 
   const selectedBoundaryIds = useMemo(() => {
@@ -3633,6 +3813,18 @@ function DHIS2Map({
 
     return validBoundaries;
   }, [boundaries, selectedBoundaryIds, showAllBoundaries]);
+
+  // Showing all boundaries is a styling choice and must not prevent the map
+  // viewport from following a narrower dashboard-filter selection.
+  const viewportFocusBoundaries = useMemo(
+    () =>
+      resolveViewportFocusBoundaries({
+        displayBoundaries,
+        selectedBoundaryIds,
+        hasActiveBoundaryFilter: hasDashboardGeographyFilter,
+      }),
+    [displayBoundaries, hasDashboardGeographyFilter, selectedBoundaryIds],
+  );
 
   const displayBoundaryIdsSignature = useMemo(
     () =>
@@ -3889,10 +4081,11 @@ function DHIS2Map({
       };
 
       handlers.click = () => {
-        setSelectedFeatureId(null);
+        setSelectedFeatureId(feature.id);
         if (document.activeElement instanceof HTMLElement) {
           document.activeElement.blur();
         }
+        handleDrillDown(feature);
       };
 
       layer.on(handlers);
@@ -3917,6 +4110,7 @@ function DHIS2Map({
       resolvedEffectiveOrgUnitColumn,
       tooltipColumns,
       enableDrill,
+      handleDrillDown,
       strokeWidth,
     ],
   );
@@ -4144,7 +4338,7 @@ function DHIS2Map({
           {/* Auto-focus map when boundaries load */}
           {/* @ts-ignore - React 19 compatibility */}
           <MapAutoFocus
-            boundaries={displayBoundaries}
+            boundaries={viewportFocusBoundaries}
             enabled={!loading}
             viewportWidth={width}
             viewportHeight={height}
@@ -4168,7 +4362,7 @@ function DHIS2Map({
 
           {displayBoundaries.length > 0 &&
             /* @ts-ignore - React 19 compatibility */
-            focusSelectedBoundaryWithChildren &&
+            shouldFocusSelectedBoundaries &&
             focusedParentBoundaries.length > 0 && (
               <DynamicGeoJSON
                 data={
@@ -4381,6 +4575,8 @@ function DHIS2Map({
             displayType={
               (legendDisplayType as LegendDisplayType) || 'vertical_list'
             }
+            fontSize={legendFontSize}
+            description={mapDescription}
             classes={legendClasses}
             metricName={metricDisplayName}
             noDataColor={legendNoDataColor}

@@ -119,8 +119,7 @@ export const hydrateDashboard =
       if (slice.datasource_info) {
         const dsInfo = slice.datasource_info;
         const dsUid =
-          sliceFormData.datasource ||
-          `${dsInfo.id}__${dsInfo.type || 'table'}`;
+          sliceFormData.datasource || `${dsInfo.id}__${dsInfo.type || 'table'}`;
         datasourcesFromCharts[dsUid] = {
           ...dsInfo,
           uid: dsUid,
@@ -256,7 +255,9 @@ export const hydrateDashboard =
     metadata.global_chart_configuration = globalChartConfiguration;
 
     const { roles } = user;
-    const canEdit = isPublicView ? false : canUserEditDashboard(dashboard, user);
+    const canEdit = isPublicView
+      ? false
+      : canUserEditDashboard(dashboard, user);
     const crossFiltersEnabled = isCrossFiltersEnabled(
       metadata.cross_filters_enabled,
     );
@@ -273,25 +274,24 @@ export const hydrateDashboard =
         dashboardInfo: {
           ...dashboard,
           metadata,
+          isPublicView: Boolean(isPublicView),
           userId: user.userId ? String(user.userId) : null, // legacy, please use state.user instead
           dash_edit_perm: canEdit,
-          dash_save_perm: isPublicView ? false : canUserSaveAsDashboard(dashboard, user),
-          dash_share_perm: isPublicView ? false : findPermission(
-            'can_share_dashboard',
-            'Superset',
-            roles,
-          ),
-          superset_can_explore: isPublicView ? false : findPermission(
-            'can_explore',
-            'Superset',
-            roles,
-          ),
-          superset_can_share: isPublicView ? false : findPermission(
-            'can_share_chart',
-            'Superset',
-            roles,
-          ),
-          superset_can_csv: isPublicView ? false : findPermission('can_csv', 'Superset', roles),
+          dash_save_perm: isPublicView
+            ? false
+            : canUserSaveAsDashboard(dashboard, user),
+          dash_share_perm: isPublicView
+            ? false
+            : findPermission('can_share_dashboard', 'Superset', roles),
+          superset_can_explore: isPublicView
+            ? false
+            : findPermission('can_explore', 'Superset', roles),
+          superset_can_share: isPublicView
+            ? false
+            : findPermission('can_share_chart', 'Superset', roles),
+          superset_can_csv: isPublicView
+            ? false
+            : findPermission('can_csv', 'Superset', roles),
           common: {
             // legacy, please use state.common instead
             conf: common?.conf,

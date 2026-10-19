@@ -55,6 +55,10 @@ export default function buildQuery(formData: QueryFormData) {
     formDataAny?.focusSelectedBoundaryWithChildren ??
       formDataAny?.focus_selected_boundary_with_children,
   );
+  const dashboardFilters =
+    formDataAny?.extra_form_data?.filters ||
+    formDataAny?.extraFormData?.filters ||
+    [];
 
   const hierarchyColumnsValue = formDataAny?.dhis2_hierarchy_columns;
   const rawHierarchyColumns = Array.isArray(hierarchyColumnsValue)
@@ -214,9 +218,24 @@ export default function buildQuery(formData: QueryFormData) {
     const sanitizedOrgUnitColumn = org_unit_column
       ? sanitizeDHIS2ColumnName(org_unit_column)
       : undefined;
+    const geographyColumnSet = new Set([
+      sanitizedOrgUnitColumn,
+      ...effectiveHierarchyColumns,
+    ]);
+    const hasDashboardGeographyFilter = dashboardFilters.some((filter: any) => {
+      const filterColumn = sanitizeDHIS2ColumnName(String(filter?.col || ''));
+      const hasValue = Array.isArray(filter?.val)
+        ? filter.val.length > 0
+        : filter?.val !== undefined &&
+          filter?.val !== null &&
+          filter?.val !== '';
+      return geographyColumnSet.has(filterColumn) && hasValue;
+    });
+    const shouldQueryFocusedChildren =
+      focusSelectedBoundaryWithChildren && hasDashboardGeographyFilter;
     const selectedFocusOrgUnitColumn = (() => {
       if (
-        !focusSelectedBoundaryWithChildren ||
+        !shouldQueryFocusedChildren ||
         !sanitizedOrgUnitColumn ||
         effectiveHierarchyColumns.length === 0
       ) {
@@ -408,7 +427,7 @@ export default function buildQuery(formData: QueryFormData) {
     //
     // The filter_null_ou_column form-data option allows opting out (default: true).
     const filterNullOuColumn = formDataAny?.filter_null_ou_column !== false;
-    const terminalColForNullFilter = focusSelectedBoundaryWithChildren
+    const terminalColForNullFilter = shouldQueryFocusedChildren
       ? selectedFocusOrgUnitColumn
       : sanitizedOrgUnitColumn;
     // Only add the null-exclusion filter when:

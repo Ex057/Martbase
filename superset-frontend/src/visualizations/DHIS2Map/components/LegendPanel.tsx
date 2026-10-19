@@ -19,6 +19,8 @@
 
 import React, { useMemo } from 'react';
 import { t } from '@superset-ui/core';
+import { Icons } from '@superset-ui/core/components/Icons';
+import { Popover } from '@superset-ui/core/components';
 import { ComputedLegendEntry, formatValue } from '../utils';
 import {
   DHIS2LegendDefinition,
@@ -32,6 +34,8 @@ interface LegendPanelProps {
   valueRange: { min: number; max: number };
   position: MapCornerPosition;
   displayType?: LegendDisplayType;
+  fontSize?: number;
+  description?: string;
   classes: number;
   metricName: string;
   noDataColor?: { r: number; g: number; b: number; a: number };
@@ -247,6 +251,8 @@ function LegendPanel({
   valueRange,
   position = 'bottomright',
   displayType = 'vertical_list',
+  fontSize = 12,
+  description,
   classes,
   metricName,
   noDataColor = { r: 204, g: 204, b: 204, a: 1 },
@@ -288,6 +294,8 @@ function LegendPanel({
 
   const isCompact = displayType === 'compact';
   const isHorizontal = displayType === 'horizontal_chips';
+  const resolvedFontSize = Math.min(24, Math.max(8, Number(fontSize) || 12));
+  const scale = resolvedFontSize / 10;
 
   // Container styles
   const containerStyle: React.CSSProperties = {
@@ -297,13 +305,16 @@ function LegendPanel({
     border: '1px solid rgba(148,163,184,0.35)',
     borderRadius: 8,
     boxShadow: '0 2px 12px rgba(0,0,0,0.13), 0 1px 3px rgba(0,0,0,0.08)',
-    padding: isCompact ? '4px 7px' : '7px 10px',
-    minWidth: isCompact ? 100 : 120,
+    padding: isCompact
+      ? `${Math.round(4 * scale)}px ${Math.round(7 * scale)}px`
+      : `${Math.round(7 * scale)}px ${Math.round(10 * scale)}px`,
+    minWidth: Math.round((isCompact ? 100 : 120) * scale),
+    maxWidth: Math.min(360, Math.round(220 * scale)),
   };
 
   // Title style
   const titleStyle: React.CSSProperties = {
-    fontSize: isCompact ? 9 : 10,
+    fontSize: isCompact ? Math.max(8, resolvedFontSize - 1) : resolvedFontSize,
     fontWeight: 600,
     color: '#1e293b',
     marginBottom: isCompact ? 2 : 5,
@@ -312,7 +323,7 @@ function LegendPanel({
     whiteSpace: 'nowrap' as const,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
-    maxWidth: 200,
+    maxWidth: Math.min(330, Math.round(200 * scale)),
   };
 
   // Item list style
@@ -320,13 +331,16 @@ function LegendPanel({
     ? {
         display: 'flex',
         flexWrap: 'wrap' as const,
-        gap: '3px 6px',
+        gap: `${Math.max(3, Math.round(3 * scale))}px ${Math.max(
+          6,
+          Math.round(6 * scale),
+        )}px`,
         alignItems: 'center',
       }
     : {
         display: 'flex',
         flexDirection: 'column' as const,
-        gap: isCompact ? 1 : 3,
+        gap: Math.max(1, Math.round((isCompact ? 1 : 3) * scale)),
       };
 
   // Single item style
@@ -334,8 +348,8 @@ function LegendPanel({
     ? {
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 4,
-        fontSize: 10,
+        gap: Math.max(4, Math.round(4 * scale)),
+        fontSize: resolvedFontSize,
         color: '#334155',
         background: 'rgba(241,245,249,0.7)',
         border: '1px solid rgba(148,163,184,0.2)',
@@ -346,16 +360,18 @@ function LegendPanel({
     : {
         display: 'flex',
         alignItems: 'center',
-        gap: 6,
-        fontSize: isCompact ? 9 : 10,
+        gap: Math.max(6, Math.round(6 * scale)),
+        fontSize: isCompact
+          ? Math.max(8, resolvedFontSize - 1)
+          : resolvedFontSize,
         color: '#334155',
         lineHeight: isCompact ? '1.2' : '1.3',
       };
 
   const swatchStyle = (color: string): React.CSSProperties => ({
-    width: isCompact ? 10 : 12,
-    minWidth: isCompact ? 10 : 12,
-    height: isCompact ? 10 : 12,
+    width: Math.round((isCompact ? 10 : 12) * scale),
+    minWidth: Math.round((isCompact ? 10 : 12) * scale),
+    height: Math.round((isCompact ? 10 : 12) * scale),
     background: color,
     borderRadius: 2,
     border: `1px solid ${colorWithAlpha(color, 0.5)}`,
@@ -365,8 +381,47 @@ function LegendPanel({
   return (
     <div style={containerStyle}>
       {/* Metric title */}
-      <div style={titleStyle} title={metricName}>
-        {metricName}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: Math.max(4, Math.round(4 * scale)),
+          marginBottom: titleStyle.marginBottom,
+        }}
+      >
+        <div style={{ ...titleStyle, marginBottom: 0 }} title={metricName}>
+          {metricName}
+        </div>
+        {description && (
+          <Popover
+            trigger="click"
+            placement="leftTop"
+            title={t('About this map')}
+            content={
+              <div style={{ maxWidth: 360, whiteSpace: 'pre-wrap' }}>
+                {description}
+              </div>
+            }
+          >
+            <button
+              type="button"
+              aria-label={t('About this map')}
+              title={t('About this map')}
+              style={{
+                border: 0,
+                padding: 0,
+                background: 'transparent',
+                color: '#475569',
+                cursor: 'pointer',
+                lineHeight: 1,
+                pointerEvents: 'auto',
+                flexShrink: 0,
+              }}
+            >
+              <Icons.InfoCircleOutlined iconSize="m" />
+            </button>
+          </Popover>
+        )}
       </div>
 
       {/* Legend items */}
@@ -386,49 +441,51 @@ function LegendPanel({
       </div>
 
       {/* Boundary level legend */}
-      {showBoundaryLegend && levelBorderColors && levelBorderColors.length > 1 && (
-        <>
-          <div
-            style={{
-              height: 1,
-              background: 'rgba(148,163,184,0.25)',
-              margin: '5px 0 4px',
-            }}
-          />
-          <div
-            style={{
-              fontSize: 9,
-              fontWeight: 600,
-              color: '#475569',
-              textTransform: 'uppercase' as const,
-              letterSpacing: '0.03em',
-              marginBottom: 3,
-            }}
-          >
-            {t('Boundary Levels')}
-          </div>
-          <div style={listStyle}>
-            {levelBorderColors.map(levelConfig => {
-              const levelColor = `rgba(${levelConfig.color.r},${levelConfig.color.g},${levelConfig.color.b},${levelConfig.color.a})`;
-              return (
-                <div key={levelConfig.level} style={itemStyle}>
-                  <div
-                    style={{
-                      width: isCompact ? 10 : 12,
-                      minWidth: isCompact ? 10 : 12,
-                      height: Math.max((levelConfig.width || 1) * 2, 2),
-                      background: levelColor,
-                      borderRadius: 1,
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span>{getLevelName(levelConfig.level)}</span>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
+      {showBoundaryLegend &&
+        levelBorderColors &&
+        levelBorderColors.length > 1 && (
+          <>
+            <div
+              style={{
+                height: 1,
+                background: 'rgba(148,163,184,0.25)',
+                margin: '5px 0 4px',
+              }}
+            />
+            <div
+              style={{
+                fontSize: 9,
+                fontWeight: 600,
+                color: '#475569',
+                textTransform: 'uppercase' as const,
+                letterSpacing: '0.03em',
+                marginBottom: 3,
+              }}
+            >
+              {t('Boundary Levels')}
+            </div>
+            <div style={listStyle}>
+              {levelBorderColors.map(levelConfig => {
+                const levelColor = `rgba(${levelConfig.color.r},${levelConfig.color.g},${levelConfig.color.b},${levelConfig.color.a})`;
+                return (
+                  <div key={levelConfig.level} style={itemStyle}>
+                    <div
+                      style={{
+                        width: isCompact ? 10 : 12,
+                        minWidth: isCompact ? 10 : 12,
+                        height: Math.max((levelConfig.width || 1) * 2, 2),
+                        background: levelColor,
+                        borderRadius: 1,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span>{getLevelName(levelConfig.level)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
     </div>
   );
 }

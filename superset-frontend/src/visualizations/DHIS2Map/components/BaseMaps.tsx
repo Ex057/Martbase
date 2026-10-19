@@ -20,6 +20,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { TileLayer } from 'react-leaflet';
 import { styled } from '@superset-ui/core';
+import { getCartoTileUrl } from 'src/visualizations/mapConfig';
 
 // Available base map configurations
 export const BASE_MAPS = {
@@ -31,7 +32,9 @@ export const BASE_MAPS = {
   },
   osmLight: {
     name: 'Light CARTO Positron',
-    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    url: getCartoTileUrl(
+      'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    ),
     attribution: '&copy; OpenStreetMap &copy; CARTO',
     maxZoom: 20,
   },
@@ -55,7 +58,9 @@ export const BASE_MAPS = {
   },
   dark: {
     name: 'Dark CARTO Dark Matter',
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    url: getCartoTileUrl(
+      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    ),
     attribution: '&copy; CartoDB',
     maxZoom: 20,
   },
@@ -73,7 +78,9 @@ interface BaseMapLayerProps {
   mapType: BaseMapType;
 }
 
-export function BaseMapLayer({ mapType }: BaseMapLayerProps): React.ReactElement | null {
+export function BaseMapLayer({
+  mapType,
+}: BaseMapLayerProps): React.ReactElement | null {
   const config = BASE_MAPS[mapType];
 
   // Debug logging
@@ -181,7 +188,10 @@ export function BaseMapSelector({
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     }
@@ -221,4 +231,4 @@ export function BaseMapSelector({
       )}
     </SelectorWrapper>
   );
-};
+}

@@ -246,13 +246,19 @@ const SliceHeaderControls = (
     getChartMetadataRegistry()
       .get(props.slice.viz_type)
       ?.behaviors?.includes(Behavior.InteractiveChart);
-  const dashboardUserId = useSelector<RootState, string>(
-    ({ dashboardInfo }) => dashboardInfo.userId,
-  );
+  const { dashboardUserId, dashboardIsPublicView } = useSelector<
+    RootState,
+    { dashboardUserId?: string; dashboardIsPublicView?: boolean }
+  >(({ dashboardInfo }) => ({
+    dashboardUserId: dashboardInfo.userId,
+    dashboardIsPublicView: dashboardInfo.isPublicView,
+  }));
   const firstQueryResponse = useSelector(
-    (state: RootState) => state.charts[props.slice.slice_id]?.queriesResponse?.[0],
+    (state: RootState) =>
+      state.charts[props.slice.slice_id]?.queriesResponse?.[0],
   );
-  const isPublicView = !dashboardUserId || isEmbedded();
+  const isPublicView =
+    Boolean(dashboardIsPublicView) || !dashboardUserId || isEmbedded();
   const canExplore = props.supersetCanExplore;
   const { canDrillToDetail, canViewQuery, canViewTable } = usePermissions();
 
@@ -576,7 +582,11 @@ const SliceHeaderControls = (
       key: MenuKeys.AiInsights,
       label: (
         <ModalTrigger
-          triggerNode={<div data-test="chart-ai-insights-menu-item">{t('AI insights')}</div>}
+          triggerNode={
+            <div data-test="chart-ai-insights-menu-item">
+              {t('AI insights')}
+            </div>
+          }
           modalTitle={t('Chart AI insights')}
           modalBody={
             <AIInsightPanel
@@ -630,7 +640,10 @@ const SliceHeaderControls = (
     newMenuItems.push(shareMenuItems);
   }
 
-  if (props.supersetCanCSV) {
+  // Public dashboards may download the same standard chart exports as the
+  // authenticated view. The backend independently verifies that CSV/XLSX
+  // requests reference a chart on the published dashboard.
+  if (props.supersetCanCSV || isPublicView) {
     newMenuItems.push({
       type: 'submenu',
       key: MenuKeys.Download,

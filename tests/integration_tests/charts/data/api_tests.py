@@ -21,6 +21,7 @@ import unittest
 from contextlib import contextmanager
 from datetime import datetime
 from io import BytesIO
+from types import SimpleNamespace
 from typing import Any, Optional
 from unittest import mock
 from zipfile import ZipFile
@@ -37,6 +38,7 @@ from superset.constants import CACHE_DISABLED_TIMEOUT
 from superset.errors import SupersetErrorType
 from superset.extensions import async_query_manager_factory, db
 from superset.models.annotations import AnnotationLayer
+from superset.models.dashboard import Dashboard
 from superset.models.slice import Slice
 from superset.models.sql_lab import Query
 from superset.superset_typing import AdhocColumn
@@ -166,6 +168,43 @@ class BaseTestChartDataApi(SupersetTestCase):
 
 @pytest.mark.chart_data_flow
 class TestPostChartDataApi(BaseTestChartDataApi):
+    @pytest.mark.usefixtures("load_birth_names_dashboard_with_slices")
+    def test_public_export_is_limited_to_chart_on_published_dashboard(self):
+        dashboard = db.session.query(Dashboard).filter(Dashboard.slices.any()).first()
+        assert dashboard is not None
+        chart = dashboard.slices[0]
+        original_published = dashboard.published
+
+        try:
+            dashboard.published = True
+            db.session.commit()
+            query_context = SimpleNamespace(
+                form_data={"dashboardId": dashboard.id, "slice_id": chart.id}
+            )
+
+            with mock.patch(
+                "superset.charts.data.api.security_manager.is_guest_user",
+                return_value=True,
+            ):
+                assert ChartDataRestApi._can_export_public_dashboard_chart(
+                    query_context
+                )
+
+                query_context.form_data["slice_id"] = -1
+                assert not ChartDataRestApi._can_export_public_dashboard_chart(
+                    query_context
+                )
+
+                query_context.form_data["slice_id"] = chart.id
+                dashboard.published = False
+                db.session.commit()
+                assert not ChartDataRestApi._can_export_public_dashboard_chart(
+                    query_context
+                )
+        finally:
+            dashboard.published = original_published
+            db.session.commit()
+
     @pytest.mark.usefixtures("load_birth_names_dashboard_with_slices")
     def test__map_form_data_datasource_to_dataset_id(self):
         # arrange

@@ -40,6 +40,7 @@ export interface UseDownloadMenuItemsProps {
   dashboardId: number;
   title: string;
   disabled?: boolean;
+  forceClientSide?: boolean;
 }
 
 export const useDownloadMenuItems = (
@@ -53,12 +54,14 @@ export const useDownloadMenuItems = (
     dashboardTitle,
     disabled,
     title,
+    forceClientSide = false,
   } = props;
 
   const { addDangerToast } = useToasts();
   const SCREENSHOT_NODE_SELECTOR = '.dashboard';
 
   const isWebDriverScreenshotEnabled =
+    !forceClientSide &&
     isFeatureEnabled(FeatureFlag.EnableDashboardScreenshotEndpoints) &&
     isFeatureEnabled(FeatureFlag.EnableDashboardDownloadWebDriverScreenshot);
 

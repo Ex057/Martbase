@@ -105,6 +105,7 @@ const createProps = (viz_type = VizType.Sunburst) =>
 const renderWrapper = (
   overrideProps?: SliceHeaderControlsProps,
   roles?: Record<string, string[][]>,
+  publicView = false,
 ) => {
   const props = overrideProps || createProps();
   return render(<SliceHeaderControls {...props} />, {
@@ -112,6 +113,9 @@ const renderWrapper = (
     useRouter: true,
     initialState: {
       ...mockState,
+      dashboardInfo: publicView
+        ? { ...mockState.dashboardInfo, isPublicView: true }
+        : mockState.dashboardInfo,
       user: {
         ...mockState.user,
         roles: roles ?? {
@@ -213,6 +217,20 @@ test('Should "export to Excel"', async () => {
   userEvent.click(await screen.findByText('Export to Excel'));
   expect(props.exportXLSX).toHaveBeenCalledTimes(1);
   expect(props.exportXLSX).toHaveBeenCalledWith(371);
+});
+
+test('shows standard downloads but not edit actions on public charts', async () => {
+  const props = { ...createProps(), supersetCanCSV: false };
+  renderWrapper(props, undefined, true);
+  openMenu();
+
+  expect(screen.queryByText('Edit chart')).not.toBeInTheDocument();
+  userEvent.hover(screen.getByText('Download'));
+  expect(await screen.findByText('Export to .CSV')).toBeInTheDocument();
+  expect(screen.getByText('Export to Excel')).toBeInTheDocument();
+  expect(screen.getByText('Download as image')).toBeInTheDocument();
+  expect(screen.queryByText('Export to full .CSV')).not.toBeInTheDocument();
+  expect(screen.queryByText('Export to full Excel')).not.toBeInTheDocument();
 });
 
 test('Export full CSV is under featureflag', async () => {

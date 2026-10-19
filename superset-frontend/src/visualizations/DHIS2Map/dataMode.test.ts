@@ -21,6 +21,8 @@ import {
   hasDHIS2SqlComment,
   hasStagedLocalServingSql,
   resolveDisplayedBoundaries,
+  resolveViewportFocusBoundaries,
+  hasActiveGeographyFilter,
   resolveDHIS2MapData,
   shouldLoadStagedLocalFocusData,
   shouldResolveDHIS2DatasetSql,
@@ -130,8 +132,9 @@ describe('DHIS2Map dataMode', () => {
     const chartRows = [{ district_city: 'Gulu City', 'SUM(c_cases)': 10 }];
 
     expect(resolveDHIS2MapData(chartRows, null, true)).toEqual([]);
-    expect(resolveDHIS2MapData(chartRows, [{ district_city: 'Kitgum' }], true))
-      .toEqual([{ district_city: 'Kitgum' }]);
+    expect(
+      resolveDHIS2MapData(chartRows, [{ district_city: 'Kitgum' }], true),
+    ).toEqual([{ district_city: 'Kitgum' }]);
     expect(resolveDHIS2MapData(chartRows, null, false)).toEqual(chartRows);
   });
 
@@ -153,6 +156,49 @@ describe('DHIS2Map dataMode', () => {
         showAllBoundaries: false,
       }),
     ).toEqual([{ id: 'b' }]);
+  });
+
+  test('focuses selected boundaries even when all boundaries remain displayed', () => {
+    const boundaries = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+
+    expect(
+      resolveViewportFocusBoundaries({
+        displayBoundaries: boundaries,
+        selectedBoundaryIds: new Set(['a', 'c']),
+        hasActiveBoundaryFilter: true,
+      }),
+    ).toEqual([{ id: 'a' }, { id: 'c' }]);
+    expect(
+      resolveViewportFocusBoundaries({
+        displayBoundaries: boundaries,
+        selectedBoundaryIds: new Set(),
+      }),
+    ).toEqual(boundaries);
+  });
+
+  test('keeps the full viewport until a geography filter is active', () => {
+    const boundaries = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    expect(
+      resolveViewportFocusBoundaries({
+        displayBoundaries: boundaries,
+        selectedBoundaryIds: new Set(['a']),
+      }),
+    ).toEqual(boundaries);
+  });
+
+  test('detects only populated filters on geography columns', () => {
+    expect(
+      hasActiveGeographyFilter({
+        filters: [{ col: 'region', val: ['Central'] }],
+        geographyColumns: ['country', 'region', 'district'],
+      }),
+    ).toBe(true);
+    expect(
+      hasActiveGeographyFilter({
+        filters: [{ col: 'period', val: ['2025'] }],
+        geographyColumns: ['country', 'region', 'district'],
+      }),
+    ).toBe(false);
   });
 
   test('loads staged-local focus rows when the saved chart payload lacks child columns', () => {
@@ -181,7 +227,9 @@ describe('DHIS2Map dataMode', () => {
         stagedDatasetId: 4,
         focusSelectedBoundaryWithChildren: true,
         focusedChildLevel: 4,
-        chartRows: [{ region: 'Acholi', district_city: 'Gulu City', c_cases: 10 }],
+        chartRows: [
+          { region: 'Acholi', district_city: 'Gulu City', c_cases: 10 },
+        ],
         requestedChildColumn: 'district_city',
         requestedMetric: 'c_cases',
         datasourceColumns: [
@@ -189,7 +237,11 @@ describe('DHIS2Map dataMode', () => {
           { column_name: 'district_city' },
           { column_name: 'c_cases' },
         ],
-        hierarchyColumns: ['region', 'district_city', 'dlg_municipality_city_council'],
+        hierarchyColumns: [
+          'region',
+          'district_city',
+          'dlg_municipality_city_council',
+        ],
       }),
     ).toBe(false);
   });
@@ -217,7 +269,11 @@ describe('DHIS2Map dataMode', () => {
           { column_name: 'dlg_municipality_city_council' },
           { column_name: 'c_cases' },
         ],
-        hierarchyColumns: ['region', 'district_city', 'dlg_municipality_city_council'],
+        hierarchyColumns: [
+          'region',
+          'district_city',
+          'dlg_municipality_city_council',
+        ],
       }),
     ).toBe(true);
   });

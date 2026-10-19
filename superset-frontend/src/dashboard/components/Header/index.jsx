@@ -20,7 +20,14 @@
 import PropTypes from 'prop-types';
 import { Global, css } from '@emotion/react';
 import { extendedDayjs } from '@superset-ui/core/utils/dates';
-import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  Fragment,
+} from 'react';
 import {
   styled,
   isFeatureEnabled,
@@ -38,6 +45,7 @@ import {
 import { Icons } from '@superset-ui/core/components/Icons';
 import {
   Button,
+  NoAnimationDropdown,
   Tooltip,
   DeleteModal,
   UnsavedChangesModal,
@@ -99,6 +107,7 @@ import isDashboardLoading from '../../util/isDashboardLoading';
 import { useChartIds } from '../../util/charts/useChartIds';
 import { useDashboardMetadataBar } from './useDashboardMetadataBar';
 import { useHeaderActionsMenu } from './useHeaderActionsDropdownMenu';
+import { useDownloadMenuItems } from '../menu/DownloadMenuItems';
 
 const extensionsRegistry = getExtensionsRegistry();
 
@@ -113,10 +122,24 @@ function useActiveFilterContext(dataMask, nativeFilters) {
     if (!nativeFilters || !dataMask) return null;
 
     const ouKeywords = [
-      'national', 'region', 'district', 'county', 'province',
-      'org_unit', 'orgunit', 'ou_', 'facility',
+      'national',
+      'region',
+      'district',
+      'county',
+      'province',
+      'org_unit',
+      'orgunit',
+      'ou_',
+      'facility',
     ];
-    const periodKeywords = ['period', 'quarter', 'month', 'year', 'date', 'time'];
+    const periodKeywords = [
+      'period',
+      'quarter',
+      'month',
+      'year',
+      'date',
+      'time',
+    ];
 
     let ouLabel = null;
     let periodLabel = null;
@@ -138,7 +161,9 @@ function useActiveFilterContext(dataMask, nativeFilters) {
       if (!label) continue;
 
       const columnName = (
-        filter.targets?.[0]?.column?.name || filter.name || ''
+        filter.targets?.[0]?.column?.name ||
+        filter.name ||
+        ''
       ).toLowerCase();
 
       if (!ouLabel && ouKeywords.some(k => columnName.includes(k))) {
@@ -212,8 +237,8 @@ const publicHeaderStyle = theme => css`
      stretches to fill the title-panel instead of being sized to text width */
   .header-with-actions .editable-title input,
   .header-with-actions .editable-title textarea,
-  .header-with-actions .editable-title span[data-test="span-title"],
-  .header-with-actions .editable-title [data-test="editable-title"],
+  .header-with-actions .editable-title span[data-test='span-title'],
+  .header-with-actions .editable-title [data-test='editable-title'],
   .header-with-actions .dynamic-title-input {
     font-size: 18px !important;
     font-weight: 700 !important;
@@ -243,6 +268,12 @@ const publicHeaderStyle = theme => css`
     align-items: center;
   }
 
+  .right-button-panel > .button-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
   /* ── Tablet ──────────────────────────────────────────────────────── */
   @media (max-width: 1024px) {
     .header-with-actions {
@@ -251,8 +282,8 @@ const publicHeaderStyle = theme => css`
     }
     .header-with-actions .editable-title input,
     .header-with-actions .editable-title textarea,
-    .header-with-actions .editable-title span[data-test="span-title"],
-    .header-with-actions .editable-title [data-test="editable-title"],
+    .header-with-actions .editable-title span[data-test='span-title'],
+    .header-with-actions .editable-title [data-test='editable-title'],
     .header-with-actions .dynamic-title-input {
       font-size: 16px !important;
     }
@@ -274,8 +305,8 @@ const publicHeaderStyle = theme => css`
     }
     .header-with-actions .editable-title input,
     .header-with-actions .editable-title textarea,
-    .header-with-actions .editable-title span[data-test="span-title"],
-    .header-with-actions .editable-title [data-test="editable-title"],
+    .header-with-actions .editable-title span[data-test='span-title'],
+    .header-with-actions .editable-title [data-test='editable-title'],
     .header-with-actions .dynamic-title-input {
       font-size: 14px !important;
     }
@@ -350,7 +381,7 @@ const filterDrawerGlobalStyles = theme => css`
     }
 
     /* Override position: absolute on the Bar so it flows in the drawer */
-    .ant-drawer-body [class*="Bar-"] {
+    .ant-drawer-body [class*='Bar-'] {
       position: relative !important;
       display: flex !important;
       flex-direction: column;
@@ -360,20 +391,20 @@ const filterDrawerGlobalStyles = theme => css`
     }
 
     /* BarWrapper — fill drawer */
-    .ant-drawer-body [class*="BarWrapper"] {
+    .ant-drawer-body [class*='BarWrapper'] {
       width: 100% !important;
     }
 
     /* Filter controls wrapper — better spacing */
-    .ant-drawer-body [class*="FilterControlsWrapper"],
-    .ant-drawer-body [class*="filter-controls-wrapper"] {
+    .ant-drawer-body [class*='FilterControlsWrapper'],
+    .ant-drawer-body [class*='filter-controls-wrapper'] {
       padding: 16px 20px 100px;
       gap: 16px;
     }
 
     /* Individual filter items */
-    .ant-drawer-body [class*="FilterValue"],
-    .ant-drawer-body [class*="filter-item-wrapper"] {
+    .ant-drawer-body [class*='FilterValue'],
+    .ant-drawer-body [class*='filter-item-wrapper'] {
       background: var(--pro-surface, ${theme.colorBgContainer});
       border: 1px solid var(--pro-border, ${theme.colorBorder});
       border-radius: 0;
@@ -382,8 +413,8 @@ const filterDrawerGlobalStyles = theme => css`
 
     /* Filter labels */
     .ant-drawer-body .filter-item-wrapper label,
-    .ant-drawer-body [class*="StyledFilterTitle"],
-    .ant-drawer-body [class*="FilterName"] {
+    .ant-drawer-body [class*='StyledFilterTitle'],
+    .ant-drawer-body [class*='FilterName'] {
       font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
@@ -424,8 +455,8 @@ const filterDrawerGlobalStyles = theme => css`
     }
 
     /* Action buttons at the bottom */
-    .ant-drawer-body [class*="ActionButtons"],
-    .ant-drawer-body [class*="action-buttons"] {
+    .ant-drawer-body [class*='ActionButtons'],
+    .ant-drawer-body [class*='action-buttons'] {
       background: var(--pro-surface, ${theme.colorBgContainer});
       border-top: 1px solid var(--pro-border, ${theme.colorBorder});
       padding: 12px 20px;
@@ -441,13 +472,13 @@ const filterDrawerGlobalStyles = theme => css`
     }
 
     /* FilterBar header (Apply / Clear buttons row) */
-    .ant-drawer-body [class*="Header"] > div {
+    .ant-drawer-body [class*='Header'] > div {
       padding: 12px 20px;
     }
 
     /* Hide collapse toggle inside drawer — not needed */
-    .ant-drawer-body [class*="CollapsedBar"],
-    .ant-drawer-body [data-test="filter-bar-collapse-button"] {
+    .ant-drawer-body [class*='CollapsedBar'],
+    .ant-drawer-body [data-test='filter-bar-collapse-button'] {
       display: none !important;
     }
 
@@ -463,7 +494,7 @@ const filterDrawerGlobalStyles = theme => css`
     }
 
     /* Scrollable area */
-    .ant-drawer-body [class*="StyledScrollContainer"] {
+    .ant-drawer-body [class*='StyledScrollContainer'] {
       overflow-y: auto;
     }
 
@@ -482,14 +513,14 @@ const filterDrawerGlobalStyles = theme => css`
         font-size: 14px;
       }
 
-      .ant-drawer-body [class*="FilterControlsWrapper"],
-      .ant-drawer-body [class*="filter-controls-wrapper"] {
+      .ant-drawer-body [class*='FilterControlsWrapper'],
+      .ant-drawer-body [class*='filter-controls-wrapper'] {
         padding: 12px 16px 80px;
         gap: 12px;
       }
 
-      .ant-drawer-body [class*="FilterValue"],
-      .ant-drawer-body [class*="filter-item-wrapper"] {
+      .ant-drawer-body [class*='FilterValue'],
+      .ant-drawer-body [class*='filter-item-wrapper'] {
         padding: 10px 12px;
       }
     }
@@ -1303,19 +1334,18 @@ const Header = ({ isPublicView, onBack, backLabel, badge, subtitle }) => {
     ],
   );
 
-  const titlePanelAdditionalItems = useMemo(
-    () => {
-      const items = [];
+  const titlePanelAdditionalItems = useMemo(() => {
+    const items = [];
 
-      if (isPublicView) {
-        // Show active OU/Period filter context (or explicit subtitle) as
-        // a compact line next to the dashboard title.
-        const contextText = activeFilterContext || subtitle;
-        if (contextText) {
-          items.push(
-            <span
-              key="public-subtitle"
-              css={() => css`
+    if (isPublicView) {
+      // Show active OU/Period filter context (or explicit subtitle) as
+      // a compact line next to the dashboard title.
+      const contextText = activeFilterContext || subtitle;
+      if (contextText) {
+        items.push(
+          <span
+            key="public-subtitle"
+            css={() => css`
                 margin-left: 12px;
                 font-size: 12px;
                 font-weight: 500;
@@ -1332,69 +1362,106 @@ const Header = ({ isPublicView, onBack, backLabel, badge, subtitle }) => {
                   display: block;
                 }
               `}
-            >
-              {contextText}
-            </span>
-          );
-        }
-        return items;
-      }
-
-      if (!editMode) {
-        items.push(
-          <PublishedStatus
-            key="published-status"
-            dashboardId={dashboardInfo.id}
-            isPublished={isPublished}
-            savePublished={boundActionCreators.savePublished}
-            userCanEdit={userCanEdit}
-            userCanSave={userCanSaveAs}
-            visible={!editMode}
-          />,
+          >
+            {contextText}
+          </span>,
         );
       }
-
-      if (!editMode && !isEmbedded && metadataBar) {
-        items.push(<Fragment key="metadata-bar">{metadataBar}</Fragment>);
-      }
-
       return items;
-    },
-    [
-      boundActionCreators.savePublished,
-      dashboardInfo.id,
-      editMode,
-      metadataBar,
-      isEmbedded,
-      isPublished,
-      userCanEdit,
-      userCanSaveAs,
-      isPublicView,
-      badge,
-      subtitle,
-      activeFilterContext,
-    ],
+    }
+
+    if (!editMode) {
+      items.push(
+        <PublishedStatus
+          key="published-status"
+          dashboardId={dashboardInfo.id}
+          isPublished={isPublished}
+          savePublished={boundActionCreators.savePublished}
+          userCanEdit={userCanEdit}
+          userCanSave={userCanSaveAs}
+          visible={!editMode}
+        />,
+      );
+    }
+
+    if (!editMode && !isEmbedded && metadataBar) {
+      items.push(<Fragment key="metadata-bar">{metadataBar}</Fragment>);
+    }
+
+    return items;
+  }, [
+    boundActionCreators.savePublished,
+    dashboardInfo.id,
+    editMode,
+    metadataBar,
+    isEmbedded,
+    isPublished,
+    userCanEdit,
+    userCanSaveAs,
+    isPublicView,
+    badge,
+    subtitle,
+    activeFilterContext,
+  ]);
+
+  const publicDashboardDownloadMenu = useDownloadMenuItems({
+    pdfMenuItemTitle: t('Export to PDF'),
+    imageMenuItemTitle: t('Download as PNG'),
+    dashboardTitle,
+    dashboardId: dashboardInfo.id,
+    title: t('Download'),
+    disabled: isLoading,
+    logEvent: boundActionCreators.logEvent,
+    forceClientSide: isPublicView,
+  });
+  const publicDashboardDownloadItems = useMemo(
+    () =>
+      (publicDashboardDownloadMenu.children || []).filter(item =>
+        ['pdf', 'png', 'download-pdf', 'download-png'].includes(
+          String(item.key),
+        ),
+      ),
+    [publicDashboardDownloadMenu.children],
   );
 
-  const rightPanelAdditionalItems = useMemo(
-    () => {
-      if (isPublicView) {
-        return (
-          <div className="button-container">
+  const rightPanelAdditionalItems = useMemo(() => {
+    if (isPublicView) {
+      return (
+        <div className="button-container">
+          <Button
+            buttonStyle="secondary"
+            buttonSize="small"
+            css={filterDrawerBtnStyle}
+            onClick={() => setFilterDrawerOpen(true)}
+            aria-label={t('Filters')}
+          >
+            <Icons.FilterOutlined iconSize="m" />
+            {t('Filters')}
+          </Button>
+          <NoAnimationDropdown
+            menu={{
+              selectable: false,
+              items: publicDashboardDownloadItems,
+            }}
+            trigger={['click']}
+            placement="bottomRight"
+            getPopupContainer={() => document.body}
+          >
             <Button
               buttonStyle="secondary"
               buttonSize="small"
               css={filterDrawerBtnStyle}
-              onClick={() => setFilterDrawerOpen(true)}
-              aria-label={t('Filters')}
+              disabled={isLoading}
+              aria-label={t('Download')}
             >
-              <Icons.FilterOutlined iconSize="m" />
-              {t('Filters')}
+              <Icons.DownloadOutlined iconSize="m" />
+              {t('Download')}
             </Button>
-          </div>
-        );
-      }
-      return (
+          </NoAnimationDropdown>
+        </div>
+      );
+    }
+    return (
       <div className="button-container">
         {userCanSaveAs && (
           <div className="button-container" data-test="dashboard-edit-actions">
@@ -1495,29 +1562,27 @@ const Header = ({ isPublicView, onBack, backLabel, badge, subtitle }) => {
           </div>
         )}
       </div>
-      );
-    },
-    [
-      NavExtension,
-      boundActionCreators.onRedo,
-      boundActionCreators.onUndo,
-      boundActionCreators.clearDashboardHistory,
-      editMode,
-      emphasizeRedo,
-      emphasizeUndo,
-      handleCtrlY,
-      handleCtrlZ,
-      hasUnsavedChanges,
-      overwriteDashboard,
-      redoLength,
-      toggleEditMode,
-      undoLength,
-      userCanEdit,
-      userCanSaveAs,
-      isPublicView,
-      setFilterDrawerOpen,
-    ],
-  );
+    );
+  }, [
+    NavExtension,
+    boundActionCreators,
+    editMode,
+    emphasizeRedo,
+    emphasizeUndo,
+    handleCtrlY,
+    handleCtrlZ,
+    hasUnsavedChanges,
+    overwriteDashboard,
+    redoLength,
+    toggleEditMode,
+    undoLength,
+    userCanEdit,
+    userCanSaveAs,
+    isPublicView,
+    isLoading,
+    publicDashboardDownloadItems,
+    setFilterDrawerOpen,
+  ]);
 
   const handleReportDelete = async report => {
     await dispatch(deleteActiveReport(report));
@@ -1554,6 +1619,7 @@ const Header = ({ isPublicView, onBack, backLabel, badge, subtitle }) => {
     manageEmbedded: showEmbedModal,
     lastModifiedTime: actualLastModifiedTime,
     logEvent: boundActionCreators.logEvent,
+    isPublicView,
   });
   return (
     <div

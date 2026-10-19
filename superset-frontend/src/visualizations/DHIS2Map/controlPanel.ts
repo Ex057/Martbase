@@ -1247,6 +1247,40 @@ const config: ControlPanelConfig = {
             },
           },
         ],
+        [
+          {
+            name: 'legend_font_size',
+            config: {
+              type: 'SliderControl',
+              label: t('Legend Font Size'),
+              description: t(
+                'Scale the legend title, values, spacing, and color swatches.',
+              ),
+              default: 12,
+              min: 8,
+              max: 24,
+              step: 1,
+              renderTrigger: true,
+              visibility: ({ controls }: any) =>
+                controls?.show_legend?.value !== false,
+            },
+          },
+        ],
+        [
+          {
+            name: 'map_description',
+            config: {
+              type: 'TextAreaControl',
+              label: t('Map Description'),
+              description: t(
+                'Optional explanatory text shown from an information icon on the map.',
+              ),
+              default: '',
+              height: 120,
+              renderTrigger: true,
+            },
+          },
+        ],
       ],
     },
     {

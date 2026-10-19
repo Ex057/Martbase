@@ -840,6 +840,10 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     formDataAny?.legendNoDataColor || formDataAny?.legend_no_data_color;
   const legend_display_type =
     formDataAny?.legendDisplayType || formDataAny?.legend_display_type;
+  const legend_font_size =
+    formDataAny?.legendFontSize ?? formDataAny?.legend_font_size;
+  const map_description =
+    formDataAny?.mapDescription ?? formDataAny?.map_description;
   // Compass
   const compass_visible =
     formDataAny?.compassVisible ?? formDataAny?.compass_visible;
@@ -949,6 +953,10 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
   );
 
   const activeFilters = formData?.filters || [];
+  const dashboardFilters =
+    formDataAny?.extraFormData?.filters ||
+    formDataAny?.extra_form_data?.filters ||
+    [];
   const nativeFilters =
     filterState && Object.keys(filterState).length > 0 ? filterState : {};
 
@@ -1385,6 +1393,9 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     showLegend: show_legend !== false,
     legendPosition: legend_position || 'bottomright',
     legendDisplayType: legend_display_type || 'vertical_list',
+    legendFontSize: Math.min(24, Math.max(8, Number(legend_font_size) || 12)),
+    mapDescription:
+      typeof map_description === 'string' ? map_description.trim() : '',
     legendClasses: legend_classes || 5,
     legendType: legend_type || 'auto',
     legendMin: legend_min ? Number(legend_min) : undefined,
@@ -1428,6 +1439,7 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
     hideQuickFilters: hide_quick_filters === true,
     setDataMask: hooks?.setDataMask,
     activeFilters,
+    dashboardFilters,
     nativeFilters,
     // DHIS2 specific props for fallback data fetching
     datasetSql,
@@ -1447,12 +1459,15 @@ export default function transformProps(chartProps: ChartProps): DHIS2MapProps {
           formDataAny?.periodSliderPlaySpeed,
       ) || undefined,
     mapRenderMode:
-      formDataAny?.map_render_mode ?? formDataAny?.mapRenderMode ?? 'choropleth',
+      formDataAny?.map_render_mode ??
+      formDataAny?.mapRenderMode ??
+      'choropleth',
     bubbleLowRadius:
       Number(formDataAny?.bubble_low_radius ?? formDataAny?.bubbleLowRadius) ||
       5,
     bubbleHighRadius:
-      Number(formDataAny?.bubble_high_radius ?? formDataAny?.bubbleHighRadius) ||
-      30,
+      Number(
+        formDataAny?.bubble_high_radius ?? formDataAny?.bubbleHighRadius,
+      ) || 30,
   };
 }
