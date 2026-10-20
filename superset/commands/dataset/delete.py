@@ -14,6 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+import json
 import logging
 from functools import partial
 from typing import Optional
@@ -33,6 +34,35 @@ from superset.utils.decorators import on_error, transaction
 logger = logging.getLogger(__name__)
 
 
+def _get_dhis2_staged_dataset_id(model: SqlaTable) -> int | None:
+    """Return the staged dataset id carried by a generated DHIS2 dataset.
+
+    A user deleting one of these rows through the normal Dataset API expects
+    the underlying staged dataset to be deleted as well. Deleting only the
+    generated ``SqlaTable`` leaves the staged definition scheduled, and the
+    next sync simply registers the missing row again.
+    """
+    raw_extra = getattr(model, "extra", None)
+    if isinstance(raw_extra, dict):
+        extra = raw_extra
+    elif isinstance(raw_extra, str) and raw_extra.strip():
+        try:
+            extra = json.loads(raw_extra)
+        except (TypeError, ValueError):
+            return None
+    else:
+        return None
+
+    if not isinstance(extra, dict) or not extra.get("dhis2_staged_local"):
+        return None
+
+    try:
+        staged_dataset_id = int(extra.get("dhis2_staged_dataset_id") or 0)
+    except (TypeError, ValueError):
+        return None
+    return staged_dataset_id if staged_dataset_id > 0 else None
+
+
 class DeleteDatasetCommand(BaseCommand):
     def __init__(self, model_ids: list[int]):
         self._model_ids = model_ids
@@ -42,7 +72,41 @@ class DeleteDatasetCommand(BaseCommand):
     def run(self) -> None:
         self.validate()
         assert self._models
-        DatasetDAO.delete(self._models)
+
+        # Route explicit user deletion of generated DHIS2 datasets through the
+        # staged-dataset service. That service removes the durable schedule,
+        # physical tables, and every generated Superset dataset, preventing the
+        # next scheduled sync from recreating the row the user just deleted.
+        # Internal MART rebuilds still delete SqlaTable rows directly and are
+        # intentionally unaffected by this command-level behavior.
+        models_by_staged_id: dict[int, list[SqlaTable]] = {}
+        regular_models: list[SqlaTable] = []
+        for model in self._models:
+            staged_dataset_id = _get_dhis2_staged_dataset_id(model)
+            if staged_dataset_id is None:
+                regular_models.append(model)
+                continue
+            models_by_staged_id.setdefault(staged_dataset_id, []).append(model)
+
+        if models_by_staged_id:
+            from superset.dhis2.staged_dataset_service import (
+                delete_staged_dataset,
+            )
+
+            for staged_dataset_id, linked_models in models_by_staged_id.items():
+                deleted = delete_staged_dataset(staged_dataset_id)
+                if deleted:
+                    logger.info(
+                        "Deleted DHIS2 staged dataset id=%s from Dataset API",
+                        staged_dataset_id,
+                    )
+                else:
+                    # The durable staged row is already absent, so these are
+                    # orphaned generated datasets and can be removed normally.
+                    regular_models.extend(linked_models)
+
+        if regular_models:
+            DatasetDAO.delete(regular_models)
 
     def validate(self) -> None:
         # Validate/populate model exists

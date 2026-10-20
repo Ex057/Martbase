@@ -46,6 +46,17 @@ class DeleteChartCommand(BaseCommand):
     def run(self) -> None:
         self.validate()
         assert self._models
+        # Keep explicit deletion intent for AI-created charts. A later AI save
+        # request with the same logical chart identity must not recreate them.
+        from superset.ai_insights.chart_identity import record_ai_chart_tombstone
+
+        for model in self._models:
+            if record_ai_chart_tombstone(model):
+                logger.info(
+                    "Recorded deletion tombstone for AI chart id=%s name=%s",
+                    model.id,
+                    model.slice_name,
+                )
         ChartDAO.delete(self._models)
 
     def validate(self) -> None:

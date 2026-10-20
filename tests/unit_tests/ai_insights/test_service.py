@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -52,6 +53,110 @@ def make_localai_config() -> dict[str, object]:
             }
         },
     }
+
+
+def make_generated_chart_config() -> dict[str, object]:
+    return {
+        "slice_name": "Admissions by region",
+        "viz_type": "echarts_timeseries_bar",
+        "description": "Regional admissions",
+        "datasource_id": 9,
+        "datasource_type": "table",
+        "params": {"metric": "value"},
+    }
+
+
+def test_save_generated_charts_skips_deleted_identity(
+    app_context: None,
+    mocker,
+) -> None:
+    del app_context
+    g.user = make_user()
+    mocker.patch(
+        "superset.ai_insights.chart_identity.is_ai_chart_tombstoned",
+        return_value=True,
+    )
+    create = mocker.patch("superset.commands.chart.create.CreateChartCommand")
+
+    result = AIInsightService().save_generated_charts(
+        [make_generated_chart_config()]
+    )
+
+    assert result == [
+        {
+            "id": None,
+            "slice_name": "Admissions by region",
+            "viz_type": "echarts_timeseries_bar",
+            "status": "skipped_deleted",
+        }
+    ]
+    create.assert_not_called()
+
+
+def test_save_generated_charts_reuses_existing_identity(
+    app_context: None,
+    mocker,
+) -> None:
+    del app_context
+    g.user = make_user()
+    mocker.patch(
+        "superset.ai_insights.chart_identity.is_ai_chart_tombstoned",
+        return_value=False,
+    )
+    mocker.patch(
+        "superset.ai_insights.chart_identity.find_existing_ai_chart",
+        return_value=SimpleNamespace(
+            id=17,
+            slice_name="Admissions by region",
+            viz_type="echarts_timeseries_bar",
+            description="Regional admissions",
+            url="/explore/?slice_id=17",
+        ),
+    )
+    create = mocker.patch("superset.commands.chart.create.CreateChartCommand")
+
+    result = AIInsightService().save_generated_charts(
+        [make_generated_chart_config()]
+    )
+
+    assert result[0]["id"] == 17
+    assert result[0]["status"] == "existing"
+    create.assert_not_called()
+
+
+def test_save_generated_charts_adds_identity_to_created_chart(
+    app_context: None,
+    mocker,
+) -> None:
+    del app_context
+    g.user = make_user()
+    mocker.patch(
+        "superset.ai_insights.chart_identity.is_ai_chart_tombstoned",
+        return_value=False,
+    )
+    mocker.patch(
+        "superset.ai_insights.chart_identity.find_existing_ai_chart",
+        return_value=None,
+    )
+    created_chart = SimpleNamespace(
+        id=18,
+        slice_name="Admissions by region",
+        viz_type="echarts_timeseries_bar",
+        description="Regional admissions",
+        url="/explore/?slice_id=18",
+    )
+    create = mocker.patch("superset.commands.chart.create.CreateChartCommand")
+    create.return_value.run.return_value = created_chart
+
+    result = AIInsightService().save_generated_charts(
+        [make_generated_chart_config()]
+    )
+
+    payload = create.call_args.args[0]
+    saved_params = json.loads(payload["params"])
+    assert saved_params["__martbase_ai_generation"]["source"] == "ai_insights"
+    assert result[0]["id"] == 18
+    assert result[0]["status"] == "created"
 
 
 @with_config({"AI_INSIGHTS_CONFIG": make_ai_config()})

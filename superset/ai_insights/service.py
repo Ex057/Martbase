@@ -7836,7 +7836,13 @@ class AIInsightService:
     def save_generated_charts(
         self, charts: list[dict[str, Any]], *, owners: list[int] | None = None,
     ) -> list[dict[str, Any]]:
-        """Persist AI-generated chart configs to the database."""
+        """Persist AI chart configs idempotently and honor prior deletions."""
+        from superset.ai_insights.chart_identity import (
+            add_ai_chart_metadata,
+            build_ai_chart_identity,
+            find_existing_ai_chart,
+            is_ai_chart_tombstoned,
+        )
         from superset.commands.chart.create import CreateChartCommand
 
         user_id = getattr(getattr(g, "user", None), "id", None)
@@ -7844,13 +7850,44 @@ class AIInsightService:
 
         for chart_config in charts:
             try:
+                identity = build_ai_chart_identity(chart_config)
+                if is_ai_chart_tombstoned(identity):
+                    logger.info(
+                        "Skipped tombstoned AI chart name=%s datasource_id=%s",
+                        chart_config.get("slice_name"),
+                        chart_config.get("datasource_id"),
+                    )
+                    saved.append({
+                        "id": None,
+                        "slice_name": chart_config.get("slice_name"),
+                        "viz_type": chart_config.get("viz_type"),
+                        "status": "skipped_deleted",
+                    })
+                    continue
+
+                existing = find_existing_ai_chart(chart_config, identity)
+                if existing:
+                    saved.append({
+                        "id": existing.id,
+                        "slice_name": existing.slice_name,
+                        "viz_type": existing.viz_type,
+                        "description": existing.description or "",
+                        "url": existing.url,
+                        "status": "existing",
+                    })
+                    continue
+
+                params = add_ai_chart_metadata(
+                    chart_config.get("params") or {},
+                    identity,
+                )
                 payload = {
                     "slice_name": chart_config["slice_name"],
                     "viz_type": chart_config["viz_type"],
                     "description": chart_config.get("description") or "",
                     "datasource_id": chart_config["datasource_id"],
                     "datasource_type": chart_config["datasource_type"],
-                    "params": json.dumps(chart_config["params"]),
+                    "params": json.dumps(params),
                     "owners": owners or ([user_id] if user_id else []),
                 }
                 chart = CreateChartCommand(payload).run()
@@ -7860,6 +7897,7 @@ class AIInsightService:
                     "viz_type": chart.viz_type,
                     "description": chart.description or "",
                     "url": chart.url,
+                    "status": "created",
                 })
             except Exception as ex:  # pylint: disable=broad-except
                 logger.warning("Failed to save AI chart '%s': %s", chart_config.get("slice_name"), ex)

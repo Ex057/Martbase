@@ -40,6 +40,7 @@ class KeyValueFilter(TypedDict, total=False):
 
 
 class KeyValueResource(StrEnum):
+    AI_CHART_TOMBSTONE = "ai_chart_tombstone"
     APP = "app"
     DASHBOARD_PERMALINK = "dashboard_permalink"
     EXPLORE_PERMALINK = "explore_permalink"
