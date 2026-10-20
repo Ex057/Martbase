@@ -53,14 +53,22 @@ def _get_dhis2_staged_dataset_id(model: SqlaTable) -> int | None:
     else:
         return None
 
-    if not isinstance(extra, dict) or not extra.get("dhis2_staged_local"):
+    if not isinstance(extra, dict):
         return None
 
     try:
         staged_dataset_id = int(extra.get("dhis2_staged_dataset_id") or 0)
     except (TypeError, ValueError):
         return None
-    return staged_dataset_id if staged_dataset_id > 0 else None
+    if staged_dataset_id <= 0:
+        return None
+
+    # Older generated DHIS2 datasets did not consistently persist the
+    # ``dhis2_staged_local`` marker, but the staged-dataset foreign identifier
+    # has always been specific to this integration.  Accepting that identifier
+    # keeps deletion possible for legacy/orphaned rows whose ClickHouse table
+    # has already disappeared.
+    return staged_dataset_id
 
 
 class DeleteDatasetCommand(BaseCommand):

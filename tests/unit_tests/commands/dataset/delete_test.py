@@ -65,6 +65,27 @@ def test_delete_generated_dhis2_dataset_removes_staged_dataset(
     dataset_dao.delete.assert_not_called()
 
 
+def test_delete_legacy_generated_dhis2_dataset_without_local_marker(
+    mocker: MockerFixture,
+) -> None:
+    dataset = _dataset(
+        mocker,
+        20,
+        '{"dhis2_staged_dataset_id": 7, "dhis2_serving_table_ref": '
+        '"dhis2_serving.sv_7_legacy"}',
+    )
+    command, dataset_dao = _prepare_command(mocker, [dataset])
+    delete_staged_dataset = mocker.patch(
+        "superset.dhis2.staged_dataset_service.delete_staged_dataset",
+        return_value=True,
+    )
+
+    command.run()
+
+    delete_staged_dataset.assert_called_once_with(7)
+    dataset_dao.delete.assert_not_called()
+
+
 def test_delete_multiple_generated_rows_deletes_staged_dataset_once(
     mocker: MockerFixture,
 ) -> None:

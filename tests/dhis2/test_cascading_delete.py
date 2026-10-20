@@ -87,6 +87,51 @@ def test_delete_staged_dataset_cascades_to_sqla_table():
     session.commit.assert_called_once()
 
 
+def test_delete_staged_dataset_continues_when_physical_tables_are_missing():
+    """Stale metadata remains deletable after its ClickHouse tables disappear."""
+    import superset
+    from superset.dhis2 import staged_dataset_service as svc
+
+    session = superset.db.session
+    session.delete = MagicMock()
+    session.commit = MagicMock()
+    session.rollback = MagicMock()
+    session.connection = MagicMock()
+    session_connection = MagicMock()
+    session_connection.info = {}
+    session.connection.return_value = session_connection
+
+    generic_dataset = MagicMock()
+    staged_dataset = MagicMock()
+    staged_dataset.id = 36
+    staged_dataset.database_id = 10
+    staged_dataset.generic_dataset = generic_dataset
+
+    with patch(
+        "superset.dhis2.staged_dataset_service.get_staged_dataset",
+        return_value=staged_dataset,
+    ), patch(
+        "superset.dhis2.staged_dataset_service._get_engine",
+    ) as mock_get_engine, patch(
+        "superset.dhis2.superset_dataset_service."
+        "cleanup_staged_dataset_superset_resources",
+    ) as mock_cleanup:
+        mock_engine = MagicMock()
+        mock_engine.drop_staging_table.side_effect = RuntimeError(
+            "Code: 60. UNKNOWN_TABLE"
+        )
+        mock_get_engine.return_value = mock_engine
+
+        assert svc.delete_staged_dataset(36) is True
+
+    mock_cleanup.assert_called_once_with(36, 10, commit=False)
+    session.delete.assert_has_calls(
+        [call(staged_dataset), call(generic_dataset)],
+        any_order=True,
+    )
+    session.commit.assert_called_once()
+
+
 def _listener_source_table(staged_id: int = 11):
     return SimpleNamespace(
         id=22,
