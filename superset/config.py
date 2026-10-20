@@ -1268,6 +1268,7 @@ AI_INSIGHTS_CONFIG: dict[str, Any] = {
     "request_timeout_seconds": 300,
     "max_tokens": 16384,
     "temperature": 0.1,
+    "default_color_scheme": "dhis2_standard",
     "default_provider": "localai",
     "default_model": "deepseek-r1-distill-qwen-7b",
     "allowed_roles": [],

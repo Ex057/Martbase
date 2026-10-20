@@ -93,4 +93,28 @@ describe('getFormDataWithExtraFilters', () => {
       getFormDataWithExtraFilters(mockArgs);
     expect(result.stack).toEqual('Stacked');
   });
+
+  test('keeps the chart color scheme when the dashboard has a scheme', () => {
+    const result = getFormDataWithExtraFilters({
+      ...mockArgs,
+      ownColorScheme: 'dhis2_standard',
+      colorScheme: 'supersetColors',
+    });
+
+    expect(result.color_scheme).toEqual('dhis2_standard');
+    expect(result.own_color_scheme).toEqual('dhis2_standard');
+    expect(result.dashboard_color_scheme).toEqual('supersetColors');
+  });
+
+  test('uses the dashboard color scheme when the chart has none', () => {
+    const result = getFormDataWithExtraFilters({
+      ...mockArgs,
+      ownColorScheme: undefined,
+      colorScheme: 'supersetColors',
+    });
+
+    expect(result.color_scheme).toEqual('supersetColors');
+    expect(result.own_color_scheme).toBeUndefined();
+    expect(result.dashboard_color_scheme).toEqual('supersetColors');
+  });
 });

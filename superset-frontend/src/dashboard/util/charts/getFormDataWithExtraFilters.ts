@@ -50,6 +50,7 @@ interface CachedFormData {
     val: DataRecordValue[];
   }[];
   own_color_scheme?: string;
+  dashboard_color_scheme?: string;
   color_scheme?: string;
   color_namespace?: string;
   chart_id: number;
@@ -459,13 +460,17 @@ export default function getFormDataWithExtraFilters({
   activeFilters: passedActiveFilters,
 }: GetFormDataWithExtraFiltersArguments) {
   const cachedFormData = cachedFormdataByChart[sliceId];
+  // Explicit chart styling wins. The dashboard scheme is only a fallback for
+  // charts that do not have an individual color scheme saved.
+  const appliedColorScheme = ownColorScheme || colorScheme;
   const dataMaskEqual = areObjectsEqual(cachedFormData?.dataMask, dataMask, {
     ignoreUndefined: true,
   });
   if (
     cachedFiltersByChart[sliceId] === filters &&
     areObjectsEqual(cachedFormData?.own_color_scheme, ownColorScheme) &&
-    areObjectsEqual(cachedFormData?.color_scheme, colorScheme) &&
+    areObjectsEqual(cachedFormData?.color_scheme, appliedColorScheme) &&
+    areObjectsEqual(cachedFormData?.dashboard_color_scheme, colorScheme) &&
     areObjectsEqual(cachedFormData?.color_namespace, colorNamespace, {
       ignoreUndefined: true,
     }) &&
@@ -568,10 +573,11 @@ export default function getFormDataWithExtraFilters({
     label_colors: labelsColor,
     shared_label_colors: sharedLabelsColors,
     map_label_colors: labelsColorMap,
-    ...(colorScheme && { color_scheme: colorScheme }),
+    ...(appliedColorScheme && { color_scheme: appliedColorScheme }),
     ...(ownColorScheme && {
       own_color_scheme: ownColorScheme,
     }),
+    ...(colorScheme && { dashboard_color_scheme: colorScheme }),
     extra_filters: getEffectiveExtraFilters(filters),
     ...extraData,
     ...extraControls,

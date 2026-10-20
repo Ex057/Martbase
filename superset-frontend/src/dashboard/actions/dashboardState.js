@@ -1007,10 +1007,8 @@ export const updateDashboardLabelsColor = renderedChartIds => (_, getState) => {
       customLabelsColors,
     );
 
-    // for dashboards with no color scheme, the charts should always use their individual schemes
-    // this logic looks for unique labels (not shared across multiple charts) of each rendered chart
-    // it applies a new color to those unique labels when the applied scheme is not up to date
-    // while leaving shared label colors and custom label colors intact for color consistency
+    // A chart's explicit scheme wins; the dashboard scheme is only its fallback.
+    // Reset stale mappings for unique labels while retaining shared/custom colors.
     const shouldReset = [];
     if (renderedChartIds.length > 0) {
       const sharedLabelsSet = new Set(sharedLabelsColors);
@@ -1020,14 +1018,11 @@ export const updateDashboardLabelsColor = renderedChartIds => (_, getState) => {
         // ensure charts have their original color scheme always available
         labelsColorMapInstance.setOwnColorScheme(
           formData.slice_id,
-          formData.color_scheme,
+          formData.own_color_scheme || formData.color_scheme,
         );
 
-        // if dashboard has a scheme, charts should ignore individual schemes
-        // thus following logic is inapplicable if a dashboard color scheme exists
-        if (colorScheme) return;
-
-        const chartColorScheme = formData.color_scheme;
+        const chartColorScheme =
+          formData.own_color_scheme || formData.color_scheme || colorScheme;
         const currentChartConfig = labelsColorMapInstance.chartsLabelsMap.get(
           formData.slice_id,
         );

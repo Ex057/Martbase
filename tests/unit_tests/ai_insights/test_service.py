@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 from flask import g
 
+from superset.ai_insights.config import get_ai_insights_config
 from superset.ai_insights.providers import AIProviderError
 from superset.ai_insights.service import AIInsightError, AIInsightService
 from tests.conftest import with_config
@@ -64,6 +65,15 @@ def make_generated_chart_config() -> dict[str, object]:
         "datasource_type": "table",
         "params": {"metric": "value"},
     }
+
+
+@with_config({"AI_INSIGHTS_CONFIG": make_ai_config()})
+def test_ai_charts_use_registered_dhis2_default_scheme(
+    app_context: None,
+) -> None:
+    del app_context
+
+    assert get_ai_insights_config()["default_color_scheme"] == "dhis2_standard"
 
 
 def test_save_generated_charts_skips_deleted_identity(

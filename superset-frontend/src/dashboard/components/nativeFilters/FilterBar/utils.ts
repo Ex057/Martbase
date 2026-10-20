@@ -39,8 +39,7 @@ import { RootState } from 'src/dashboard/types';
 export const isNativeFilterControl = (
   filter: Filter | Divider,
 ): filter is Filter =>
-  isNativeFilter(filter) ||
-  (filter as Filter & { type: string }).type === 'NativeFilter';
+  isNativeFilter(filter) || String(filter.type) === 'NativeFilter';
 
 export const getOnlyExtraFormData = (data: DataMaskStateWithId) =>
   Object.values(data).reduce(

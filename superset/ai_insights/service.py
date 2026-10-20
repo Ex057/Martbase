@@ -7651,7 +7651,13 @@ class AIInsightService:
             # Match the default a manually-created chart gets (sharedControls
             # row_limit default = 10000) so AI charts don't silently truncate.
             params.setdefault("row_limit", 10000)
-            params.setdefault("color_scheme", "supersetColors")
+            params.setdefault(
+                "color_scheme",
+                str(
+                    get_ai_insights_config().get("default_color_scheme")
+                    or "dhis2_standard"
+                ),
+            )
             params.setdefault("adhoc_filters", [])
             params.setdefault("time_range", "No filter")
 
