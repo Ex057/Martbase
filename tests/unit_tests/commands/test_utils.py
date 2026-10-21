@@ -488,8 +488,7 @@ def test_inject_chart_dhis2_identity_serializes_payload_and_preserves_identity()
     assert params["dhis2_dataset_role"] == "SOURCE"
     assert query_context["form_data"]["dhis2_staged_dataset_id"] == 7
     assert query_context["form_data"]["dhis2_dataset_role"] == "SOURCE"
-    assert query_context["datasource"]["dhis2_staged_dataset_id"] == 7
-    assert query_context["datasource"]["dhis2_dataset_role"] == "SOURCE"
+    assert query_context["datasource"] == {"id": 9, "type": "table"}
     assert "datasource" not in query_context["queries"][0]
 
 

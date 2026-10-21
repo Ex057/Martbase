@@ -156,7 +156,11 @@ def _update_query_context_dhis2_identity(
 
     datasource = query_context.get("datasource")
     if isinstance(datasource, dict):
-        datasource.update(identity)
+        # ChartDataDatasourceSchema accepts only datasource addressing fields.
+        # Keep DHIS2 recovery identity in form_data/params and clean contexts
+        # written by older versions of this helper.
+        datasource.pop("dhis2_staged_dataset_id", None)
+        datasource.pop("dhis2_dataset_role", None)
 
     queries = query_context.get("queries")
     if isinstance(queries, list):
@@ -392,8 +396,6 @@ def update_chart_config_dataset(
             if "form_data" in query_context:
                 query_context["form_data"]["datasource"] = dataset_uid
                 query_context["form_data"].update(identity)
-
-            query_context["datasource"].update(identity)
 
             if "queries" in query_context:
                 for query in query_context["queries"]:

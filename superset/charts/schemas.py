@@ -1164,6 +1164,22 @@ class ChartDataDatasourceSchema(Schema):
         metadata={"description": "Datasource type"},
         validate=validate.OneOf(choices=[ds.value for ds in DatasourceType]),
     )
+    # Compatibility for DHIS2 query contexts saved before identity metadata
+    # was moved into ``form_data``. These fields are accepted only so an old
+    # chart/public page can load; they are removed before QueryContextFactory
+    # receives the datasource descriptor, whose canonical shape is id + type.
+    dhis2_staged_dataset_id = fields.Integer(load_only=True, allow_none=True)
+    dhis2_dataset_role = fields.String(load_only=True, allow_none=True)
+
+    @post_load
+    def remove_legacy_dhis2_identity(
+        self,
+        data: dict[str, Any],
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        data.pop("dhis2_staged_dataset_id", None)
+        data.pop("dhis2_dataset_role", None)
+        return data
 
 
 class ChartDataQueryObjectSchema(Schema):

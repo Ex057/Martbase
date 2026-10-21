@@ -647,8 +647,11 @@ def normalize_dhis2_chart_payload(
             query_context_datasource = parsed_query_context.get("datasource")
             if not isinstance(query_context_datasource, dict):
                 query_context_datasource = {}
-            if identity:
-                query_context_datasource.update(identity)
+            # The chart-data datasource schema is intentionally limited to
+            # ``id`` and ``type``. DHIS2 identity belongs in form_data and
+            # params, where QueryContextFactory reads it for recovery.
+            query_context_datasource.pop("dhis2_staged_dataset_id", None)
+            query_context_datasource.pop("dhis2_dataset_role", None)
             query_context_datasource["id"] = datasource.id
             query_context_datasource["type"] = datasource_type
             parsed_query_context["datasource"] = query_context_datasource

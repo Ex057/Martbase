@@ -348,7 +348,7 @@ def test_repair_charts_for_dhis2_staged_dataset_updates_saved_chart_json() -> No
 
     query_context = json.loads(chart.query_context)
     assert query_context["datasource"]["id"] == 23
-    assert query_context["datasource"]["dhis2_staged_dataset_id"] == 7
+    assert query_context["datasource"] == {"id": 23, "type": "table"}
     assert query_context["form_data"]["datasource"] == "23__table"
     assert "datasource" not in query_context["queries"][0]
 

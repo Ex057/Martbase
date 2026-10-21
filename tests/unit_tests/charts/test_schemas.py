@@ -20,10 +20,24 @@ from flask import current_app
 from marshmallow import ValidationError
 
 from superset.charts.schemas import (
+    ChartDataDatasourceSchema,
     ChartDataProphetOptionsSchema,
     ChartDataQueryObjectSchema,
     get_time_grain_choices,
 )
+
+
+def test_chart_data_datasource_schema_strips_legacy_dhis2_identity() -> None:
+    result = ChartDataDatasourceSchema().load(
+        {
+            "id": 9,
+            "type": "table",
+            "dhis2_staged_dataset_id": 7,
+            "dhis2_dataset_role": "MART",
+        }
+    )
+
+    assert result == {"id": 9, "type": "table"}
 
 
 def test_get_time_grain_choices(app_context: None) -> None:
