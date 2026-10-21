@@ -45,8 +45,12 @@ _REQUEST_TIMEOUT = (30, 300)
 
 # HTTP status codes that are transient and worth retrying.
 _RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
-_MAX_RETRIES = 3
+_MAX_RETRIES = 2
 _RETRY_BACKOFF_BASE = 2.0  # seconds
+
+
+class DHIS2DataValueSourceUnavailable(requests.ConnectionError):
+    """The DHIS2 source stopped responding during a dataValueSets extract."""
 
 
 class DHIS2DataValueExtractor:
@@ -191,7 +195,9 @@ class DHIS2DataValueExtractor:
     ) -> dict[str, Any] | None:
         """Execute a GET request with retry on transient errors.
 
-        Returns the parsed JSON response dict or ``None`` on terminal failure.
+        Returns the parsed JSON response dict or ``None`` on a non-network,
+        non-retryable response.  Raises when the source remains unreachable so
+        the parent sync stops instead of treating an empty result as success.
         """
         url = f"{self._base_url}/api/dataValueSets"
         headers = self._instance.get_auth_headers()
@@ -215,7 +221,10 @@ class DHIS2DataValueExtractor:
                 if attempt < _MAX_RETRIES:
                     time.sleep(_RETRY_BACKOFF_BASE ** attempt)
                     continue
-                return None
+                raise DHIS2DataValueSourceUnavailable(
+                    f"DHIS2 instance '{self._instance.name}' became unavailable "
+                    f"during dataValueSets sync after {_MAX_RETRIES} timeouts"
+                )
             except requests.RequestException as exc:
                 logger.error(
                     "dataValueSets request failed (attempt %d/%d) url=%s: %s",
@@ -224,7 +233,10 @@ class DHIS2DataValueExtractor:
                     url,
                     exc,
                 )
-                return None
+                raise DHIS2DataValueSourceUnavailable(
+                    f"DHIS2 instance '{self._instance.name}' became unavailable "
+                    f"during dataValueSets sync: {exc}"
+                ) from exc
 
             if response.status_code == 200:
                 try:
@@ -245,6 +257,12 @@ class DHIS2DataValueExtractor:
                 )
                 time.sleep(_RETRY_BACKOFF_BASE ** attempt)
                 continue
+
+            if response.status_code in _RETRYABLE_STATUS_CODES:
+                raise DHIS2DataValueSourceUnavailable(
+                    f"DHIS2 instance '{self._instance.name}' remained unavailable "
+                    f"during dataValueSets sync (HTTP {response.status_code})"
+                )
 
             logger.error(
                 "dataValueSets: HTTP %d from %s — body: %.500s",

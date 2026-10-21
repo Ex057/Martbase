@@ -961,6 +961,65 @@ class TestFetchFromInstanceBatching:
             in str(exc.value)
         )
 
+    def test_network_failure_retries_once_then_marks_instance_unavailable(self, mocker):
+        from superset.dhis2.sync_service import DHIS2InstanceUnavailableError
+
+        svc = self._svc()
+        instance = _make_instance(id=101, name="HMIS-Test")
+        variable = _make_variable(variable_id="var_a", id=1)
+        request = mocker.patch.object(
+            svc,
+            "_make_analytics_request",
+            side_effect=requests.ConnectionError("connection refused"),
+        )
+        sleep = mocker.patch("superset.dhis2.sync_service.time.sleep")
+
+        with pytest.raises(DHIS2InstanceUnavailableError) as exc:
+            svc._fetch_analytics_batch(
+                instance=instance,
+                batch=["var_a"],
+                periods=["2024Q1"],
+                org_units=["ou_a", "ou_b"],
+                variable_map={"var_a": variable},
+                page_size=1000,
+            )
+
+        assert "became unavailable during sync" in str(exc.value)
+        assert request.call_count == 2
+        sleep.assert_called_once()
+
+    def test_batch_request_refreshes_job_heartbeat(self, mocker):
+        svc = self._svc()
+        instance = _make_instance(id=101, name="HMIS-Test")
+        variable = _make_variable(variable_id="var_a", id=1)
+        heartbeat = mocker.patch.object(svc, "_update_job_progress")
+        mocker.patch.object(svc, "_create_running_request_log", return_value=None)
+        mocker.patch.object(
+            svc,
+            "_make_analytics_request",
+            return_value={
+                **SAMPLE_ANALYTICS_RESPONSE,
+                "rows": [["var_a", "2024Q1", "ou_a", "1"]],
+                "pager": {"page": 1, "pageCount": 1, "total": 1},
+            },
+        )
+
+        svc._fetch_analytics_batch(
+            instance=instance,
+            batch=["var_a"],
+            periods=["2024Q1"],
+            org_units=["ou_a"],
+            variable_map={"var_a": variable},
+            page_size=1000,
+            job_id=77,
+        )
+
+        heartbeat.assert_called_once_with(
+            77,
+            current_step="requesting data from HMIS-Test",
+            current_item="HMIS-Test",
+        )
+
 
 def test_resolve_incremental_period_plan_for_relative_periods_uses_delta_and_prunes(
     mocker,
@@ -1323,6 +1382,102 @@ def test_schedule_staged_dataset_sync_reuses_existing_active_job(mocker) -> None
         "status": "running",
     }
     create_sync_job.assert_not_called()
+
+
+def test_scheduled_tick_does_not_dispatch_duplicate_active_job(mocker) -> None:
+    from superset.tasks import dhis2_sync
+
+    dataset = SimpleNamespace(
+        id=7,
+        schedule_cron="*/15 * * * *",
+        last_sync_at=None,
+    )
+    query = mocker.MagicMock()
+    query.filter.return_value.all.return_value = [dataset]
+
+    mocker.patch("superset.db.session.query", return_value=query)
+    mocker.patch.object(dhis2_sync, "_reset_stuck_running_datasets")
+    mocker.patch.object(dhis2_sync, "_dataset_is_due", return_value=True)
+    schedule = mocker.patch(
+        "superset.dhis2.sync_service.schedule_staged_dataset_sync",
+        return_value={
+            "scheduled": True,
+            "mode": "existing",
+            "job_id": 88,
+            "task_id": "task-88",
+            "status": "running",
+        },
+    )
+
+    result = dhis2_sync.sync_all_scheduled_datasets.run()
+
+    assert result == {"dispatched": [], "skipped": [7]}
+    schedule.assert_called_once_with(7, job_type="scheduled")
+
+
+def test_manual_trigger_reuses_guarded_scheduler(mocker) -> None:
+    from superset.tasks import dhis2_sync
+
+    schedule = mocker.patch(
+        "superset.dhis2.sync_service.schedule_staged_dataset_sync",
+        return_value={
+            "scheduled": True,
+            "mode": "existing",
+            "job_id": 88,
+            "task_id": "task-88",
+            "status": "running",
+        },
+    )
+
+    result = dhis2_sync.trigger_sync_for_dataset.run(7)
+
+    assert result == {
+        "scheduled": True,
+        "mode": "existing",
+        "job_id": 88,
+        "task_id": "task-88",
+        "status": "running",
+        "staged_dataset_id": 7,
+    }
+    schedule.assert_called_once_with(7, job_type="manual")
+
+
+def test_sync_task_suppresses_duplicate_before_source_request(mocker) -> None:
+    from superset.tasks import dhis2_sync
+
+    current_job = SimpleNamespace(id=99)
+    active_job = SimpleNamespace(id=88)
+    dataset_query = mocker.MagicMock()
+    dataset_query.filter.return_value.scalar.return_value = 7
+    active_query = mocker.MagicMock()
+    active_query.filter.return_value.order_by.return_value.first.return_value = (
+        active_job
+    )
+
+    session = mocker.patch("superset.db.session")
+    session.query.side_effect = [dataset_query, active_query]
+    session.get.return_value = current_job
+    update = mocker.patch(
+        "superset.dhis2.sync_service.DHIS2SyncService.update_job_status"
+    )
+    run_sync = mocker.patch(
+        "superset.dhis2.sync_service.DHIS2SyncService.sync_staged_dataset"
+    )
+
+    result = dhis2_sync.sync_staged_dataset_task.run(
+        staged_dataset_id=7,
+        job_type="scheduled",
+        job_id=99,
+    )
+
+    assert result["status"] == "skipped"
+    assert result["active_job_id"] == 88
+    update.assert_called_once_with(
+        current_job,
+        status="cancelled",
+        error_message="Duplicate sync suppressed; active job 88 already owns this dataset",
+    )
+    run_sync.assert_not_called()
 
 
 def test_reset_stale_running_jobs_marks_job_failed_and_dataset_pending(mocker) -> None:

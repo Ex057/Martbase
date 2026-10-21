@@ -120,6 +120,41 @@ def sync_staged_dataset_task(
     else:
         job = service.create_sync_job(staged_dataset_id, job_type=job_type)
 
+    # Final execution-time guard.  Dispatchers already reuse active jobs, but
+    # two web/beat processes can race between their read and task publication,
+    # and old callers may enqueue this raw task directly.  Deterministically
+    # let the oldest active job run and cancel this duplicate before it makes
+    # any DHIS2 request.
+    oldest_active_job = (
+        db.session.query(DHIS2SyncJob)
+        .filter(
+            DHIS2SyncJob.staged_dataset_id == staged_dataset_id,
+            DHIS2SyncJob.status.in_(
+                ("pending", "queued", "running", "retry_pending")
+            ),
+        )
+        .order_by(DHIS2SyncJob.created_on.asc(), DHIS2SyncJob.id.asc())
+        .first()
+    )
+    if oldest_active_job is not None and oldest_active_job.id != job.id:
+        message = (
+            f"Duplicate sync suppressed; active job {oldest_active_job.id} "
+            "already owns this dataset"
+        )
+        logger.info(
+            "dhis2_sync: suppressing duplicate job id=%d dataset=%d; active job=%d",
+            job.id,
+            staged_dataset_id,
+            oldest_active_job.id,
+        )
+        service.update_job_status(job, status="cancelled", error_message=message)
+        return {
+            "status": "skipped",
+            "reason": message,
+            "job_id": job.id,
+            "active_job_id": oldest_active_job.id,
+        }
+
     logger.info(
         "dhis2_sync: starting job id=%d dataset=%d type=%s celery_task=%s",
         job.id,
@@ -218,7 +253,10 @@ def sync_all_scheduled_datasets() -> dict[str, Any]:
 
     from superset import db
     from superset.dhis2.models import DHIS2StagedDataset, DHIS2SyncJob
-    from superset.dhis2.sync_service import DHIS2SyncService
+    from superset.dhis2.sync_service import (
+        DHIS2SyncService,
+        schedule_staged_dataset_sync,
+    )
 
     now = datetime.utcnow()
     dispatched: list[int] = []
@@ -267,16 +305,25 @@ def sync_all_scheduled_datasets() -> dict[str, Any]:
             continue
 
         if is_due:
-            sync_staged_dataset_task.delay(
-                staged_dataset_id=dataset.id,
+            schedule = schedule_staged_dataset_sync(
+                dataset.id,
                 job_type="scheduled",
             )
-            dispatched.append(dataset.id)
-            logger.info(
-                "dhis2_sync_all: dispatched sync for dataset=%d (cron='%s')",
-                dataset.id,
-                cron_expr,
-            )
+            if schedule.get("mode") == "existing":
+                skipped.append(dataset.id)
+                logger.info(
+                    "dhis2_sync_all: reused active job=%s for dataset=%d; "
+                    "not dispatching duplicate scheduled sync",
+                    schedule.get("job_id"),
+                    dataset.id,
+                )
+            else:
+                dispatched.append(dataset.id)
+                logger.info(
+                    "dhis2_sync_all: dispatched sync for dataset=%d (cron='%s')",
+                    dataset.id,
+                    cron_expr,
+                )
         else:
             skipped.append(dataset.id)
             logger.debug(
@@ -316,17 +363,20 @@ def trigger_sync_for_dataset(staged_dataset_id: int) -> dict[str, Any]:
     Returns:
         A dict with keys ``task_id`` and ``staged_dataset_id``.
     """
-    task = sync_staged_dataset_task.delay(
-        staged_dataset_id=staged_dataset_id,
+    from superset.dhis2.sync_service import schedule_staged_dataset_sync
+
+    schedule = schedule_staged_dataset_sync(
+        staged_dataset_id,
         job_type="manual",
     )
     logger.info(
-        "dhis2_sync: triggered manual sync for dataset=%d task_id=%s",
+        "dhis2_sync: manual trigger for dataset=%d mode=%s task_id=%s",
         staged_dataset_id,
-        task.id,
+        schedule.get("mode"),
+        schedule.get("task_id"),
     )
     return {
-        "task_id": task.id,
+        **schedule,
         "staged_dataset_id": staged_dataset_id,
     }
 

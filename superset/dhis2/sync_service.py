@@ -159,6 +159,10 @@ _FIXED_PERIOD_PATTERNS = (
 )
 
 
+class DHIS2InstanceUnavailableError(requests.ConnectionError):
+    """The source became unreachable while a dataset sync was running."""
+
+
 @dataclass(frozen=True)
 class _IncrementalPeriodPlan:
     use_incremental: bool
@@ -1418,6 +1422,7 @@ class DHIS2SyncService:
         page_size: int,
         include_combo_dimensions: bool = False,
         job_id: int | None = None,
+        network_retry_attempted: bool = False,
     ) -> list[dict[str, Any]]:
         batch_started_at = datetime.utcnow()
         batch_start_mono = time.monotonic()
@@ -1448,6 +1453,14 @@ class DHIS2SyncService:
         # before the HTTP call returns (which can take up to 300 s).
         running_id: int | None = None
         if job_id is not None:
+            # Keep the job heartbeat current immediately before a potentially
+            # long HTTP request.  Stale-job recovery must not duplicate a live
+            # extraction merely because DHIS2 is slow to return a batch.
+            self._update_job_progress(
+                job_id,
+                current_step=f"requesting data from {instance.name}",
+                current_item=instance.name,
+            )
             running_id = self._create_running_request_log(
                 job_id, instance, batch, periods, org_units, batch_started_at
             )
@@ -1533,6 +1546,12 @@ class DHIS2SyncService:
                 # Only one extra attempt is made so the total delay is bounded.
                 # ----------------------------------------------------------
                 if isinstance(exc, (requests.Timeout, requests.ConnectionError)):
+                    if network_retry_attempted:
+                        raise DHIS2InstanceUnavailableError(
+                            f"DHIS2 instance '{instance.name}' became unavailable "
+                            "during sync after two consecutive network failures: "
+                            f"{exc}"
+                        ) from exc
                     logger.warning(
                         "Sync: transient network error for instance '%s' "
                         "(page=%d); sleeping %ds then retrying once",
@@ -1542,24 +1561,17 @@ class DHIS2SyncService:
                         exc_info=True,
                     )
                     time.sleep(_TIMEOUT_RETRY_SLEEP_SECONDS)
-                    try:
-                        return self._fetch_analytics_batch(
-                            instance=instance,
-                            batch=batch,
-                            periods=periods,
-                            org_units=org_units,
-                            variable_map=variable_map,
-                            page_size=page_size,
-                            include_combo_dimensions=include_combo_dimensions,
-                            job_id=job_id,
-                        )
-                    except (requests.Timeout, requests.ConnectionError):
-                        # Still timing out — fall through to splitting strategies.
-                        pass
-                    except Exception as retry_exc:  # pylint: disable=broad-except
-                        if not _is_retryable_analytics_error(retry_exc):
-                            raise
-                        # Non-timeout retryable error — fall through.
+                    return self._fetch_analytics_batch(
+                        instance=instance,
+                        batch=batch,
+                        periods=periods,
+                        org_units=org_units,
+                        variable_map=variable_map,
+                        page_size=page_size,
+                        include_combo_dimensions=include_combo_dimensions,
+                        job_id=job_id,
+                        network_retry_attempted=True,
+                    )
 
                 # ----------------------------------------------------------
                 # Strategy 1: getOrgUnitCountMap NPE → split OUs immediately.
@@ -2670,6 +2682,11 @@ class DHIS2SyncService:
                     if periods_cfg and not last_updated_duration:
                         for pe_start in range(0, max(len(periods_cfg), 1), _DVS_MAX_PERIODS):
                             pe_chunk = periods_cfg[pe_start : pe_start + _DVS_MAX_PERIODS]
+                            self._update_job_progress(
+                                job_id,
+                                current_step=f"requesting data from {instance.name}",
+                                current_item=instance.name,
+                            )
                             chunk_values = extractor.fetch(
                                 data_sets=data_sets_cfg or None,
                                 periods=pe_chunk,
@@ -2678,6 +2695,11 @@ class DHIS2SyncService:
                             )
                             all_values.extend(chunk_values)
                     else:
+                        self._update_job_progress(
+                            job_id,
+                            current_step=f"requesting data from {instance.name}",
+                            current_item=instance.name,
+                        )
                         chunk_values = extractor.fetch(
                             data_sets=data_sets_cfg or None,
                             org_units=ou_chunk,
