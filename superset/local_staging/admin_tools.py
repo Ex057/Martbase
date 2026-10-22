@@ -201,6 +201,20 @@ def _check_systemd_service_candidates(
     return False, None
 
 
+def _systemd_unit_exists(service_name: str) -> bool:
+    """Return whether a systemd unit is installed, regardless of its state."""
+    try:
+        result = subprocess.run(
+            ["systemctl", "show", service_name, "--property=LoadState", "--value"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.returncode == 0 and result.stdout.strip() == "loaded"
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+
+
 def _read_process_children(pid: int, *, proc_root: str = "/proc") -> list[int]:
     children_path = Path(proc_root) / str(pid) / "task" / str(pid) / "children"
     try:
@@ -357,32 +371,45 @@ def _service_pid_paths() -> dict[str, dict[str, str]]:
         "backend": {
             "pid_file": os.environ.get(
                 "LOCAL_STAGING_BACKEND_PID_FILE",
-                os.path.join(project_root, "superset_backend.pid"),
+                os.path.join(project_root, "run", "superset.pid"),
             ),
         },
         "celery": {
             "worker_pid_file": os.environ.get(
                 "LOCAL_STAGING_CELERY_WORKER_PID_FILE",
-                os.path.join(project_root, "celery_worker.pid"),
+                os.path.join(project_root, "run", "celery-worker.pid"),
             ),
             "beat_pid_file": os.environ.get(
                 "LOCAL_STAGING_CELERY_BEAT_PID_FILE",
-                os.path.join(project_root, "celery_beat.pid"),
+                os.path.join(project_root, "run", "celerybeat.pid"),
             ),
         },
     }
 
 
 def _default_restart_commands() -> dict[str, str]:
+    # Production runs under these systemd units. Prefer them over the repository
+    # manager script when they are installed; the application service account
+    # must have narrowly scoped passwordless sudo permission for the restart
+    # commands. Environment overrides still take precedence in
+    # ``_restart_command_for``.
+    commands: dict[str, str] = {}
+    if _systemd_unit_exists("superset"):
+        commands["backend"] = "sudo -n systemctl restart superset"
+    if _systemd_unit_exists("superset-worker") and _systemd_unit_exists(
+        "superset-beat"
+    ):
+        commands["celery"] = (
+            "sudo -n systemctl restart superset-worker superset-beat"
+        )
+
     project_root = _project_root()
     manager_script = os.path.join(project_root, "superset-manager.sh")
-    if not os.path.isfile(manager_script):
-        return {}
-    quoted_script = shlex.quote(manager_script)
-    return {
-        "backend": f"bash {quoted_script} restart",
-        "celery": f"bash {quoted_script} restart-celery",
-    }
+    if os.path.isfile(manager_script):
+        quoted_script = shlex.quote(manager_script)
+        commands.setdefault("backend", f"bash {quoted_script} restart")
+        commands.setdefault("celery", f"bash {quoted_script} restart-celery")
+    return commands
 
 
 def _restart_command_for(service_name: str) -> str | None:

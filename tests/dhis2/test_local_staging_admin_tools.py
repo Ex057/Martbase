@@ -78,6 +78,43 @@ def test_restart_runtime_service_queues_background_command(mocker) -> None:
     assert result["service"] == "celery"
 
 
+def test_service_pid_paths_use_production_run_directory(mocker) -> None:
+    from superset.local_staging import admin_tools
+
+    mocker.patch.object(admin_tools, "_project_root", return_value="/opt/dhis2-superset")
+    mocker.patch.dict("os.environ", {}, clear=True)
+
+    paths = admin_tools._service_pid_paths()
+
+    assert paths["backend"]["pid_file"] == "/opt/dhis2-superset/run/superset.pid"
+    assert (
+        paths["celery"]["worker_pid_file"]
+        == "/opt/dhis2-superset/run/celery-worker.pid"
+    )
+    assert (
+        paths["celery"]["beat_pid_file"]
+        == "/opt/dhis2-superset/run/celerybeat.pid"
+    )
+
+
+def test_default_restart_commands_prefer_production_systemd_units(mocker) -> None:
+    from superset.local_staging import admin_tools
+
+    unit_exists = mocker.patch.object(admin_tools, "_systemd_unit_exists")
+    unit_exists.side_effect = lambda service: service in {
+        "superset",
+        "superset-worker",
+        "superset-beat",
+    }
+
+    commands = admin_tools._default_restart_commands()
+
+    assert commands == {
+        "backend": "sudo -n systemctl restart superset",
+        "celery": "sudo -n systemctl restart superset-worker superset-beat",
+    }
+
+
 def test_get_file_descriptor_status_aggregates_process_tree(tmp_path) -> None:
     from superset.local_staging import admin_tools
 
