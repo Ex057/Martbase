@@ -102,11 +102,34 @@ def test_staging_table_info_handles_engine_errors_gracefully():
     dataset = _dataset()
 
     with patch(
-        "superset.dhis2.staging_engine.DHIS2StagingEngine"
+        "superset.local_staging.engine_factory.get_active_staging_engine"
     ) as mock_engine_cls:
         mock_engine_cls.return_value.table_exists.side_effect = RuntimeError("boom")
 
         assert service._staging_table_info(dataset) == (False, None)
+
+
+def test_staging_table_info_uses_active_clickhouse_engine():
+    from superset.dhis2.diagnostics import DHIS2DiagnosticsService
+
+    service = DHIS2DiagnosticsService()
+    dataset = _dataset(database_id=7)
+
+    with patch(
+        "superset.local_staging.engine_factory.get_active_staging_engine"
+    ) as engine_factory:
+        engine = engine_factory.return_value
+        engine.table_exists.return_value = True
+        engine.get_staging_table_stats.return_value = {
+            "row_count": 8955,
+            "engine": "clickhouse",
+        }
+
+        assert service._staging_table_info(dataset) == (True, 8955)
+
+    engine_factory.assert_called_once_with(7)
+    engine.table_exists.assert_called_once_with(dataset)
+    engine.get_staging_table_stats.assert_called_once_with(dataset)
 
 
 def test_get_sync_history_includes_staged_dataset_name():

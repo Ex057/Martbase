@@ -5,6 +5,7 @@ import os
 import shlex
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 from superset.local_staging.platform_settings import (
@@ -190,6 +191,166 @@ def _check_systemd_service_running(service_name: str) -> tuple[bool, int | None]
         return False, None
 
 
+def _check_systemd_service_candidates(
+    service_names: list[str],
+) -> tuple[bool, int | None]:
+    for service_name in service_names:
+        running, pid = _check_systemd_service_running(service_name)
+        if running:
+            return running, pid
+    return False, None
+
+
+def _read_process_children(pid: int, *, proc_root: str = "/proc") -> list[int]:
+    children_path = Path(proc_root) / str(pid) / "task" / str(pid) / "children"
+    try:
+        return [int(value) for value in children_path.read_text().split()]
+    except (FileNotFoundError, PermissionError, ValueError, OSError):
+        return []
+
+
+def _process_tree_pids(pid: int, *, proc_root: str = "/proc") -> list[int]:
+    pending = [pid]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        pending.extend(_read_process_children(current, proc_root=proc_root))
+    return sorted(seen)
+
+
+def _parse_open_file_limits(limits_text: str) -> tuple[int | None, int | None]:
+    for line in limits_text.splitlines():
+        if not line.startswith("Max open files"):
+            continue
+        values = line[len("Max open files") :].split()
+        if len(values) < 2:
+            return None, None
+
+        def _limit(value: str) -> int | None:
+            if value.lower() == "unlimited":
+                return None
+            try:
+                return int(value)
+            except ValueError:
+                return None
+
+        return _limit(values[0]), _limit(values[1])
+    return None, None
+
+
+def get_file_descriptor_status(
+    pid: int | None,
+    *,
+    proc_root: str = "/proc",
+) -> dict[str, Any]:
+    """Return bounded, read-only FD diagnostics for a process tree."""
+    if not pid:
+        return {
+            "available": False,
+            "open": 0,
+            "soft_limit": None,
+            "max_process_usage_percent": None,
+            "severity": "unknown",
+            "processes": [],
+        }
+
+    processes: list[dict[str, Any]] = []
+    for process_pid in _process_tree_pids(pid, proc_root=proc_root):
+        process_path = Path(proc_root) / str(process_pid)
+        try:
+            open_count = len(list((process_path / "fd").iterdir()))
+            limits_text = (process_path / "limits").read_text()
+            soft_limit, hard_limit = _parse_open_file_limits(limits_text)
+            try:
+                name = (process_path / "comm").read_text().strip()
+            except (FileNotFoundError, PermissionError, OSError):
+                name = str(process_pid)
+        except (FileNotFoundError, PermissionError, OSError):
+            continue
+
+        usage_percent = (
+            round(open_count / soft_limit * 100, 2)
+            if soft_limit and soft_limit > 0
+            else None
+        )
+        processes.append(
+            {
+                "pid": process_pid,
+                "name": name,
+                "open": open_count,
+                "soft_limit": soft_limit,
+                "hard_limit": hard_limit,
+                "usage_percent": usage_percent,
+            }
+        )
+
+    if not processes:
+        return {
+            "available": False,
+            "open": 0,
+            "soft_limit": None,
+            "max_process_usage_percent": None,
+            "severity": "unknown",
+            "processes": [],
+        }
+
+    total_open = sum(process["open"] for process in processes)
+    finite_limits = [
+        process["soft_limit"]
+        for process in processes
+        if process["soft_limit"] is not None
+    ]
+    usages = [
+        process["usage_percent"]
+        for process in processes
+        if process["usage_percent"] is not None
+    ]
+    max_usage = max(usages) if usages else None
+    severity = (
+        "critical"
+        if max_usage is not None and max_usage >= 90
+        else "warning"
+        if max_usage is not None and max_usage >= 70
+        else "healthy"
+    )
+    return {
+        "available": True,
+        "open": total_open,
+        "soft_limit": sum(finite_limits) if finite_limits else None,
+        "max_process_usage_percent": max_usage,
+        "severity": severity,
+        "processes": processes,
+    }
+
+
+def get_system_file_descriptor_status(
+    *, proc_root: str = "/proc"
+) -> dict[str, Any]:
+    try:
+        values = (Path(proc_root) / "sys" / "fs" / "file-nr").read_text().split()
+        allocated, unused, maximum = (int(value) for value in values[:3])
+        open_count = max(0, allocated - unused)
+        usage_percent = round(open_count / maximum * 100, 2) if maximum else None
+        return {
+            "available": True,
+            "open": open_count,
+            "allocated": allocated,
+            "unused": unused,
+            "maximum": maximum,
+            "usage_percent": usage_percent,
+        }
+    except (FileNotFoundError, PermissionError, ValueError, OSError):
+        return {
+            "available": False,
+            "open": 0,
+            "maximum": None,
+            "usage_percent": None,
+        }
+
+
 def _service_pid_paths() -> dict[str, dict[str, str]]:
     project_root = _project_root()
     return {
@@ -239,17 +400,27 @@ def get_runtime_service_status() -> dict[str, Any]:
     backend_pid = _read_running_pid(pid_paths["backend"]["pid_file"])
     backend_running = backend_pid is not None
     if not backend_running:
-        backend_running, backend_pid = _check_systemd_service_running("martbase-web")
+        backend_running, backend_pid = _check_systemd_service_candidates(
+            ["superset", "martbase-web"]
+        )
 
     celery_worker_pid = _read_running_pid(pid_paths["celery"]["worker_pid_file"])
     worker_running = celery_worker_pid is not None
     if not worker_running:
-        worker_running, celery_worker_pid = _check_systemd_service_running("martbase-worker")
+        worker_running, celery_worker_pid = _check_systemd_service_candidates(
+            ["superset-worker", "martbase-worker"]
+        )
 
     celery_beat_pid = _read_running_pid(pid_paths["celery"]["beat_pid_file"])
     beat_running = celery_beat_pid is not None
     if not beat_running:
-        beat_running, celery_beat_pid = _check_systemd_service_running("martbase-beat")
+        beat_running, celery_beat_pid = _check_systemd_service_candidates(
+            ["superset-beat", "martbase-beat"]
+        )
+
+    backend_fds = get_file_descriptor_status(backend_pid)
+    worker_fds = get_file_descriptor_status(celery_worker_pid)
+    beat_fds = get_file_descriptor_status(celery_beat_pid)
 
     return {
         "services": {
@@ -260,6 +431,7 @@ def get_runtime_service_status() -> dict[str, Any]:
                 "pid": backend_pid,
                 "pid_file": pid_paths["backend"]["pid_file"],
                 "restart_available": _restart_command_for("backend") is not None,
+                "file_descriptors": backend_fds,
             },
             "celery": {
                 "name": "celery",
@@ -272,8 +444,11 @@ def get_runtime_service_status() -> dict[str, Any]:
                 "beat_pid": celery_beat_pid,
                 "beat_pid_file": pid_paths["celery"]["beat_pid_file"],
                 "restart_available": _restart_command_for("celery") is not None,
+                "worker_file_descriptors": worker_fds,
+                "beat_file_descriptors": beat_fds,
             },
-        }
+        },
+        "system_file_descriptors": get_system_file_descriptor_status(),
     }
 
 

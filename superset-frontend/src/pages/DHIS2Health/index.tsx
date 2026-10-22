@@ -518,7 +518,12 @@ export default function DHIS2Health() {
               {formatCount(dataset.last_sync_rows)}
             </Descriptions.Item>
             <Descriptions.Item label={t('Rows in staging')}>
-              {formatCount(dataset.staging_row_count)}
+              {dataset.staging_row_count === null ||
+              dataset.staging_row_count === undefined ? (
+                <Text type="secondary">{t('Unavailable')}</Text>
+              ) : (
+                formatCount(dataset.staging_row_count)
+              )}
             </Descriptions.Item>
             <Descriptions.Item label={t('Staging table')}>
               {dataset.staging_table_exists ? (
@@ -531,9 +536,19 @@ export default function DHIS2Health() {
               <Space wrap>
                 {dataset.recent_jobs.length ? (
                   dataset.recent_jobs.map(job => (
-                    <Tag key={job.id} color={getStatusColor(job.status)}>
-                      {job.status}
-                    </Tag>
+                    <Tooltip
+                      key={job.id}
+                      title={
+                        job.error_message ||
+                        t('%s rows loaded', formatCount(job.rows_loaded))
+                      }
+                    >
+                      <Tag color={getStatusColor(job.status)}>
+                        {job.status === 'success' && job.rows_loaded === 0
+                          ? t('success · no new rows')
+                          : job.status}
+                      </Tag>
+                    </Tooltip>
                   ))
                 ) : (
                   <Text type="secondary">{t('None yet')}</Text>

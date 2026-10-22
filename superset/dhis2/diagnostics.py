@@ -63,25 +63,28 @@ class DHIS2DiagnosticsService:
     def _staging_table_info(self, dataset: DHIS2StagedDataset) -> tuple[bool, int | None]:
         """Return (table_exists, row_count) for a staged dataset's physical table.
 
+        Resolve the configured local-staging engine rather than assuming the
+        Superset metadata database.  Production commonly stores these rows in
+        ClickHouse, so querying ``db.session`` reports false ``Missing / 0``
+        results even while successful syncs are writing to ClickHouse.
+
         Catches all exceptions so a missing or inaccessible table never raises.
         """
         if not dataset.staging_table_name:
             return False, None
 
         try:
-            from sqlalchemy import text as sa_text
-            from superset.dhis2.staging_engine import DHIS2StagingEngine
+            from superset.local_staging.engine_factory import (
+                get_active_staging_engine,
+            )
 
-            engine = DHIS2StagingEngine(dataset.database_id)
+            engine = get_active_staging_engine(dataset.database_id)
             if not engine.table_exists(dataset):
                 return False, None
 
-            table_ref = engine.get_superset_sql_table_ref(dataset)
-            count_result = db.session.execute(
-                sa_text(f"SELECT COUNT(*) FROM {table_ref}")  # noqa: S608
-            )
-            row_count = count_result.scalar()
-            return True, int(row_count) if row_count is not None else 0
+            stats = engine.get_staging_table_stats(dataset) or {}
+            row_count = stats.get("row_count", stats.get("total_rows"))
+            return True, int(row_count) if row_count is not None else None
 
         except Exception:  # pylint: disable=broad-except
             logger.debug(

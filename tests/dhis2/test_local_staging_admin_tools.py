@@ -76,3 +76,54 @@ def test_restart_runtime_service_queues_background_command(mocker) -> None:
     assert "service superset-worker restart" in command[2]
     assert result["queued"] is True
     assert result["service"] == "celery"
+
+
+def test_get_file_descriptor_status_aggregates_process_tree(tmp_path) -> None:
+    from superset.local_staging import admin_tools
+
+    proc_root = tmp_path / "proc"
+    for pid, name, open_count, soft_limit in [
+        (111, "celery", 3, 100),
+        (222, "celery-child", 8, 10),
+    ]:
+        process = proc_root / str(pid)
+        (process / "fd").mkdir(parents=True)
+        for index in range(open_count):
+            (process / "fd" / str(index)).touch()
+        (process / "limits").write_text(
+            "Limit                     Soft Limit           Hard Limit           Units\n"
+            f"Max open files            {soft_limit}                 200                  files\n"
+        )
+        (process / "comm").write_text(f"{name}\n")
+        (process / "task" / str(pid)).mkdir(parents=True)
+        (process / "task" / str(pid) / "children").write_text(
+            "222\n" if pid == 111 else ""
+        )
+
+    result = admin_tools.get_file_descriptor_status(
+        111,
+        proc_root=str(proc_root),
+    )
+
+    assert result["available"] is True
+    assert result["open"] == 11
+    assert result["soft_limit"] == 110
+    assert result["max_process_usage_percent"] == 80.0
+    assert result["severity"] == "warning"
+    assert [process["pid"] for process in result["processes"]] == [111, 222]
+
+
+def test_get_system_file_descriptor_status(tmp_path) -> None:
+    from superset.local_staging import admin_tools
+
+    file_nr = tmp_path / "proc" / "sys" / "fs"
+    file_nr.mkdir(parents=True)
+    (file_nr / "file-nr").write_text("1000 100 10000\n")
+
+    result = admin_tools.get_system_file_descriptor_status(
+        proc_root=str(tmp_path / "proc")
+    )
+
+    assert result["open"] == 900
+    assert result["maximum"] == 10000
+    assert result["usage_percent"] == 9.0

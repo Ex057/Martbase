@@ -14,6 +14,7 @@ import {
   Input,
   InputNumber,
   Popconfirm,
+  Progress,
   Radio,
   Row,
   Space,
@@ -165,6 +166,34 @@ interface RuntimeServiceInfo {
   beat_running?: boolean;
   beat_pid?: number | null;
   beat_pid_file?: string;
+  file_descriptors?: FileDescriptorStatus;
+  worker_file_descriptors?: FileDescriptorStatus;
+  beat_file_descriptors?: FileDescriptorStatus;
+}
+
+interface FileDescriptorProcess {
+  pid: number;
+  name: string;
+  open: number;
+  soft_limit: number | null;
+  hard_limit: number | null;
+  usage_percent: number | null;
+}
+
+interface FileDescriptorStatus {
+  available: boolean;
+  open: number;
+  soft_limit: number | null;
+  max_process_usage_percent: number | null;
+  severity: 'healthy' | 'warning' | 'critical' | 'unknown';
+  processes: FileDescriptorProcess[];
+}
+
+interface SystemFileDescriptorStatus {
+  available: boolean;
+  open: number;
+  maximum: number | null;
+  usage_percent: number | null;
 }
 
 interface RuntimeServiceStatus {
@@ -172,6 +201,7 @@ interface RuntimeServiceStatus {
     backend: RuntimeServiceInfo;
     celery: RuntimeServiceInfo;
   };
+  system_file_descriptors?: SystemFileDescriptorStatus;
 }
 
 // ---------------------------------------------------------------------------
@@ -793,6 +823,64 @@ function ExplorerTab({ settings, onRefreshSettings }: ExplorerTabProps) {
   const currentStatus = settings?.engine_health_status || {};
   const backendService = runtimeServices?.services.backend;
   const celeryService = runtimeServices?.services.celery;
+  const systemFileDescriptors = runtimeServices?.system_file_descriptors;
+  const descriptorStatuses = [
+    backendService?.file_descriptors,
+    celeryService?.worker_file_descriptors,
+    celeryService?.beat_file_descriptors,
+  ].filter((status): status is FileDescriptorStatus => Boolean(status));
+  const descriptorAlert = descriptorStatuses.find(
+    status => status.severity === 'critical',
+  )
+    ? 'critical'
+    : descriptorStatuses.find(status => status.severity === 'warning')
+      ? 'warning'
+      : null;
+
+  const renderFileDescriptors = (status?: FileDescriptorStatus) => {
+    if (!status?.available) {
+      return <Text type="secondary">{t('Unavailable')}</Text>;
+    }
+    const percent = status.max_process_usage_percent;
+    const processDetails = status.processes
+      .map(
+        process =>
+          `${process.name} (PID ${process.pid}): ${process.open} / ${
+            process.soft_limit ?? 'unlimited'
+          }`,
+      )
+      .join('\n');
+    return (
+      <Space direction="vertical" size={2} style={{ width: '100%' }}>
+        <Space wrap>
+          <Tooltip title={processDetails}>
+            <Text code>
+              {status.open.toLocaleString()} {t('open across process tree')}
+            </Text>
+          </Tooltip>
+          <Tag
+            color={
+              status.severity === 'critical'
+                ? 'error'
+                : status.severity === 'warning'
+                  ? 'warning'
+                  : 'success'
+            }
+          >
+            {percent == null ? t('Limit unavailable') : t('%s% peak use', percent)}
+          </Tag>
+        </Space>
+        {percent != null ? (
+          <Progress
+            percent={Math.min(100, percent)}
+            size="small"
+            status={status.severity === 'critical' ? 'exception' : 'normal'}
+            showInfo={false}
+          />
+        ) : null}
+      </Space>
+    );
+  };
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -889,9 +977,23 @@ function ExplorerTab({ settings, onRefreshSettings }: ExplorerTabProps) {
             <Space direction="vertical" style={{ width: '100%' }} size="middle">
               <Text type="secondary">
                 {t(
-                  'Restart the web server or Celery background processors without leaving the staging workspace.',
+                  'Monitor open file descriptors and restart application services safely when a process approaches its configured limit. Persistent limit changes must be made in systemd by the server administrator.',
                 )}
               </Text>
+              {descriptorAlert ? (
+                <Alert
+                  showIcon
+                  type={descriptorAlert === 'critical' ? 'error' : 'warning'}
+                  message={
+                    descriptorAlert === 'critical'
+                      ? t('A runtime process is close to exhausting its file descriptors')
+                      : t('File descriptor usage needs attention')
+                  }
+                  description={t(
+                    'Inspect the process breakdown, stop duplicate work, and use the controlled restart only as recovery. Raise LimitNOFILE for a permanent capacity change.',
+                  )}
+                />
+              ) : null}
               <Descriptions bordered column={1} size="small">
                 <Descriptions.Item label={t('Web server')}>
                   <Space wrap>
@@ -907,6 +1009,9 @@ function ExplorerTab({ settings, onRefreshSettings }: ExplorerTabProps) {
                       </Text>
                     ) : null}
                   </Space>
+                </Descriptions.Item>
+                <Descriptions.Item label={t('Web server file descriptors')}>
+                  {renderFileDescriptors(backendService?.file_descriptors)}
                 </Descriptions.Item>
                 <Descriptions.Item label={t('Celery worker + beat')}>
                   <Space wrap>
@@ -932,6 +1037,29 @@ function ExplorerTab({ settings, onRefreshSettings }: ExplorerTabProps) {
                       </Text>
                     ) : null}
                   </Space>
+                </Descriptions.Item>
+                <Descriptions.Item label={t('Celery worker file descriptors')}>
+                  {renderFileDescriptors(celeryService?.worker_file_descriptors)}
+                </Descriptions.Item>
+                <Descriptions.Item label={t('Celery beat file descriptors')}>
+                  {renderFileDescriptors(celeryService?.beat_file_descriptors)}
+                </Descriptions.Item>
+                <Descriptions.Item label={t('System file descriptors')}>
+                  {systemFileDescriptors?.available ? (
+                    <Space wrap>
+                      <Text code>
+                        {systemFileDescriptors.open.toLocaleString()} /{' '}
+                        {systemFileDescriptors.maximum?.toLocaleString() || '—'}
+                      </Text>
+                      {systemFileDescriptors.usage_percent != null ? (
+                        <Tag color="blue">
+                          {t('%s% used', systemFileDescriptors.usage_percent)}
+                        </Tag>
+                      ) : null}
+                    </Space>
+                  ) : (
+                    <Text type="secondary">{t('Unavailable')}</Text>
+                  )}
                 </Descriptions.Item>
               </Descriptions>
               <Space wrap>
