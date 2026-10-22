@@ -1482,10 +1482,18 @@ def delete_staged_dataset(dataset_id: int) -> bool:
         )
 
         db.session.delete(dataset)
+        # Execute ORM delete listeners while the transaction connection and
+        # its explicit-delete marker are still active. Clear the marker before
+        # commit returns the DBAPI connection to the pool; ``Connection.info``
+        # persists with pooled connections and must not leak into a later
+        # unrelated dataset deletion.
+        db.session.flush()
+        clear_explicit_staged_dataset_delete(connection)
         db.session.commit()
         logger.info("Deleted DHIS2StagedDataset id=%s", dataset_id)
         return True
     except Exception:
+        clear_explicit_staged_dataset_delete(connection)
         db.session.rollback()
         logger.exception("Failed to delete DHIS2StagedDataset id=%s", dataset_id)
         raise

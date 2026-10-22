@@ -44,6 +44,7 @@ def test_delete_staged_dataset_cascades_to_sqla_table():
     session = superset.db.session
     session.query = MagicMock()
     session.delete = MagicMock()
+    session.flush = MagicMock()
     session.commit = MagicMock()
     session.connection = MagicMock()
     session_connection = MagicMock()
@@ -85,6 +86,7 @@ def test_delete_staged_dataset_cascades_to_sqla_table():
         call(generic_dataset)
     ], any_order=True)
     session.commit.assert_called_once()
+    session.flush.assert_called_once()
 
 
 def test_delete_staged_dataset_continues_when_physical_tables_are_missing():
@@ -94,6 +96,7 @@ def test_delete_staged_dataset_continues_when_physical_tables_are_missing():
 
     session = superset.db.session
     session.delete = MagicMock()
+    session.flush = MagicMock()
     session.commit = MagicMock()
     session.rollback = MagicMock()
     session.connection = MagicMock()
@@ -130,6 +133,59 @@ def test_delete_staged_dataset_continues_when_physical_tables_are_missing():
         any_order=True,
     )
     session.commit.assert_called_once()
+    session.flush.assert_called_once()
+
+
+def test_delete_staged_dataset_does_not_fail_when_commit_closes_connection():
+    """A successful commit must not become an HTTP 500 during marker cleanup."""
+    import superset
+    from sqlalchemy.exc import ResourceClosedError
+    from superset.dhis2 import staged_dataset_service as svc
+
+    class CommitClosingConnection:
+        def __init__(self) -> None:
+            self.closed = False
+            self.state: dict[str, object] = {}
+
+        @property
+        def info(self):
+            if self.closed:
+                raise ResourceClosedError("This Connection is closed")
+            return self.state
+
+    session = superset.db.session
+    connection = CommitClosingConnection()
+    session.connection = MagicMock(return_value=connection)
+    session.delete = MagicMock()
+    session.flush = MagicMock()
+    session.rollback = MagicMock()
+    session.commit = MagicMock(
+        side_effect=lambda: setattr(connection, "closed", True)
+    )
+
+    staged_dataset = MagicMock()
+    staged_dataset.id = 41
+    staged_dataset.database_id = 10
+    staged_dataset.generic_dataset = None
+
+    with patch(
+        "superset.dhis2.staged_dataset_service.get_staged_dataset",
+        return_value=staged_dataset,
+    ), patch(
+        "superset.dhis2.staged_dataset_service._get_engine",
+    ) as mock_get_engine, patch(
+        "superset.dhis2.superset_dataset_service."
+        "cleanup_staged_dataset_superset_resources",
+    ):
+        mock_get_engine.return_value = MagicMock()
+
+        assert svc.delete_staged_dataset(41) is True
+
+    assert connection.closed is True
+    assert connection.state == {}
+    session.flush.assert_called_once()
+    session.commit.assert_called_once()
+    session.rollback.assert_not_called()
 
 
 def _listener_source_table(staged_id: int = 11):
